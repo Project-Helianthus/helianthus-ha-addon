@@ -1,25 +1,17 @@
-# Helianthus Home Assistant Add-on
+# Helianthus Home Assistant Add-on Repository
 
-Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
+This repository hosts the Helianthus Home Assistant add-on. Home Assistant discovers it via `repository.json`. The add-on itself lives in `./helianthus`.
 
-## Status
+## Add the Repository
 
-- Builds and runs `helianthus-ebusgateway`
-- Exposes GraphQL + MCP over HTTP
-- Advertises `_helianthus-graphql._tcp` via mDNS (optional)
+From the HA Supervisor CLI:
 
-## Defaults
+```
+ha addons repo add https://github.com/d3vi1/helianthus-ha-addon
+```
 
-- GraphQL: `http://<host>:8080/graphql`
-- Subscriptions: `http://<host>:8080/graphql/subscriptions`
-- MCP: `http://<host>:8080/mcp`
+Then install the **Helianthus** add-on from the store.
 
-## Configuration
+## Add-on Docs
 
-Key options are exposed in `config.json`:
-
-- `transport`: `enh` or `ens`
-- `network`: `tcp` or `unix`
-- `address`: transport address (e.g. `192.168.100.2:9999`)
-- `http_port`: HTTP listen port
-- `mdns`: enable/disable mDNS advertisement
+See `helianthus/README.md` for configuration and defaults.
