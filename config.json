@@ -1,12 +1,48 @@
 {
   "name": "Helianthus",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "slug": "helianthus",
-  "description": "Helianthus eBUS add-on (placeholder)",
+  "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": ["aarch64", "amd64", "armhf", "armv7", "i386"],
   "startup": "services",
   "boot": "auto",
   "init": false,
-  "options": {},
-  "schema": {}
+  "host_network": true,
+  "ports": {
+    "8080/tcp": 8080
+  },
+  "ports_description": {
+    "8080/tcp": "GraphQL + MCP HTTP server"
+  },
+  "image": "ghcr.io/d3vi1/helianthus-ha-addon",
+  "options": {
+    "transport": "enh",
+    "network": "tcp",
+    "address": "192.168.100.2:9999",
+    "http_port": 8080,
+    "graphql_path": "/graphql",
+    "subscription_path": "/graphql/subscriptions",
+    "mcp_path": "/mcp",
+    "mdns": true,
+    "mdns_instance": "helianthus",
+    "broadcast": false,
+    "read_timeout": "5s",
+    "write_timeout": "5s",
+    "dial_timeout": "5s"
+  },
+  "schema": {
+    "transport": "list(enh|ens)",
+    "network": "list(tcp|unix)",
+    "address": "str",
+    "http_port": "int",
+    "graphql_path": "str",
+    "subscription_path": "str",
+    "mcp_path": "str",
+    "mdns": "bool",
+    "mdns_instance": "str",
+    "broadcast": "bool",
+    "read_timeout": "str",
+    "write_timeout": "str",
+    "dial_timeout": "str"
+  }
 }
