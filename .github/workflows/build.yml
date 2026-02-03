@@ -44,4 +44,4 @@ jobs:
           build-args: |
             EBUSGATEWAY_VERSION=main
           secrets: |
-            github_token=${{ secrets.PRIVATE_REPO_READ_TOKEN }}
+            github_token=${{ secrets.REPO_READ_TOKEN }}
