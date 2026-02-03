@@ -15,6 +15,25 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            base: ghcr.io/home-assistant/amd64-base:3.19
+          - platform: linux/arm64
+            arch: aarch64
+            base: ghcr.io/home-assistant/aarch64-base:3.19
+          - platform: linux/arm/v7
+            arch: armv7
+            base: ghcr.io/home-assistant/armv7-base:3.19
+          - platform: linux/arm/v6
+            arch: armhf
+            base: ghcr.io/home-assistant/armhf-base:3.19
+          - platform: linux/386
+            arch: i386
+            base: ghcr.io/home-assistant/i386-base:3.19
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,17 +51,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push (${{ matrix.arch }})
         uses: docker/build-push-action@v5
         with:
           context: ./helianthus
           push: true
-          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
+          platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/d3vi1/helianthus-ha-addon:latest
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-${{ matrix.arch }}
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-${{ matrix.arch }}
           build-args: |
             EBUSGATEWAY_VERSION=main
-            BUILD_FROM=ghcr.io/home-assistant/base:3.19
+            BUILD_FROM=${{ matrix.base }}
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t ghcr.io/d3vi1/helianthus-ha-addon:latest \
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-amd64 \
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-aarch64 \
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-armv7 \
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-armhf \
+            ghcr.io/d3vi1/helianthus-ha-addon:latest-i386
+          docker buildx imagetools create \
+            -t ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }} \
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-amd64 \
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-aarch64 \
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-armv7 \
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-armhf \
+            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-i386
