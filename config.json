@@ -1,0 +1,12 @@
+{
+  "name": "Helianthus",
+  "version": "0.1.0",
+  "slug": "helianthus",
+  "description": "Helianthus eBUS add-on (placeholder)",
+  "arch": ["aarch64", "amd64", "armhf", "armv7", "i386"],
+  "startup": "services",
+  "boot": "auto",
+  "init": false,
+  "options": {},
+  "schema": {}
+}
