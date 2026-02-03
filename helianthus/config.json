@@ -18,7 +18,7 @@
   "options": {
     "transport": "enh",
     "network": "tcp",
-    "address": "192.168.100.2:9999",
+    "address": "HOST:PORT",
     "http_port": 8080,
     "graphql_path": "/graphql",
     "subscription_path": "/graphql/subscriptions",
