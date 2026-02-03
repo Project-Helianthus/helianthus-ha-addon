@@ -43,5 +43,6 @@ jobs:
             ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}
           build-args: |
             EBUSGATEWAY_VERSION=main
+            BUILD_FROM=ghcr.io/home-assistant/base:3.19
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}

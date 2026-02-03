@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19
+ARG BUILD_FROM=ghcr.io/home-assistant/base:3.19
 
 FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 ARG TARGETOS=linux
