@@ -34,7 +34,7 @@
     "dial_timeout": "5s"
   },
   "schema": {
-    "transport": "list(enh|ens)",
+    "transport": "list(enh|ens|ebusd-tcp)",
     "network": "list(tcp|unix)",
     "address": "str",
     "host": "str",
