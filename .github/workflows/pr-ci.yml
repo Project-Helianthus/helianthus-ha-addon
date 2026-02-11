@@ -1,0 +1,45 @@
+name: pr-ci
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JSON syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            found=1
+            python3 -m json.tool "${file}" > /dev/null
+            echo "OK: ${file}"
+          done < <(git ls-files '*.json')
+          if [ "${found}" -eq 0 ]; then
+            echo "No JSON files found."
+          fi
+
+      - name: Validate shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            found=1
+            bash -n "${file}"
+            echo "OK: ${file}"
+          done < <(git ls-files '*.sh')
+          if [ "${found}" -eq 0 ]; then
+            echo "No shell files found."
+          fi
