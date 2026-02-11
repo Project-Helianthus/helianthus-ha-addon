@@ -21,5 +21,8 @@ Key options are exposed in `config.json`:
 - `transport`: `enh` or `ens`
 - `network`: `tcp` or `unix`
 - `address`: transport address (e.g. `HOST:PORT`)
+- `host`: gateway host placeholder
+- `port`: gateway port placeholder
+- `path`: gateway path placeholder
 - `http_port`: HTTP listen port
 - `mdns`: enable/disable mDNS advertisement
