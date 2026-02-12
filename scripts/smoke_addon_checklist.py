@@ -19,6 +19,9 @@ CHECK_LOG_GRAPHQL_ENDPOINT = "CHECK_LOG_GRAPHQL_ENDPOINT"
 CHECK_LOG_SUBSCRIPTION_ENDPOINT = "CHECK_LOG_SUBSCRIPTION_ENDPOINT"
 CHECK_LOG_MCP_ENDPOINT = "CHECK_LOG_MCP_ENDPOINT"
 
+DEFAULT_GRAPHQL_PATH = "/graphql"
+DEFAULT_SUBSCRIPTION_PATH = "/graphql/subscriptions"
+
 TRIAGE = {
     CHECK_CONNECTION_GRAPHQL: "verify addon started and graphql_path/http_port are reachable",
     CHECK_CONNECTION_MCP: "verify mcp_path/http_port and supervisor host-network reachability",
@@ -218,6 +221,17 @@ def _build_url(host: str, port: int, path: str) -> str:
     return urlunsplit(("http", f"{host}:{port}", _normalize_path(path), "", ""))
 
 
+def _derive_subscription_path(graphql_path: str, subscription_path: str) -> str:
+    normalized_graphql_path = _normalize_path(graphql_path)
+    normalized_subscription_path = _normalize_path(subscription_path)
+    if (
+        normalized_subscription_path == DEFAULT_SUBSCRIPTION_PATH
+        and normalized_graphql_path != DEFAULT_GRAPHQL_PATH
+    ):
+        return f"{normalized_graphql_path.rstrip('/')}/subscriptions"
+    return normalized_subscription_path
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run deterministic smoke checklist for Helianthus HA add-on.",
@@ -257,9 +271,11 @@ def main() -> int:
     with open(args.log_file, "r", encoding="utf-8") as handle:
         log_text = handle.read()
 
-    graphql_url = _build_url(args.host, args.http_port, args.graphql_path)
+    graphql_path = _normalize_path(args.graphql_path)
+    subscription_path = _derive_subscription_path(graphql_path, args.subscription_path)
+    graphql_url = _build_url(args.host, args.http_port, graphql_path)
     mcp_url = _build_url(args.host, args.http_port, args.mcp_path)
-    subscription_url = _build_url(args.host, args.http_port, args.subscription_path)
+    subscription_url = _build_url(args.host, args.http_port, subscription_path)
 
     result = run_checklist(
         log_text=log_text,
