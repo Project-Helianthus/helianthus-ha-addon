@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import re
 import sys
 
 RUNBOOK_PATH = Path("SMOKE_RUNBOOK.md")
+SMOKE_CHECKLIST_PATH = Path(__file__).with_name("smoke_addon_checklist.py")
 
 REQUIRED_HEADINGS = [
     "## Local ebusd-tcp topology",
@@ -39,6 +41,17 @@ REQUIRED_CHECKS = [
     "CHECK_LOG_SUBSCRIPTION_ENDPOINT",
     "CHECK_LOG_MCP_ENDPOINT",
 ]
+
+
+def _load_smoke_checklist_module():
+    module_name = "smoke_addon_checklist_runtime"
+    spec = importlib.util.spec_from_file_location(module_name, SMOKE_CHECKLIST_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"failed to load {SMOKE_CHECKLIST_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _extract_marker_block(text: str, marker: str) -> str:
@@ -110,6 +123,30 @@ def main() -> int:
         if check not in triage_rows:
             print(f"missing triage row for {check}")
             return 1
+
+    smoke_addon_checklist = _load_smoke_checklist_module()
+
+    derived_subscription = smoke_addon_checklist._derive_subscription_path(
+        "/api/graphql",
+        "/graphql/subscriptions",
+    )
+    if derived_subscription != "/api/graphql/subscriptions":
+        print(
+            "subscription marker derivation mismatch for customized graphql_path: "
+            f"{derived_subscription}",
+        )
+        return 1
+
+    explicit_subscription = smoke_addon_checklist._derive_subscription_path(
+        "/api/graphql",
+        "/custom/subscriptions",
+    )
+    if explicit_subscription != "/custom/subscriptions":
+        print(
+            "subscription marker derivation mismatch for explicit subscription_path: "
+            f"{explicit_subscription}",
+        )
+        return 1
 
     print("Smoke runbook validation passed.")
     return 0
