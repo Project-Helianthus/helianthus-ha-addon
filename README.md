@@ -132,6 +132,13 @@ GitHub Actions workflow: `.github/workflows/build.yml`
 - Default exposed port is `8080/tcp`.
 - This repository is packaging/runtime glue only; gateway feature behavior lives in `helianthus-ebusgateway`.
 
+## Smoke runbook
+
+For local `ebusd-tcp` operator validation (install/start/config + deterministic endpoint/log checklist), use:
+
+- `SMOKE_RUNBOOK.md`
+- `scripts/smoke_addon_checklist.py`
+
 ## Troubleshooting
 
 - Add-on starts but no data: verify `transport`/`network`/`address` match your real backend endpoint.

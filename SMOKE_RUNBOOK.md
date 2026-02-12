@@ -1,0 +1,127 @@
+# Helianthus HA Add-on Smoke Runbook
+
+This runbook validates the Home Assistant add-on path with a local `ebusd-tcp` topology and produces deterministic pass/fail output.
+
+## Local ebusd-tcp topology
+
+- Home Assistant Supervisor runs the `helianthus` add-on.
+- Add-on transport points to local/lan ebusd TCP endpoint.
+- Example topology values used below:
+  - ebusd endpoint: `192.168.100.2:9999`
+  - add-on HTTP API: `127.0.0.1:8080`
+  - GraphQL path: `/graphql`
+  - Subscriptions path: `/graphql/subscriptions`
+  - MCP path: `/mcp`
+
+## Install and start add-on
+
+1) Add repository:
+
+```bash
+ha addons repo add https://github.com/d3vi1/helianthus-ha-addon
+```
+
+2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
+
+3) Open add-on **Configuration** and paste the configuration payload below.
+
+## Add-on configuration (copy/paste)
+
+<!-- smoke-config-json:start -->
+```json
+{
+  "transport": "ebusd-tcp",
+  "network": "tcp",
+  "address": "192.168.100.2:9999",
+  "host": "127.0.0.1",
+  "http_port": 8080,
+  "graphql_path": "/graphql",
+  "subscription_path": "/graphql/subscriptions",
+  "mcp_path": "/mcp",
+  "mdns": true,
+  "mdns_instance": "helianthus",
+  "broadcast": false,
+  "read_timeout": "5s",
+  "write_timeout": "5s",
+  "dial_timeout": "5s"
+}
+```
+<!-- smoke-config-json:end -->
+
+After saving config, restart the add-on.
+
+## Deterministic smoke checklist
+
+1) Export add-on logs:
+
+```bash
+ha addons logs helianthus > /tmp/helianthus-addon.log
+```
+
+2) Run checklist:
+
+```bash
+python3 scripts/smoke_addon_checklist.py \
+  --log-file /tmp/helianthus-addon.log \
+  --transport ebusd-tcp \
+  --network tcp \
+  --address 192.168.100.2:9999 \
+  --host 127.0.0.1 \
+  --http-port 8080 \
+  --graphql-path /graphql \
+  --subscription-path /graphql/subscriptions \
+  --mcp-path /mcp
+```
+
+3) Optional JSON output:
+
+```bash
+python3 scripts/smoke_addon_checklist.py \
+  --log-file /tmp/helianthus-addon.log \
+  --transport ebusd-tcp \
+  --network tcp \
+  --address 192.168.100.2:9999 \
+  --host 127.0.0.1 \
+  --http-port 8080 \
+  --graphql-path /graphql \
+  --subscription-path /graphql/subscriptions \
+  --mcp-path /mcp \
+  --json
+```
+
+Checklist IDs (stable order):
+
+<!-- smoke-checklist:start -->
+```text
+- [ ] CHECK_CONNECTION_GRAPHQL
+- [ ] CHECK_CONNECTION_MCP
+- [ ] CHECK_LOG_STARTUP
+- [ ] CHECK_LOG_TRANSPORT
+- [ ] CHECK_LOG_GRAPHQL_ENDPOINT
+- [ ] CHECK_LOG_SUBSCRIPTION_ENDPOINT
+- [ ] CHECK_LOG_MCP_ENDPOINT
+```
+<!-- smoke-checklist:end -->
+
+Expected final line:
+
+```text
+OVERALL PASS
+```
+
+Exit code:
+
+- `0` when all checks pass
+- `1` when any check fails
+
+## Failure triage
+
+| Check ID | Primary failure meaning | First action |
+| --- | --- | --- |
+| CHECK_CONNECTION_GRAPHQL | GraphQL endpoint not reachable or invalid response | Verify add-on is running and `graphql_path/http_port` settings, then restart |
+| CHECK_CONNECTION_MCP | MCP endpoint not reachable or tools/list failed | Verify `mcp_path` and supervisor/network reachability |
+| CHECK_LOG_STARTUP | Startup marker missing | Confirm add-on process starts and does not crash early |
+| CHECK_LOG_TRANSPORT | Transport marker mismatch | Verify `transport/network/address` options for ebusd-tcp |
+| CHECK_LOG_GRAPHQL_ENDPOINT | GraphQL endpoint marker mismatch | Verify `host/http_port/graphql_path` in add-on config |
+| CHECK_LOG_SUBSCRIPTION_ENDPOINT | Subscriptions marker mismatch | Verify `subscription_path` and graphql path normalization |
+| CHECK_LOG_MCP_ENDPOINT | MCP marker mismatch | Verify `mcp_path` normalization and startup options |
