@@ -43,3 +43,12 @@ jobs:
           if [ "${found}" -eq 0 ]; then
             echo "No shell files found."
           fi
+
+      - name: Enforce terminology
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nIwiE 'm[a]ster|s[l]ave'; then
+            echo "Found legacy terminology in tracked files."
+            exit 1
+          fi
