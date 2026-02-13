@@ -26,19 +26,20 @@ effective_network="${network}"
 effective_address="${address}"
 
 proxy_profile=$(printf '%s' "${proxy_profile}" | tr '[:upper:]' '[:lower:]')
+proxy_endpoint_trimmed=$(printf '%s' "${proxy_endpoint}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 
 case "${proxy_profile}" in
   "" | disabled)
     proxy_profile="disabled"
     ;;
   enh | ens)
-    if [ -z "${proxy_endpoint}" ]; then
+    if [ -z "${proxy_endpoint_trimmed}" ]; then
       bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
     fi
-    if [[ "${proxy_endpoint}" == *"://"* ]]; then
-      effective_address="${proxy_endpoint}"
+    if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
+      effective_address="${proxy_endpoint_trimmed}"
     else
-      effective_address="${proxy_profile}://${proxy_endpoint}"
+      effective_address="${proxy_profile}://${proxy_endpoint_trimmed}"
     fi
     effective_transport="${proxy_profile}"
     effective_network="tcp"
@@ -49,8 +50,8 @@ case "${proxy_profile}" in
 esac
 
 proxy_endpoint_marker="(none)"
-if [ -n "${proxy_endpoint}" ]; then
-  proxy_endpoint_marker="${proxy_endpoint}"
+if [ -n "${proxy_endpoint_trimmed}" ]; then
+  proxy_endpoint_marker="${proxy_endpoint_trimmed}"
 fi
 if [ "${proxy_profile}" = "enh" ] || [ "${proxy_profile}" = "ens" ]; then
   proxy_endpoint_marker="${effective_address}"
