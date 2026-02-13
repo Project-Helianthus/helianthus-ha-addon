@@ -1,6 +1,7 @@
 # Helianthus HA Add-on Smoke Runbook
 
-This runbook validates the Home Assistant add-on path with a local `ebusd-tcp` topology and produces deterministic pass/fail output.
+This runbook validates the Home Assistant add-on path with a local `ebusd-tcp` topology and
+the adapter-proxy transition topology, and produces deterministic pass/fail output.
 
 ## Local ebusd-tcp topology
 
@@ -8,10 +9,21 @@ This runbook validates the Home Assistant add-on path with a local `ebusd-tcp` t
 - Add-on transport points to local/lan ebusd TCP endpoint.
 - Example topology values used below:
   - ebusd endpoint: `192.168.100.2:9999`
+  - proxy profile: `disabled`
+  - proxy endpoint: `(none)`
   - add-on HTTP API: `127.0.0.1:8080`
   - GraphQL path: `/graphql`
   - Subscriptions path: `/graphql/subscriptions`
   - MCP path: `/mcp`
+
+## Proxy transition topology (`helianthus-ebus-adapter-proxy`)
+
+- Keep `ebusd` on direct adapter endpoint and point Helianthus add-on to adapter-proxy endpoint.
+- Set `proxy_profile` to `enh` or `ens` to enable transition mode marker + endpoint wiring.
+- Example values:
+  - proxy profile: `enh`
+  - proxy endpoint: `127.0.0.1:19001`
+  - effective transport marker: `Transport: enh (tcp enh://127.0.0.1:19001)`
 
 ## Install and start add-on
 
@@ -33,6 +45,8 @@ ha addons repo add https://github.com/d3vi1/helianthus-ha-addon
   "transport": "ebusd-tcp",
   "network": "tcp",
   "address": "192.168.100.2:9999",
+  "proxy_profile": "disabled",
+  "proxy_endpoint": "",
   "host": "127.0.0.1",
   "http_port": 8080,
   "graphql_path": "/graphql",
@@ -66,6 +80,7 @@ python3 scripts/smoke_addon_checklist.py \
   --transport ebusd-tcp \
   --network tcp \
   --address 192.168.100.2:9999 \
+  --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
   --graphql-path /graphql \
@@ -81,12 +96,30 @@ python3 scripts/smoke_addon_checklist.py \
   --transport ebusd-tcp \
   --network tcp \
   --address 192.168.100.2:9999 \
+  --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
   --graphql-path /graphql \
   --subscription-path /graphql/subscriptions \
   --mcp-path /mcp \
   --json
+```
+
+Proxy transition checklist example (`enh` profile):
+
+```bash
+python3 scripts/smoke_addon_checklist.py \
+  --log-file /tmp/helianthus-addon.log \
+  --transport enh \
+  --network tcp \
+  --address 192.168.100.2:9999 \
+  --proxy-profile enh \
+  --proxy-endpoint 127.0.0.1:19001 \
+  --host 127.0.0.1 \
+  --http-port 8080 \
+  --graphql-path /graphql \
+  --subscription-path /graphql/subscriptions \
+  --mcp-path /mcp
 ```
 
 Checklist IDs (stable order):
@@ -97,6 +130,8 @@ Checklist IDs (stable order):
 - [ ] CHECK_CONNECTION_MCP
 - [ ] CHECK_LOG_STARTUP
 - [ ] CHECK_LOG_TRANSPORT
+- [ ] CHECK_LOG_PROXY_PROFILE
+- [ ] CHECK_LOG_PROXY_ENDPOINT
 - [ ] CHECK_LOG_GRAPHQL_ENDPOINT
 - [ ] CHECK_LOG_SUBSCRIPTION_ENDPOINT
 - [ ] CHECK_LOG_MCP_ENDPOINT
@@ -122,6 +157,8 @@ Exit code:
 | CHECK_CONNECTION_MCP | MCP endpoint not reachable or tools/list failed | Verify `mcp_path` and supervisor/network reachability |
 | CHECK_LOG_STARTUP | Startup marker missing | Confirm add-on process starts and does not crash early |
 | CHECK_LOG_TRANSPORT | Transport marker mismatch | Verify `transport/network/address` options for ebusd-tcp |
+| CHECK_LOG_PROXY_PROFILE | Proxy profile marker mismatch | Verify `proxy_profile` is set to `disabled`, `enh`, or `ens` as intended |
+| CHECK_LOG_PROXY_ENDPOINT | Proxy endpoint marker mismatch | Verify `proxy_endpoint` and transition mode endpoint normalization |
 | CHECK_LOG_GRAPHQL_ENDPOINT | GraphQL endpoint marker mismatch | Verify `host/http_port/graphql_path` in add-on config |
 | CHECK_LOG_SUBSCRIPTION_ENDPOINT | Subscriptions marker mismatch | Verify `subscription_path` and graphql path normalization |
 | CHECK_LOG_MCP_ENDPOINT | MCP marker mismatch | Verify `mcp_path` normalization and startup options |
