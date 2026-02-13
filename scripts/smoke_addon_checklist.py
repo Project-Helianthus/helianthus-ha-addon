@@ -15,6 +15,8 @@ CHECK_CONNECTION_GRAPHQL = "CHECK_CONNECTION_GRAPHQL"
 CHECK_CONNECTION_MCP = "CHECK_CONNECTION_MCP"
 CHECK_LOG_STARTUP = "CHECK_LOG_STARTUP"
 CHECK_LOG_TRANSPORT = "CHECK_LOG_TRANSPORT"
+CHECK_LOG_PROXY_PROFILE = "CHECK_LOG_PROXY_PROFILE"
+CHECK_LOG_PROXY_ENDPOINT = "CHECK_LOG_PROXY_ENDPOINT"
 CHECK_LOG_GRAPHQL_ENDPOINT = "CHECK_LOG_GRAPHQL_ENDPOINT"
 CHECK_LOG_SUBSCRIPTION_ENDPOINT = "CHECK_LOG_SUBSCRIPTION_ENDPOINT"
 CHECK_LOG_MCP_ENDPOINT = "CHECK_LOG_MCP_ENDPOINT"
@@ -27,6 +29,8 @@ TRIAGE = {
     CHECK_CONNECTION_MCP: "verify mcp_path/http_port and supervisor host-network reachability",
     CHECK_LOG_STARTUP: "verify add-on process did not exit before gateway startup",
     CHECK_LOG_TRANSPORT: "verify transport/network/address options match local ebusd-tcp target",
+    CHECK_LOG_PROXY_PROFILE: "verify proxy_profile is disabled, enh, or ens",
+    CHECK_LOG_PROXY_ENDPOINT: "verify proxy_endpoint and proxy endpoint normalization",
     CHECK_LOG_GRAPHQL_ENDPOINT: "verify host/http_port/graphql_path options and restart add-on",
     CHECK_LOG_SUBSCRIPTION_ENDPOINT: "verify subscription_path and graphql_path normalization",
     CHECK_LOG_MCP_ENDPOINT: "verify mcp_path normalization and gateway startup options",
@@ -177,6 +181,8 @@ def run_checklist(
     expected_transport: str,
     expected_network: str,
     expected_address: str,
+    expected_proxy_profile_marker: str,
+    expected_proxy_endpoint_marker: str,
     expected_graphql_marker: str,
     expected_subscription_marker: str,
     expected_mcp_marker: str,
@@ -191,6 +197,8 @@ def run_checklist(
             log_text,
             f"Transport: {expected_transport} ({expected_network} {expected_address})",
         ),
+        _check_marker(CHECK_LOG_PROXY_PROFILE, log_text, expected_proxy_profile_marker),
+        _check_marker(CHECK_LOG_PROXY_ENDPOINT, log_text, expected_proxy_endpoint_marker),
         _check_marker(CHECK_LOG_GRAPHQL_ENDPOINT, log_text, expected_graphql_marker),
         _check_marker(CHECK_LOG_SUBSCRIPTION_ENDPOINT, log_text, expected_subscription_marker),
         _check_marker(CHECK_LOG_MCP_ENDPOINT, log_text, expected_mcp_marker),
@@ -219,6 +227,41 @@ def _normalize_path(path: str) -> str:
 
 def _build_url(host: str, port: int, path: str) -> str:
     return urlunsplit(("http", f"{host}:{port}", _normalize_path(path), "", ""))
+
+
+def _normalize_proxy_profile(proxy_profile: str) -> str:
+    normalized = proxy_profile.strip().lower()
+    if normalized == "":
+        return "disabled"
+    return normalized
+
+
+def _derive_proxy_endpoint_marker(proxy_profile: str, proxy_endpoint: str) -> str:
+    normalized_endpoint = proxy_endpoint.strip()
+    if proxy_profile in {"enh", "ens"}:
+        if normalized_endpoint == "":
+            return "(none)"
+        if "://" in normalized_endpoint:
+            return normalized_endpoint
+        return f"{proxy_profile}://{normalized_endpoint}"
+    if normalized_endpoint == "":
+        return "(none)"
+    return normalized_endpoint
+
+
+def _derive_transport_marker(
+    transport: str,
+    network: str,
+    address: str,
+    proxy_profile: str,
+    proxy_endpoint_marker: str,
+) -> tuple[str, str, str]:
+    expected_transport = transport.strip()
+    expected_network = network.strip()
+    expected_address = address.strip()
+    if proxy_profile in {"enh", "ens"} and proxy_endpoint_marker != "(none)":
+        return proxy_profile, "tcp", proxy_endpoint_marker
+    return expected_transport, expected_network, expected_address
 
 
 def _derive_subscription_path(graphql_path: str, subscription_path: str) -> str:
@@ -252,6 +295,16 @@ def _parse_args() -> argparse.Namespace:
         required=True,
         help="Expected transport address marker value (for example 192.168.100.2:9999).",
     )
+    parser.add_argument(
+        "--proxy-profile",
+        default="disabled",
+        help="Expected proxy profile marker value (disabled|enh|ens).",
+    )
+    parser.add_argument(
+        "--proxy-endpoint",
+        default="",
+        help="Expected proxy endpoint marker value or host:port when proxy_profile is enabled.",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="Expected endpoint host in startup log markers.")
     parser.add_argument("--http-port", type=int, default=8080, help="Expected endpoint port in startup markers.")
     parser.add_argument("--graphql-path", default="/graphql", help="Expected graphql path in markers.")
@@ -271,6 +324,18 @@ def main() -> int:
     with open(args.log_file, "r", encoding="utf-8") as handle:
         log_text = handle.read()
 
+    proxy_profile = _normalize_proxy_profile(args.proxy_profile)
+    if proxy_profile not in {"disabled", "enh", "ens"}:
+        raise SystemExit("--proxy-profile must be one of: disabled, enh, ens")
+    proxy_endpoint_marker = _derive_proxy_endpoint_marker(proxy_profile, args.proxy_endpoint)
+    expected_transport, expected_network, expected_address = _derive_transport_marker(
+        args.transport,
+        args.network,
+        args.address,
+        proxy_profile,
+        proxy_endpoint_marker,
+    )
+
     graphql_path = _normalize_path(args.graphql_path)
     subscription_path = _derive_subscription_path(graphql_path, args.subscription_path)
     graphql_url = _build_url(args.host, args.http_port, graphql_path)
@@ -281,9 +346,11 @@ def main() -> int:
         log_text=log_text,
         graphql_url=graphql_url,
         mcp_url=mcp_url,
-        expected_transport=args.transport,
-        expected_network=args.network,
-        expected_address=args.address,
+        expected_transport=expected_transport,
+        expected_network=expected_network,
+        expected_address=expected_address,
+        expected_proxy_profile_marker=f"Proxy profile: {proxy_profile}",
+        expected_proxy_endpoint_marker=f"Proxy endpoint: {proxy_endpoint_marker}",
         expected_graphql_marker=f"GraphQL endpoint: {graphql_url}",
         expected_subscription_marker=f"Subscriptions endpoint: {subscription_url}",
         expected_mcp_marker=f"MCP endpoint: {mcp_url}",

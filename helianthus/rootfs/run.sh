@@ -5,6 +5,8 @@ set -euo pipefail
 transport=$(bashio::config 'transport')
 network=$(bashio::config 'network')
 address=$(bashio::config 'address')
+proxy_profile=$(bashio::config 'proxy_profile')
+proxy_endpoint=$(bashio::config 'proxy_endpoint')
 host=$(bashio::config 'host')
 port=$(bashio::config 'port')
 path=$(bashio::config 'path')
@@ -18,6 +20,41 @@ broadcast=$(bashio::config 'broadcast')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
+
+effective_transport="${transport}"
+effective_network="${network}"
+effective_address="${address}"
+
+proxy_profile=$(printf '%s' "${proxy_profile}" | tr '[:upper:]' '[:lower:]')
+
+case "${proxy_profile}" in
+  "" | disabled)
+    proxy_profile="disabled"
+    ;;
+  enh | ens)
+    if [ -z "${proxy_endpoint}" ]; then
+      bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
+    fi
+    if [[ "${proxy_endpoint}" == *"://"* ]]; then
+      effective_address="${proxy_endpoint}"
+    else
+      effective_address="${proxy_profile}://${proxy_endpoint}"
+    fi
+    effective_transport="${proxy_profile}"
+    effective_network="tcp"
+    ;;
+  *)
+    bashio::exit.nok "proxy_profile must be one of: disabled, enh, ens"
+    ;;
+esac
+
+proxy_endpoint_marker="(none)"
+if [ -n "${proxy_endpoint}" ]; then
+  proxy_endpoint_marker="${proxy_endpoint}"
+fi
+if [ "${proxy_profile}" = "enh" ] || [ "${proxy_profile}" = "ens" ]; then
+  proxy_endpoint_marker="${effective_address}"
+fi
 
 if [ -z "${http_port}" ]; then
   http_port=8080
@@ -58,7 +95,9 @@ fi
 http_addr="0.0.0.0:${http_port}"
 
 bashio::log.info "Starting Helianthus gateway"
-bashio::log.info "Transport: ${transport} (${network} ${address})"
+bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
+bashio::log.info "Proxy profile: ${proxy_profile}"
+bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
 bashio::log.info "HTTP listen: ${http_addr}"
 bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
 bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
@@ -66,9 +105,9 @@ bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 
 exec /usr/local/bin/helianthus-gateway \
-  -transport "${transport}" \
-  -network "${network}" \
-  -address "${address}" \
+  -transport "${effective_transport}" \
+  -network "${effective_network}" \
+  -address "${effective_address}" \
   -http-addr "${http_addr}" \
   -graphql-path "${graphql_path}" \
   -subscription-path "${subscription_path}" \

@@ -21,6 +21,8 @@ Key options are exposed in `config.json`:
 - `transport`: `enh`, `ens`, or `ebusd-tcp`
 - `network`: `tcp` or `unix`
 - `address`: transport address (e.g. `HOST:PORT`)
+- `proxy_profile`: `disabled`, `enh`, or `ens` (transition mode profile marker)
+- `proxy_endpoint`: proxy endpoint (`host:port` or URI) used when `proxy_profile` is enabled
 - `host`: hostname used in startup endpoint logs
 - `port`: simple GraphQL/MCP endpoint port alias
 - `path`: simple GraphQL endpoint path alias
@@ -31,3 +33,6 @@ Key options are exposed in `config.json`:
 - `mdns`: enable/disable mDNS advertisement
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
+
+For transition mode via `helianthus-ebus-adapter-proxy`, set `proxy_profile=enh|ens` and
+`proxy_endpoint=<host:port>` (or full endpoint URI); startup logs emit proxy profile/endpoint markers.

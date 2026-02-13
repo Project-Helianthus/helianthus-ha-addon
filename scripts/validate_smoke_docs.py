@@ -14,6 +14,7 @@ SMOKE_CHECKLIST_PATH = Path(__file__).with_name("smoke_addon_checklist.py")
 
 REQUIRED_HEADINGS = [
     "## Local ebusd-tcp topology",
+    "## Proxy transition topology (`helianthus-ebus-adapter-proxy`)",
     "## Install and start add-on",
     "## Add-on configuration (copy/paste)",
     "## Deterministic smoke checklist",
@@ -24,6 +25,8 @@ REQUIRED_CONFIG_KEYS = [
     "transport",
     "network",
     "address",
+    "proxy_profile",
+    "proxy_endpoint",
     "host",
     "http_port",
     "graphql_path",
@@ -37,6 +40,8 @@ REQUIRED_CHECKS = [
     "CHECK_CONNECTION_MCP",
     "CHECK_LOG_STARTUP",
     "CHECK_LOG_TRANSPORT",
+    "CHECK_LOG_PROXY_PROFILE",
+    "CHECK_LOG_PROXY_ENDPOINT",
     "CHECK_LOG_GRAPHQL_ENDPOINT",
     "CHECK_LOG_SUBSCRIPTION_ENDPOINT",
     "CHECK_LOG_MCP_ENDPOINT",
@@ -99,6 +104,9 @@ def main() -> int:
     if config_payload.get("network") != "tcp":
         print("smoke config network must be tcp")
         return 1
+    if config_payload.get("proxy_profile") != "disabled":
+        print("smoke config proxy_profile must be disabled")
+        return 1
 
     checklist_section = _extract_marker_block(text, "smoke-checklist")
     lines = [line.strip() for line in checklist_section.splitlines() if line.strip()]
@@ -145,6 +153,28 @@ def main() -> int:
         print(
             "subscription marker derivation mismatch for explicit subscription_path: "
             f"{explicit_subscription}",
+        )
+        return 1
+
+    normalized_proxy_endpoint = smoke_addon_checklist._derive_proxy_endpoint_marker(
+        "enh",
+        "127.0.0.1:19001",
+    )
+    if normalized_proxy_endpoint != "enh://127.0.0.1:19001":
+        print(
+            "proxy endpoint marker derivation mismatch for host:port endpoint: "
+            f"{normalized_proxy_endpoint}",
+        )
+        return 1
+
+    disabled_proxy_endpoint = smoke_addon_checklist._derive_proxy_endpoint_marker(
+        "disabled",
+        "",
+    )
+    if disabled_proxy_endpoint != "(none)":
+        print(
+            "proxy endpoint marker derivation mismatch for disabled profile: "
+            f"{disabled_proxy_endpoint}",
         )
         return 1
 

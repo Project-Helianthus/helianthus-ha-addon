@@ -37,6 +37,23 @@ Common TCP baseline:
 transport: enh
 network: tcp
 address: 192.168.100.2:9999
+proxy_profile: disabled
+proxy_endpoint: ""
+http_port: 8080
+graphql_path: /graphql
+subscription_path: /graphql/subscriptions
+mcp_path: /mcp
+mdns: true
+```
+
+Transition mode via `helianthus-ebus-adapter-proxy` (ENH example):
+
+```yaml
+transport: enh
+network: tcp
+address: 192.168.100.2:9999
+proxy_profile: enh
+proxy_endpoint: 127.0.0.1:19001
 http_port: 8080
 graphql_path: /graphql
 subscription_path: /graphql/subscriptions
@@ -51,6 +68,8 @@ mdns: true
 | `transport` | `list(enh\|ens\|ebusd-tcp)` | `enh` | Set to your backend protocol | Passed to `-transport` |
 | `network` | `list(tcp\|unix)` | `tcp` | Match your endpoint type | Passed to `-network` |
 | `address` | `str` | `HOST:PORT` | **Required:** replace placeholder with real endpoint/socket | Passed to `-address`; placeholder is not operational |
+| `proxy_profile` | `list(disabled\|enh\|ens)` | `disabled` | Set `enh`/`ens` for transition mode via adapter-proxy | When enabled, runtime forces TCP proxy endpoint and logs profile marker |
+| `proxy_endpoint` | `str` | `""` | Set proxy host:port or endpoint URI | Required when `proxy_profile` is `enh` or `ens`; accepts `host:port` or full URI |
 | `host` | `str` | `127.0.0.1` | Optional | Used for startup endpoint log URLs only; does not change bind address |
 | `port` | `int` | `8080` | Optional compatibility alias | Can override `http_port` (legacy key support) |
 | `path` | `str` | `/graphql` | Optional compatibility alias | Can override `graphql_path` (legacy key support) |
@@ -70,6 +89,7 @@ Compatibility precedence from `run.sh`:
 - `port` may override `http_port` for legacy configs
 - `path` may override `graphql_path` for legacy configs
 - if `graphql_path` changes and `subscription_path` stays default, runtime derives `<graphql_path>/subscriptions`
+- if `proxy_profile` is `enh` or `ens`, runtime uses `proxy_endpoint` and emits proxy profile/endpoint startup markers
 
 ## Compatibility and runtime assumptions
 
@@ -108,6 +128,8 @@ Use your configured host/port/path values in commands below.
 1. Confirm startup markers:
    - `Starting Helianthus gateway`
    - `Transport: ...`
+   - `Proxy profile: ...`
+   - `Proxy endpoint: ...`
    - `GraphQL endpoint: ...`
    - `Subscriptions endpoint: ...`
    - `MCP endpoint: ...`
@@ -159,6 +181,7 @@ Workflow: `.github/workflows/build.yml`
 ## Troubleshooting
 
 - No data: verify `transport`, `network`, and `address` match your live backend
+- Transition mode issues: verify `proxy_profile` and `proxy_endpoint` match your adapter-proxy ENH/ENS listener
 - Endpoint mismatch: verify `http_port`, `graphql_path`, `subscription_path`, `mcp_path`, and alias keys (`port`, `path`)
 - mDNS missing: verify `mdns=true`, multicast availability, and startup log lines
 - Connection errors: verify backend service health, routing, and firewall rules
