@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": ["aarch64", "amd64", "armhf", "armv7", "i386"],
@@ -16,6 +16,12 @@
   },
   "image": "ghcr.io/d3vi1/helianthus-ha-addon",
   "options": {
+    "adapter_proxy_enabled": false,
+    "adapter_proxy_upstream": "",
+    "adapter_proxy_port": 19001,
+    "adapter_proxy_dial_timeout": "3s",
+    "adapter_proxy_read_timeout": "200ms",
+    "adapter_proxy_write_timeout": "2s",
     "transport": "enh",
     "network": "tcp",
     "address": "HOST:PORT",
@@ -36,6 +42,12 @@
     "dial_timeout": "5s"
   },
   "schema": {
+    "adapter_proxy_enabled": "bool",
+    "adapter_proxy_upstream": "str",
+    "adapter_proxy_port": "int",
+    "adapter_proxy_dial_timeout": "str",
+    "adapter_proxy_read_timeout": "str",
+    "adapter_proxy_write_timeout": "str",
     "transport": "list(enh|ens|ebusd-tcp)",
     "network": "list(tcp|unix)",
     "address": "str",

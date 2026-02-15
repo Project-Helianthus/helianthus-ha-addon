@@ -1,0 +1,38 @@
+#!/usr/bin/with-contenv bashio
+
+set -euo pipefail
+
+enabled=$(bashio::config 'adapter_proxy_enabled')
+upstream=$(bashio::config 'adapter_proxy_upstream')
+listen_port=$(bashio::config 'adapter_proxy_port')
+dial_timeout=$(bashio::config 'adapter_proxy_dial_timeout')
+read_timeout=$(bashio::config 'adapter_proxy_read_timeout')
+write_timeout=$(bashio::config 'adapter_proxy_write_timeout')
+
+if ! bashio::var.true "${enabled}"; then
+  bashio::log.info "eBUS adapter proxy: disabled"
+  exec bash -c 'while true; do sleep 3600; done'
+fi
+
+upstream_trimmed=$(printf '%s' "${upstream}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if [ -z "${upstream_trimmed}" ]; then
+  bashio::exit.nok "adapter_proxy_upstream is required when adapter_proxy_enabled=true"
+fi
+
+if [ -z "${listen_port}" ]; then
+  listen_port=19001
+fi
+
+listen_addr="0.0.0.0:${listen_port}"
+
+bashio::log.info "Starting eBUS adapter proxy"
+bashio::log.info "Listen: ${listen_addr}"
+bashio::log.info "Upstream: (configured)"
+
+exec /usr/local/bin/helianthus-ebus-adapter-proxy \
+  -listen "${listen_addr}" \
+  -upstream "${upstream_trimmed}" \
+  -dial-timeout "${dial_timeout}" \
+  -read-timeout "${read_timeout}" \
+  -write-timeout "${write_timeout}"
+

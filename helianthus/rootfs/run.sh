@@ -20,6 +20,8 @@ broadcast=$(bashio::config 'broadcast')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
+adapter_proxy_enabled=$(bashio::config 'adapter_proxy_enabled')
+adapter_proxy_port=$(bashio::config 'adapter_proxy_port')
 
 effective_transport="${transport}"
 effective_network="${network}"
@@ -104,6 +106,21 @@ bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
 bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
 bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
+
+if bashio::var.true "${adapter_proxy_enabled}"; then
+  if [ -z "${adapter_proxy_port}" ]; then
+    adapter_proxy_port=19001
+  fi
+
+  bashio::log.info "Waiting for eBUS adapter proxy on 127.0.0.1:${adapter_proxy_port}"
+  for _ in $(seq 1 50); do
+    if (echo >/dev/tcp/127.0.0.1/${adapter_proxy_port}) >/dev/null 2>&1; then
+      bashio::log.info "eBUS adapter proxy is reachable"
+      break
+    fi
+    sleep 0.1
+  done
+fi
 
 exec /usr/local/bin/helianthus-gateway \
   -transport "${effective_transport}" \
