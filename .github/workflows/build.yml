@@ -65,7 +65,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: |
             ghcr.io/d3vi1/helianthus-ha-addon:latest-${{ matrix.arch }}
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-${{ matrix.arch }}
             ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
           build-args: |
             EBUSGATEWAY_VERSION=main
@@ -105,13 +104,6 @@ jobs:
             ghcr.io/d3vi1/helianthus-ha-addon:latest-armv7 \
             ghcr.io/d3vi1/helianthus-ha-addon:latest-armhf \
             ghcr.io/d3vi1/helianthus-ha-addon:latest-i386
-          docker buildx imagetools create \
-            -t ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }} \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-amd64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-aarch64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-armv7 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-armhf \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ github.sha }}-i386
           docker buildx imagetools create \
             -t ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
             ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
