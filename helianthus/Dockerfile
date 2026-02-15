@@ -3,8 +3,7 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/base:3.20
 ARG VRCEXPLORER_VERSION=main
 
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
-ARG TARGETOS
+FROM --platform=$TARGETPLATFORM golang:1.22-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG EBUSGATEWAY_VERSION=main
@@ -19,10 +18,9 @@ RUN --mount=type=secret,id=github_token \
     if [ -f /run/secrets/github_token ]; then \
       git config --global url."https://$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
     fi \
- && GOBIN=/out GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
-    go install github.com/d3vi1/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION} \
- && GOBIN=/out GOOS=$TARGETOS GOARCH=$TARGETARCH GOARM=${TARGETVARIANT#v} \
-    go install github.com/d3vi1/helianthus-ebus-adapter-proxy/cmd/helianthus-ebus-adapter-proxy@${EBUSADAPTERPROXY_VERSION}
+ && if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi \
+ && GOBIN=/out go install github.com/d3vi1/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION} \
+ && GOBIN=/out go install github.com/d3vi1/helianthus-ebus-adapter-proxy/cmd/helianthus-ebus-adapter-proxy@${EBUSADAPTERPROXY_VERSION}
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
 ARG VRCEXPLORER_VERSION=main
