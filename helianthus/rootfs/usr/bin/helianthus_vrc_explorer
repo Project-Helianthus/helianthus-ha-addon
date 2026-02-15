@@ -1,0 +1,6 @@
+#!/usr/bin/with-contenv bashio
+
+set -euo pipefail
+
+export PYTHONPATH="/opt/helianthus-vrc-explorer${PYTHONPATH:+:${PYTHONPATH}}"
+exec python3 -m helianthus_vrc_explorer "$@"

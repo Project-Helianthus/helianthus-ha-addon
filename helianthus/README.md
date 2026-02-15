@@ -5,8 +5,10 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 ## Status
 
 - Builds and runs `helianthus-ebusgateway`
+- Optionally runs `helianthus-ebus-adapter-proxy` in the same container (s6 service)
 - Exposes GraphQL + MCP over HTTP
 - Advertises `_helianthus-graphql._tcp` via mDNS (optional)
+- Bundles `helianthus_vrc_explorer` in `/usr/bin` for on-device debugging
 
 ## Defaults
 
@@ -18,6 +20,9 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 
 Key options are exposed in `config.json`:
 
+- `adapter_proxy_enabled`: start the local adapter proxy service
+- `adapter_proxy_upstream`: upstream endpoint for the proxy (e.g. `enh://<host>:<port>`)
+- `adapter_proxy_port`: local proxy listen port
 - `transport`: `enh`, `ens`, or `ebusd-tcp`
 - `network`: `tcp` or `unix`
 - `address`: transport address (e.g. `HOST:PORT`)
@@ -36,3 +41,13 @@ For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<
 
 For transition mode via `helianthus-ebus-adapter-proxy`, set `proxy_profile=enh|ens` and
 `proxy_endpoint=<host:port>` (or full endpoint URI); startup logs emit proxy profile/endpoint markers.
+
+## Debugging tools
+
+This add-on image includes `helianthus_vrc_explorer` at `/usr/bin/helianthus_vrc_explorer`.
+
+It runs with:
+
+```sh
+helianthus_vrc_explorer --help
+```
