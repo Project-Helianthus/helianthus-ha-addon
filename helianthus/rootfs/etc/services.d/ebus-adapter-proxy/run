@@ -3,6 +3,7 @@
 set -euo pipefail
 
 enabled=$(bashio::config 'adapter_proxy_enabled')
+debug=$(bashio::config 'adapter_proxy_debug')
 upstream=$(bashio::config 'adapter_proxy_upstream')
 listen_port=$(bashio::config 'adapter_proxy_port')
 dial_timeout=$(bashio::config 'adapter_proxy_dial_timeout')
@@ -29,10 +30,15 @@ bashio::log.info "Starting eBUS adapter proxy"
 bashio::log.info "Listen: ${listen_addr}"
 bashio::log.info "Upstream: (configured)"
 
+extra_args=()
+if bashio::var.true "${debug}"; then
+  extra_args+=("-debug")
+fi
+
 exec /usr/local/bin/helianthus-ebus-adapter-proxy \
   -listen "${listen_addr}" \
   -upstream "${upstream_trimmed}" \
   -dial-timeout "${dial_timeout}" \
   -read-timeout "${read_timeout}" \
-  -write-timeout "${write_timeout}"
-
+  -write-timeout "${write_timeout}" \
+  "${extra_args[@]}"
