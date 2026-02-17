@@ -17,6 +17,7 @@ mcp_path=$(bashio::config 'mcp_path')
 mdns=$(bashio::config 'mdns')
 mdns_instance=$(bashio::config 'mdns_instance')
 broadcast=$(bashio::config 'broadcast')
+source_addr=$(bashio::config 'source_addr')
 scan_request_timeout=$(bashio::config 'scan_request_timeout')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
@@ -127,10 +128,16 @@ if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
 
+source_addr_args=()
+if [ -n "${source_addr}" ]; then
+  source_addr_args=(-source-addr "${source_addr}")
+fi
+
 exec /usr/local/bin/helianthus-gateway \
   -transport "${effective_transport}" \
   -network "${effective_network}" \
   -address "${effective_address}" \
+  "${source_addr_args[@]}" \
   -scan-request-timeout "${scan_request_timeout}" \
   -http-addr "${http_addr}" \
   -graphql-path "${graphql_path}" \
