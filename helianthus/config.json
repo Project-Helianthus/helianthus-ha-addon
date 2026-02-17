@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.3.25",
+  "version": "0.3.26",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": [
@@ -44,6 +44,7 @@
     "mdns": true,
     "mdns_instance": "helianthus",
     "broadcast": false,
+    "source_addr": "0x31",
     "scan_request_timeout": "400ms",
     "read_timeout": "5s",
     "write_timeout": "5s",
@@ -72,6 +73,7 @@
     "mdns": "bool",
     "mdns_instance": "str",
     "broadcast": "bool",
+    "source_addr": "str",
     "scan_request_timeout": "str",
     "read_timeout": "str",
     "write_timeout": "str",
