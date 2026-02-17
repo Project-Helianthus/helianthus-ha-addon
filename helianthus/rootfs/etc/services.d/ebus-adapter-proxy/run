@@ -31,9 +31,9 @@ bashio::log.info "Listen: ${listen_addr}"
 bashio::log.info "Upstream: (configured)"
 
 extra_args=()
-if bashio::var.true "${debug}"; then
-  extra_args+=("-debug")
-fi
+# Force debug logs on for now. This add-on is used primarily for live debugging
+# and will be switched back to config-controlled once the proxy is stable.
+extra_args+=("-debug")
 
 exec /usr/local/bin/helianthus-ebus-adapter-proxy \
   -listen "${listen_addr}" \
