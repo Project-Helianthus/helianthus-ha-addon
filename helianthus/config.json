@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.3.16",
+  "version": "0.3.24",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": [
@@ -23,6 +23,7 @@
   "image": "ghcr.io/d3vi1/helianthus-ha-addon",
   "options": {
     "adapter_proxy_enabled": false,
+    "adapter_proxy_debug": false,
     "adapter_proxy_upstream": "",
     "adapter_proxy_port": 19001,
     "adapter_proxy_dial_timeout": "3s",
@@ -49,6 +50,7 @@
   },
   "schema": {
     "adapter_proxy_enabled": "bool",
+    "adapter_proxy_debug": "bool",
     "adapter_proxy_upstream": "str",
     "adapter_proxy_port": "int",
     "adapter_proxy_dial_timeout": "str",
