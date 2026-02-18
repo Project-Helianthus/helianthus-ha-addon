@@ -44,11 +44,7 @@ helianthus-ebusgo -> helianthus-ebusreg -> helianthus-ebusgateway -> helianthus-
 ```bash
 git clone https://github.com/d3vi1/helianthus-ha-addon.git
 cd helianthus-ha-addon
-python3 -m json.tool repository.json >/dev/null
-python3 -m json.tool helianthus/config.json >/dev/null
-bash -n helianthus/rootfs/run.sh
-if git grep -nIwiE 'm[a]ster|s[l]ave'; then echo "Found legacy terminology."; exit 1; fi
-python3 scripts/validate_smoke_docs.py
+./scripts/ci_local.sh
 python3 scripts/smoke_addon_checklist.py --help
 ```
 
@@ -65,7 +61,7 @@ Then install **Helianthus** from the Add-on Store and open add-on configuration.
 ```yaml
 transport: ebusd-tcp
 network: tcp
-address: 192.168.100.2:9999
+address: 203.0.113.10:9999
 proxy_profile: disabled
 proxy_endpoint: ""
 http_port: 8080
@@ -80,7 +76,7 @@ mdns: true
 ```yaml
 transport: enh
 network: tcp
-address: 192.168.100.2:9999
+address: 203.0.113.10:9999
 proxy_profile: enh
 proxy_endpoint: 127.0.0.1:19001
 http_port: 8080
@@ -106,7 +102,7 @@ Deterministic smoke checklist from add-on logs:
 
 ```bash
 ha addons logs helianthus > /tmp/helianthus-addon.log
-python3 scripts/smoke_addon_checklist.py --log-file /tmp/helianthus-addon.log --address 192.168.100.2:9999
+python3 scripts/smoke_addon_checklist.py --log-file /tmp/helianthus-addon.log --address 203.0.113.10:9999
 ```
 
 For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
@@ -117,7 +113,6 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 |---|---|
 | JSON syntax | `python3 -m json.tool repository.json >/dev/null` |
 | add-on config syntax | `python3 -m json.tool helianthus/config.json >/dev/null` |
-| shell syntax | `bash -n helianthus/rootfs/run.sh` |
 | terminology gate (CI parity) | `if git grep -nIwiE 'm[a]ster|s[l]ave'; then echo "Found legacy terminology."; exit 1; fi` |
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
