@@ -128,6 +128,12 @@ if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
 
+source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if bashio::var.true "${adapter_proxy_enabled}" && { [ "${source_addr_normalized}" = "0x31" ] || [ "${source_addr_normalized}" = "31" ]; }; then
+  bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default; overriding to 0xF0 when adapter_proxy_enabled=true"
+  source_addr="0xF0"
+fi
+
 source_addr_args=()
 if [ -n "${source_addr}" ]; then
   source_addr_args=(-source-addr "${source_addr}")
