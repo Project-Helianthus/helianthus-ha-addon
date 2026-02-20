@@ -99,19 +99,16 @@ fi
 
 http_addr="0.0.0.0:${http_port}"
 
-bashio::log.info "Starting Helianthus gateway"
-bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
-bashio::log.info "Proxy profile: ${proxy_profile}"
-bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
-bashio::log.info "HTTP listen: ${http_addr}"
-bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
-bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
-bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
-bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
-
 if bashio::var.true "${adapter_proxy_enabled}"; then
   if [ -z "${adapter_proxy_port}" ]; then
     adapter_proxy_port=19001
+  fi
+
+  if [ "${effective_transport}" = "ebusd-tcp" ]; then
+    bashio::log.warning "adapter_proxy_enabled=true with transport=ebusd-tcp; overriding gateway transport to ens://127.0.0.1:${adapter_proxy_port}"
+    effective_transport="ens"
+    effective_network="tcp"
+    effective_address="127.0.0.1:${adapter_proxy_port}"
   fi
 
   bashio::log.info "Waiting for eBUS adapter proxy on 127.0.0.1:${adapter_proxy_port}"
@@ -130,14 +127,24 @@ fi
 
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 if bashio::var.true "${adapter_proxy_enabled}" && { [ "${source_addr_normalized}" = "0x31" ] || [ "${source_addr_normalized}" = "31" ]; }; then
-  bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default; overriding to 0xF0 when adapter_proxy_enabled=true"
-  source_addr="0xF0"
+  bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default; overriding to 0x01 when adapter_proxy_enabled=true"
+  source_addr="0x01"
 fi
 
 source_addr_args=()
 if [ -n "${source_addr}" ]; then
   source_addr_args=(-source-addr "${source_addr}")
 fi
+
+bashio::log.info "Starting Helianthus gateway"
+bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
+bashio::log.info "Proxy profile: ${proxy_profile}"
+bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
+bashio::log.info "HTTP listen: ${http_addr}"
+bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
+bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
+bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
+bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 
 exec /usr/local/bin/helianthus-gateway \
   -transport "${effective_transport}" \
