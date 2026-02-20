@@ -128,14 +128,25 @@ fi
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_args=()
 if [ "${source_addr_normalized}" = "auto" ]; then
-  bashio::log.info "source_addr=auto; gateway uses configured/default source selection"
+  if [ "${effective_transport}" = "ebusd-tcp" ]; then
+    bashio::log.info "source_addr=auto with transport=ebusd-tcp; gateway uses configured/default source selection"
+  else
+    bashio::log.info "source_addr=auto; enabling proxy/gateway gentle-join source selection"
+    source_addr_args=(-source-addr "auto")
+  fi
 elif [ -n "${source_addr_normalized}" ]; then
   if bashio::var.true "${adapter_proxy_enabled}" && { [ "${source_addr_normalized}" = "0x31" ] || [ "${source_addr_normalized}" = "31" ]; }; then
-    bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default (0x31); overriding to 0xF0"
-    source_addr="0xF0"
-    source_addr_normalized="0xf0"
+    bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default (0x31); overriding to auto gentle-join"
+    source_addr="auto"
+    source_addr_normalized="auto"
+    if [ "${effective_transport}" = "ebusd-tcp" ]; then
+      source_addr_args=()
+    else
+      source_addr_args=(-source-addr "auto")
+    fi
+  else
+    source_addr_args=(-source-addr "${source_addr}")
   fi
-  source_addr_args=(-source-addr "${source_addr}")
 fi
 
 if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${broadcast}"; then

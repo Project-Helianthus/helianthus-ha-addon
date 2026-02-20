@@ -44,7 +44,7 @@
     "mdns": true,
     "mdns_instance": "helianthus",
     "broadcast": true,
-    "source_addr": "0xF0",
+    "source_addr": "auto",
     "scan_request_timeout": "400ms",
     "read_timeout": "5s",
     "write_timeout": "5s",
