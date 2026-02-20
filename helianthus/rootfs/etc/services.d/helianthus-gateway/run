@@ -164,7 +164,13 @@ bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscript
 bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 
-exec /usr/local/bin/helianthus-gateway \
+gateway_bin="/usr/local/bin/helianthus-gateway"
+if [ -x "/data/helianthus-gateway" ]; then
+  gateway_bin="/data/helianthus-gateway"
+  bashio::log.info "Using gateway binary override from /data/helianthus-gateway"
+fi
+
+exec "${gateway_bin}" \
   -transport "${effective_transport}" \
   -network "${effective_network}" \
   -address "${effective_address}" \
