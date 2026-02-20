@@ -6,6 +6,8 @@ enabled=$(bashio::config 'adapter_proxy_enabled')
 debug=$(bashio::config 'adapter_proxy_debug')
 upstream=$(bashio::config 'adapter_proxy_upstream')
 listen_port=$(bashio::config 'adapter_proxy_port')
+udp_plain_enabled=$(bashio::config 'adapter_proxy_udp_plain_enabled')
+udp_plain_port=$(bashio::config 'adapter_proxy_udp_plain_port')
 dial_timeout=$(bashio::config 'adapter_proxy_dial_timeout')
 read_timeout=$(bashio::config 'adapter_proxy_read_timeout')
 write_timeout=$(bashio::config 'adapter_proxy_write_timeout')
@@ -25,10 +27,20 @@ if [ -z "${listen_port}" ]; then
 fi
 
 listen_addr="0.0.0.0:${listen_port}"
+udp_plain_listen_addr=""
+if bashio::var.true "${udp_plain_enabled}"; then
+  if [ -z "${udp_plain_port}" ]; then
+    udp_plain_port=19002
+  fi
+  udp_plain_listen_addr="0.0.0.0:${udp_plain_port}"
+fi
 
 bashio::log.info "Starting eBUS adapter proxy"
 bashio::log.info "Listen: ${listen_addr}"
 bashio::log.info "Upstream: (configured)"
+if [ -n "${udp_plain_listen_addr}" ]; then
+  bashio::log.info "UDP plain listen: ${udp_plain_listen_addr}"
+fi
 
 proxy_bin="/usr/local/bin/helianthus-ebus-adapter-proxy"
 if [ -x "/data/helianthus-ebus-adapter-proxy" ]; then
@@ -45,10 +57,18 @@ if bashio::var.true "${debug}"; then
   fi
 fi
 
+proxy_args=(
+  -listen "${listen_addr}"
+  -upstream "${upstream_trimmed}"
+  -dial-timeout "${dial_timeout}"
+  -read-timeout "${read_timeout}"
+  -write-timeout "${write_timeout}"
+)
+
+if [ -n "${udp_plain_listen_addr}" ]; then
+  proxy_args+=(-listen-udp-plain "${udp_plain_listen_addr}")
+fi
+
 exec "${proxy_bin}" \
-  -listen "${listen_addr}" \
-  -upstream "${upstream_trimmed}" \
-  -dial-timeout "${dial_timeout}" \
-  -read-timeout "${read_timeout}" \
-  -write-timeout "${write_timeout}" \
+  "${proxy_args[@]}" \
   "${extra_args[@]}"
