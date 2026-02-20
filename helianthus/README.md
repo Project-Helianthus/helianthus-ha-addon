@@ -51,3 +51,8 @@ It runs with:
 ```sh
 helianthus_vrc_explorer --help
 ```
+
+For local smoke/debug, executable overrides are supported from add-on data:
+
+- `/data/helianthus-gateway` overrides `/usr/local/bin/helianthus-gateway`
+- `/data/helianthus-ebus-adapter-proxy` overrides `/usr/local/bin/helianthus-ebus-adapter-proxy`

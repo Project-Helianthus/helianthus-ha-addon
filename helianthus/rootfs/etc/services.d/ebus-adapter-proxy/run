@@ -30,12 +30,22 @@ bashio::log.info "Starting eBUS adapter proxy"
 bashio::log.info "Listen: ${listen_addr}"
 bashio::log.info "Upstream: (configured)"
 
-extra_args=()
-if bashio::var.true "${debug}"; then
-  extra_args+=("-debug")
+proxy_bin="/usr/local/bin/helianthus-ebus-adapter-proxy"
+if [ -x "/data/helianthus-ebus-adapter-proxy" ]; then
+  proxy_bin="/data/helianthus-ebus-adapter-proxy"
+  bashio::log.info "Using eBUS adapter proxy binary override from /data/helianthus-ebus-adapter-proxy"
 fi
 
-exec /usr/local/bin/helianthus-ebus-adapter-proxy \
+extra_args=()
+if bashio::var.true "${debug}"; then
+  if "${proxy_bin}" -h 2>&1 | grep -q -- '-debug'; then
+    extra_args+=("-debug")
+  else
+    bashio::log.warning "adapter_proxy_debug=true ignored: proxy binary does not support -debug"
+  fi
+fi
+
+exec "${proxy_bin}" \
   -listen "${listen_addr}" \
   -upstream "${upstream_trimmed}" \
   -dial-timeout "${dial_timeout}" \
