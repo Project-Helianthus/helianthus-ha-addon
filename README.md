@@ -36,7 +36,7 @@ helianthus-ebusgo -> helianthus-ebusreg -> helianthus-ebusgateway -> helianthus-
 ### 0) Prerequisites
 
 - Home Assistant OS or Home Assistant Supervised (Supervisor add-ons enabled).
-- Reachable eBUS backend endpoint (`enh` / `ens` / `ebusd-tcp`).
+- Reachable eBUS backend endpoint (`enh` / `ens` / `udp-plain` / `ebusd-tcp`).
 - `python3` and `bash` for local docs/check scripts.
 
 ### 1) Clone and run local validation checks
@@ -62,6 +62,8 @@ Then install **Helianthus** from the Add-on Store and open add-on configuration.
 transport: ebusd-tcp
 network: tcp
 address: 203.0.113.10:9999
+source_addr: auto
+source_addr_state_file: /data/source_addr.last
 proxy_profile: disabled
 proxy_endpoint: ""
 http_port: 8080
@@ -77,6 +79,11 @@ mdns: true
 transport: enh
 network: tcp
 address: 203.0.113.10:9999
+adapter_proxy_enabled: true
+adapter_proxy_upstream: enh://203.0.113.10:9999
+adapter_proxy_port: 19001
+adapter_proxy_udp_plain_enabled: true
+adapter_proxy_udp_plain_port: 19002
 proxy_profile: enh
 proxy_endpoint: 127.0.0.1:19001
 http_port: 8080
