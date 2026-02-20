@@ -131,9 +131,16 @@ if [ "${source_addr_normalized}" = "auto" ]; then
   bashio::log.info "source_addr=auto; gateway uses configured/default source selection"
 elif [ -n "${source_addr_normalized}" ]; then
   if bashio::var.true "${adapter_proxy_enabled}" && { [ "${source_addr_normalized}" = "0x31" ] || [ "${source_addr_normalized}" = "31" ]; }; then
-    bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default (0x31); keeping configured value"
+    bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default (0x31); overriding to 0xF0"
+    source_addr="0xF0"
+    source_addr_normalized="0xf0"
   fi
   source_addr_args=(-source-addr "${source_addr}")
+fi
+
+if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${broadcast}"; then
+  bashio::log.warning "adapter_proxy_enabled=true with broadcast=false; enabling broadcast listener"
+  broadcast=true
 fi
 
 bashio::log.info "Starting Helianthus gateway"
