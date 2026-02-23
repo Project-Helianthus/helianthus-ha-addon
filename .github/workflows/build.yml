@@ -48,7 +48,11 @@ jobs:
         id: vrc
         run: |
           set -euo pipefail
-          ref="$(git ls-remote https://github.com/d3vi1/helianthus-vrc-explorer.git refs/heads/main | awk '{print $1}')"
+          remote_url="https://github.com/d3vi1/helianthus-vrc-explorer.git"
+          if [ -n "${{ secrets.REPO_READ_TOKEN }}" ]; then
+            remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/d3vi1/helianthus-vrc-explorer.git"
+          fi
+          ref="$(git ls-remote "${remote_url}" refs/heads/main | awk '{print $1}')"
           if [ -z "${ref}" ]; then
             echo "failed to resolve helianthus-vrc-explorer main ref" >&2
             exit 1
