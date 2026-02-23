@@ -194,7 +194,8 @@ fi
 
 if [ "${source_addr_normalized}" = "auto" ]; then
   if [ "${effective_transport}" = "ebusd-tcp" ]; then
-    bashio::log.info "source_addr=auto with transport=ebusd-tcp; gateway uses configured/default source selection"
+    bashio::log.info "source_addr=auto with transport=ebusd-tcp; forcing ebusd-compatible source selection"
+    source_addr_args=(-source-addr "auto")
   else
     bashio::log.info "source_addr=auto; enabling proxy/gateway gentle-join source selection"
     source_addr_args=(-source-addr "auto")
