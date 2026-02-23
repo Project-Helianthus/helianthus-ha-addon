@@ -161,10 +161,7 @@ if bashio::var.true "${adapter_proxy_enabled}"; then
   fi
 
   if [ "${effective_transport}" = "ebusd-tcp" ]; then
-    bashio::log.warning "adapter_proxy_enabled=true with transport=ebusd-tcp; overriding gateway transport to ens://127.0.0.1:${adapter_proxy_port}"
-    effective_transport="ens"
-    effective_network="tcp"
-    effective_address="127.0.0.1:${adapter_proxy_port}"
+    bashio::log.info "adapter_proxy_enabled=true with transport=ebusd-tcp; keeping gateway transport unchanged and using proxy for side clients"
   fi
 
   bashio::log.info "Waiting for eBUS adapter proxy on 127.0.0.1:${adapter_proxy_port}"
