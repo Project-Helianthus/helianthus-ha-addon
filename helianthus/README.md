@@ -55,6 +55,7 @@ For transition mode via `helianthus-ebus-adapter-proxy`, set `proxy_profile=enh|
 ## Debugging tools
 
 This add-on image includes `helianthus_vrc_explorer` at `/usr/bin/helianthus_vrc_explorer`.
+CI builds resolve `helianthus-vrc-explorer` `main` to a concrete commit SHA at build time and install that pinned revision in the image.
 
 It runs with:
 

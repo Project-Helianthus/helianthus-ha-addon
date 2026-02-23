@@ -44,6 +44,18 @@ jobs:
           set -euo pipefail
           echo "version=$(jq -r '.version' helianthus/config.json)" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve helianthus-vrc-explorer ref
+        id: vrc
+        run: |
+          set -euo pipefail
+          ref="$(git ls-remote https://github.com/d3vi1/helianthus-vrc-explorer.git refs/heads/main | awk '{print $1}')"
+          if [ -z "${ref}" ]; then
+            echo "failed to resolve helianthus-vrc-explorer main ref" >&2
+            exit 1
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "Resolved helianthus-vrc-explorer main to ${ref}"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -69,7 +81,7 @@ jobs:
           build-args: |
             EBUSGATEWAY_VERSION=main
             EBUSADAPTERPROXY_VERSION=main
-            VRCEXPLORER_VERSION=main
+            VRCEXPLORER_VERSION=${{ steps.vrc.outputs.ref }}
             BUILD_FROM=${{ matrix.base }}
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}
