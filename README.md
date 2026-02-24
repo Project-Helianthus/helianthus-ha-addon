@@ -123,6 +123,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | terminology gate (CI parity) | `if git grep -nIwiE 'm[a]ster|s[l]ave'; then echo "Found legacy terminology."; exit 1; fi` |
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
 | gateway parity gate readiness | `python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
+| rollout guardrails | `python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
 
 ## Link Map
