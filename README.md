@@ -124,6 +124,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
 | gateway parity gate readiness | `python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | rollout guardrails | `python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
+| post-parity enablement tasks | `python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
 
 ## Link Map
