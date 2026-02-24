@@ -58,3 +58,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/validate_smoke_docs.py
+
+      - name: Validate gateway parity gate artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json
