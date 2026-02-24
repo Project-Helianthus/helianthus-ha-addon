@@ -70,3 +70,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json
+
+      - name: Run post-parity enablement tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md

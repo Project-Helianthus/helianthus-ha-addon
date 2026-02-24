@@ -43,6 +43,9 @@ python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway
 echo "==> rollout guardrails"
 python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json
 
+echo "==> post-parity enablement tasks"
+python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
+
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 - <<'PY'
 from __future__ import annotations
