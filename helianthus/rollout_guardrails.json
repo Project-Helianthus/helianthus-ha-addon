@@ -1,0 +1,8 @@
+{
+  "stage": "pre_parity",
+  "allow_consumer_expansion": false,
+  "required_gateway_gates": [
+    "parity_contract",
+    "tool_classification"
+  ]
+}
