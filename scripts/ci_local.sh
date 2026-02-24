@@ -40,6 +40,9 @@ python3 scripts/validate_smoke_docs.py
 echo "==> gateway parity gate readiness"
 python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json
 
+echo "==> rollout guardrails"
+python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json
+
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 - <<'PY'
 from __future__ import annotations
