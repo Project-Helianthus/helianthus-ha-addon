@@ -48,9 +48,9 @@ jobs:
         id: vrc
         run: |
           set -euo pipefail
-          remote_url="https://github.com/d3vi1/helianthus-vrc-explorer.git"
+          remote_url="https://github.com/Project-Helianthus/helianthus-vrc-explorer.git"
           if [ -n "${{ secrets.REPO_READ_TOKEN }}" ]; then
-            remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/d3vi1/helianthus-vrc-explorer.git"
+            remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/Project-Helianthus/helianthus-vrc-explorer.git"
           fi
           ref="$(git ls-remote "${remote_url}" refs/heads/main | awk '{print $1}')"
           if [ -z "${ref}" ]; then
@@ -80,8 +80,8 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-${{ matrix.arch }}
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-${{ matrix.arch }}
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
           build-args: |
             EBUSGATEWAY_VERSION=main
             EBUSADAPTERPROXY_VERSION=main
@@ -114,16 +114,16 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create \
-            -t ghcr.io/d3vi1/helianthus-ha-addon:latest \
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-amd64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-aarch64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-armv7 \
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-armhf \
-            ghcr.io/d3vi1/helianthus-ha-addon:latest-i386
+            -t ghcr.io/Project-Helianthus/helianthus-ha-addon:latest \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-amd64 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-aarch64 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-armv7 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-armhf \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-i386
           docker buildx imagetools create \
-            -t ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-aarch64 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armv7 \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armhf \
-            ghcr.io/d3vi1/helianthus-ha-addon:${{ steps.addon.outputs.version }}-i386
+            -t ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-aarch64 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armv7 \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armhf \
+            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-i386

@@ -30,7 +30,7 @@ the adapter-proxy transition topology, and produces deterministic pass/fail outp
 1) Add repository:
 
 ```bash
-ha addons repo add https://github.com/d3vi1/helianthus-ha-addon
+ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.

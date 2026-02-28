@@ -20,7 +20,7 @@
   "ports_description": {
     "8080/tcp": "GraphQL + MCP HTTP server"
   },
-  "image": "ghcr.io/d3vi1/helianthus-ha-addon",
+  "image": "ghcr.io/Project-Helianthus/helianthus-ha-addon",
   "options": {
     "adapter_proxy_enabled": false,
     "adapter_proxy_debug": false,

@@ -42,7 +42,7 @@ helianthus-ebusgo -> helianthus-ebusreg -> helianthus-ebusgateway -> helianthus-
 ### 1) Clone and run local validation checks
 
 ```bash
-git clone https://github.com/d3vi1/helianthus-ha-addon.git
+git clone https://github.com/Project-Helianthus/helianthus-ha-addon.git
 cd helianthus-ha-addon
 ./scripts/ci_local.sh
 python3 scripts/smoke_addon_checklist.py --help
@@ -51,7 +51,7 @@ python3 scripts/smoke_addon_checklist.py --help
 ### 2) Add repository to Home Assistant and install
 
 ```bash
-ha addons repo add https://github.com/d3vi1/helianthus-ha-addon
+ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
@@ -139,11 +139,11 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 
 ### Related Helianthus repos/docs
 
-- Gateway runtime: https://github.com/d3vi1/helianthus-ebusgateway
-- Registry/schema layer: https://github.com/d3vi1/helianthus-ebusreg
-- eBUS transport/protocol layer: https://github.com/d3vi1/helianthus-ebusgo
-- HA integration: https://github.com/d3vi1/helianthus-ha-integration
-- eBUS docs hub: https://github.com/d3vi1/helianthus-docs-ebus
+- Gateway runtime: https://github.com/Project-Helianthus/helianthus-ebusgateway
+- Registry/schema layer: https://github.com/Project-Helianthus/helianthus-ebusreg
+- eBUS transport/protocol layer: https://github.com/Project-Helianthus/helianthus-ebusgo
+- HA integration: https://github.com/Project-Helianthus/helianthus-ha-integration
+- eBUS docs hub: https://github.com/Project-Helianthus/helianthus-docs-ebus
 
 ### Issue workflow conventions
 
