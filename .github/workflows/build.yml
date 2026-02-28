@@ -80,8 +80,8 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-${{ matrix.arch }}
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-${{ matrix.arch }}
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
           build-args: |
             EBUSGATEWAY_VERSION=main
             EBUSADAPTERPROXY_VERSION=main
@@ -114,16 +114,16 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create \
-            -t ghcr.io/Project-Helianthus/helianthus-ha-addon:latest \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-amd64 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-aarch64 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-armv7 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-armhf \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:latest-i386
+            -t ghcr.io/project-helianthus/helianthus-ha-addon:latest \
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-amd64 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-aarch64 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-armv7 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-armhf \
+            ghcr.io/project-helianthus/helianthus-ha-addon:latest-i386
           docker buildx imagetools create \
-            -t ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-aarch64 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armv7 \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armhf \
-            ghcr.io/Project-Helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-i386
+            -t ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-aarch64 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armv7 \
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armhf \
+            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-i386
