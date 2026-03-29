@@ -64,6 +64,10 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 After saving config, restart the add-on.
 
+On first start, the add-on also creates `/data/instance_guid` if it does not already exist.
+Preserving `/data` across updates keeps the same Helianthus identity; reinstalling without `/data`
+creates a new identity that Home Assistant should treat as a new instance.
+
 ## Deterministic smoke checklist
 
 1) Export add-on logs:

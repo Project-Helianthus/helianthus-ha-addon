@@ -49,6 +49,13 @@ Source-address persistence:
 - `source_addr_state_file` (default `/data/source_addr.last`) stores the last explicit source address used by the gateway.
 - On restart with `source_addr=auto` (and non-`ebusd-tcp` transport), the add-on reuses the persisted address when present.
 
+Stable instance GUID persistence:
+
+- The add-on stores the Helianthus instance GUID at `/data/instance_guid`.
+- If the file is missing or invalid, startup generates a new lowercase UUIDv4 and persists it atomically.
+- The persisted GUID survives normal restarts and updates as long as `/data` is preserved.
+- Removing `/data/instance_guid` or reinstalling without restoring `/data` creates a new Helianthus instance identity.
+
 For transition mode via `helianthus-ebus-adapter-proxy`, set `proxy_profile=enh|ens` and
 `proxy_endpoint=<host:port>` (or full endpoint URI); startup logs emit proxy profile/endpoint markers.
 
