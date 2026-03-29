@@ -25,6 +25,24 @@ write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_proxy_enabled=$(bashio::config 'adapter_proxy_enabled')
 adapter_proxy_port=$(bashio::config 'adapter_proxy_port')
+observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)
+passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
+passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
+external_write_policy=$(bashio::config 'external_write_policy' 2>/dev/null || true)
+
+# Apply defaults when Supervisor has not yet merged new config schema keys.
+if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ]; then
+  observe_first_enabled=true
+fi
+if [ -z "${passive_state_direct_apply}" ] || [ "${passive_state_direct_apply}" = "null" ]; then
+  passive_state_direct_apply=false
+fi
+if [ -z "${passive_config_direct_apply}" ] || [ "${passive_config_direct_apply}" = "null" ]; then
+  passive_config_direct_apply=false
+fi
+if [ -z "${external_write_policy}" ] || [ "${external_write_policy}" = "null" ]; then
+  external_write_policy="record_only"
+fi
 instance_guid_file="/data/instance_guid"
 
 source_addr_state_file=$(printf '%s' "${source_addr_state_file}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
@@ -312,6 +330,7 @@ bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscript
 bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 bashio::log.info "Stable instance GUID: ${instance_guid}"
+bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
@@ -335,4 +354,8 @@ exec "${gateway_bin}" \
   -broadcast="${broadcast}" \
   -read-timeout "${read_timeout}" \
   -write-timeout "${write_timeout}" \
-  -dial-timeout "${dial_timeout}"
+  -dial-timeout "${dial_timeout}" \
+  -observe-first-enabled="${observe_first_enabled}" \
+  -passive-state-direct-apply="${passive_state_direct_apply}" \
+  -passive-config-direct-apply="${passive_config_direct_apply}" \
+  -external-write-policy "${external_write_policy}"
