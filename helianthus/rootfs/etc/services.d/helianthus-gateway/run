@@ -25,6 +25,7 @@ write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_proxy_enabled=$(bashio::config 'adapter_proxy_enabled')
 adapter_proxy_port=$(bashio::config 'adapter_proxy_port')
+instance_guid_file="/data/instance_guid"
 
 source_addr_state_file=$(printf '%s' "${source_addr_state_file}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 
@@ -47,7 +48,62 @@ normalize_source_addr_value() {
     return 0
   fi
 
-  return 1
+	return 1
+}
+
+normalize_instance_guid() {
+	local raw normalized
+	raw="$1"
+	normalized=$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+	if [ -z "${normalized}" ]; then
+		return 1
+	fi
+	if [[ "${normalized}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+		printf '%s' "${normalized}"
+		return 0
+	fi
+	return 1
+}
+
+load_instance_guid_state() {
+	if [ ! -f "${instance_guid_file}" ]; then
+		return 1
+	fi
+
+	local stored
+	stored=$(head -n 1 "${instance_guid_file}" 2>/dev/null || true)
+	if [ -z "${stored}" ]; then
+		return 1
+	fi
+
+	normalize_instance_guid "${stored}"
+}
+
+persist_instance_guid_state() {
+	local value tmp dir
+	value="$1"
+	if [ -z "${value}" ]; then
+		return 1
+	fi
+
+	dir=$(dirname "${instance_guid_file}")
+	tmp="${instance_guid_file}.tmp"
+
+	mkdir -p "${dir}" 2>/dev/null || return 1
+	if printf '%s\n' "${value}" >"${tmp}" 2>/dev/null; then
+		mv -f "${tmp}" "${instance_guid_file}" 2>/dev/null || return 1
+	fi
+	rm -f "${tmp}" 2>/dev/null || true
+	return 0
+}
+
+generate_instance_guid() {
+	local generated
+	generated=""
+	if [ -r /proc/sys/kernel/random/uuid ]; then
+		generated=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || true)
+	fi
+	normalize_instance_guid "${generated}"
 }
 
 load_source_addr_state() {
@@ -220,6 +276,27 @@ if [ -n "${persist_source_addr}" ] && [ "${effective_transport}" != "ebusd-tcp" 
   persist_source_addr_state "${persist_source_addr}"
 fi
 
+instance_guid=""
+if [ -f "${instance_guid_file}" ]; then
+  instance_guid=$(load_instance_guid_state || true)
+  if [ -z "${instance_guid}" ]; then
+    bashio::log.warning "Invalid instance GUID in ${instance_guid_file}; regenerating"
+  fi
+fi
+
+if [ -z "${instance_guid}" ]; then
+  instance_guid=$(generate_instance_guid || true)
+  if [ -z "${instance_guid}" ]; then
+    bashio::exit.nok "Failed to generate stable instance GUID"
+  fi
+  if ! persist_instance_guid_state "${instance_guid}"; then
+    bashio::exit.nok "Failed to persist stable instance GUID to ${instance_guid_file}"
+  fi
+  bashio::log.info "Generated stable instance GUID ${instance_guid}"
+else
+  bashio::log.info "Using persisted stable instance GUID ${instance_guid}"
+fi
+
 if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${broadcast}"; then
   bashio::log.warning "adapter_proxy_enabled=true with broadcast=false; enabling broadcast listener"
   broadcast=true
@@ -234,6 +311,7 @@ bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
 bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
 bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
+bashio::log.info "Stable instance GUID: ${instance_guid}"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
@@ -253,6 +331,7 @@ exec "${gateway_bin}" \
   -mcp-path "${mcp_path}" \
   -mdns="${mdns}" \
   -mdns-instance "${mdns_instance}" \
+  -instance-guid "${instance_guid}" \
   -broadcast="${broadcast}" \
   -read-timeout "${read_timeout}" \
   -write-timeout "${write_timeout}" \

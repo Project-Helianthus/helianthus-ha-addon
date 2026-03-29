@@ -2,6 +2,8 @@
 
 `helianthus-ha-addon` is the Home Assistant add-on packaging layer for Helianthus gateway runtime. It runs `helianthus-gateway` in Supervisor and exposes GraphQL/MCP endpoints to Home Assistant operators.
 
+The add-on also owns the stable Helianthus instance GUID used by the Home Assistant integration. It persists a lowercase UUIDv4 in `/data/instance_guid`, keeps it across normal restarts and updates, and passes it through to the gateway for GraphQL and mDNS discovery.
+
 ## Purpose and Scope
 
 ### What belongs in this repository
@@ -113,6 +115,12 @@ python3 scripts/smoke_addon_checklist.py --log-file /tmp/helianthus-addon.log --
 ```
 
 For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
+
+## Stable Instance GUID Lifecycle
+
+- First start with empty `/data`: generate `/data/instance_guid`.
+- Restart or add-on update with preserved `/data`: reuse the same GUID.
+- Reinstall without restored `/data`: generate a new GUID and present as a new Helianthus instance to Home Assistant.
 
 ## Validation Commands
 
