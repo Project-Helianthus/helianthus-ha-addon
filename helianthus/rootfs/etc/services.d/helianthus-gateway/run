@@ -35,7 +35,7 @@ if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ];
   observe_first_enabled=true
 fi
 if [ -z "${passive_state_direct_apply}" ] || [ "${passive_state_direct_apply}" = "null" ]; then
-  passive_state_direct_apply=false
+  passive_state_direct_apply=true
 fi
 if [ -z "${passive_config_direct_apply}" ] || [ "${passive_config_direct_apply}" = "null" ]; then
   passive_config_direct_apply=false

@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.3.50",
+  "version": "0.3.51",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": [
@@ -53,7 +53,7 @@
     "write_timeout": "5s",
     "dial_timeout": "5s",
     "observe_first_enabled": true,
-    "passive_state_direct_apply": false,
+    "passive_state_direct_apply": true,
     "passive_config_direct_apply": false,
     "external_write_policy": "record_only"
   },
