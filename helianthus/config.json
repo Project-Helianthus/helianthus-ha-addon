@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.3.54",
+  "version": "0.3.55",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": [
@@ -20,7 +20,7 @@
   "ports_description": {
     "8080/tcp": "GraphQL + MCP HTTP server"
   },
-  "image": "ghcr.io/Project-Helianthus/helianthus-ha-addon",
+  "image": "ghcr.io/project-helianthus/helianthus-ha-addon",
   "options": {
     "adapter_proxy_enabled": false,
     "adapter_proxy_debug": false,
