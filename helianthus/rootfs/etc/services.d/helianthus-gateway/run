@@ -23,11 +23,8 @@ scan_request_timeout=$(bashio::config 'scan_request_timeout')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
-adapter_proxy_enabled=$(bashio::config 'adapter_proxy_enabled')
-adapter_proxy_port=$(bashio::config 'adapter_proxy_port')
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
-adapter_proxy_listen=$(bashio::config 'adapter_proxy_listen' 2>/dev/null || true)
 observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)
 passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
@@ -51,9 +48,6 @@ if [ -z "${adapter_direct_enabled}" ] || [ "${adapter_direct_enabled}" = "null" 
 fi
 if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
   adapter_direct_address=""
-fi
-if [ -z "${adapter_proxy_listen}" ] || [ "${adapter_proxy_listen}" = "null" ]; then
-  adapter_proxy_listen=""
 fi
 instance_guid_file="/data/instance_guid"
 
@@ -255,25 +249,6 @@ fi
 
 http_addr="0.0.0.0:${http_port}"
 
-if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${adapter_direct_enabled}"; then
-  if [ -z "${adapter_proxy_port}" ]; then
-    adapter_proxy_port=19001
-  fi
-
-  if [ "${effective_transport}" = "ebusd-tcp" ]; then
-    bashio::log.info "adapter_proxy_enabled=true with transport=ebusd-tcp; keeping gateway transport unchanged and using proxy for side clients"
-  fi
-
-  bashio::log.info "Waiting for eBUS adapter proxy on 127.0.0.1:${adapter_proxy_port}"
-  for _ in $(seq 1 50); do
-    if (echo >/dev/tcp/127.0.0.1/${adapter_proxy_port}) >/dev/null 2>&1; then
-      bashio::log.info "eBUS adapter proxy is reachable"
-      break
-    fi
-    sleep 0.1
-  done
-fi
-
 if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
@@ -297,23 +272,12 @@ if [ "${source_addr_normalized}" = "auto" ]; then
     bashio::log.info "source_addr=auto with transport=ebusd-tcp; forcing ebusd-compatible source selection"
     source_addr_args=(-source-addr "auto")
   else
-    bashio::log.info "source_addr=auto; enabling proxy/gateway gentle-join source selection"
+    bashio::log.info "source_addr=auto; enabling gentle-join source selection"
     source_addr_args=(-source-addr "auto")
   fi
 elif [ -n "${source_addr_normalized}" ]; then
-  if bashio::var.true "${adapter_proxy_enabled}" && { [ "${source_addr_normalized}" = "0x31" ] || [ "${source_addr_normalized}" = "31" ]; }; then
-    bashio::log.warning "source_addr=${source_addr} conflicts with ebusd default (0x31); overriding to auto gentle-join"
-      source_addr="auto"
-      source_addr_normalized="auto"
-      if [ "${effective_transport}" = "ebusd-tcp" ]; then
-        source_addr_args=()
-      else
-      source_addr_args=(-source-addr "auto")
-    fi
-  else
-    source_addr_args=(-source-addr "${source_addr}")
-    persist_source_addr=$(normalize_source_addr_value "${source_addr}" || true)
-  fi
+  source_addr_args=(-source-addr "${source_addr}")
+  persist_source_addr=$(normalize_source_addr_value "${source_addr}" || true)
 fi
 
 if [ -n "${persist_source_addr}" ] && [ "${effective_transport}" != "ebusd-tcp" ]; then
@@ -341,41 +305,12 @@ else
   bashio::log.info "Using persisted stable instance GUID ${instance_guid}"
 fi
 
-if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${broadcast}"; then
-  bashio::log.warning "adapter_proxy_enabled=true with broadcast=false; enabling broadcast listener"
-  broadcast=true
-fi
-
-# Build proxy-listen args for adapter-direct mode
-proxy_listen_args=()
-if bashio::var.true "${adapter_direct_enabled}"; then
-  adapter_proxy_listen_trimmed=$(printf '%s' "${adapter_proxy_listen}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  if [ -n "${adapter_proxy_listen_trimmed}" ]; then
-    # Skip --proxy-listen when the standalone adapter proxy is already bound on the same port
-    if bashio::var.true "${adapter_proxy_enabled}"; then
-      # Extract port from adapter_proxy_listen (host:port or :port format)
-      listen_port="${adapter_proxy_listen_trimmed##*:}"
-      if [ "${listen_port}" = "${adapter_proxy_port}" ]; then
-        bashio::log.warning "adapter_proxy is already listening on port ${adapter_proxy_port}; skipping --proxy-listen to avoid port conflict"
-        proxy_listen_args=()
-      else
-        proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
-      fi
-    else
-      proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
-    fi
-  fi
-fi
-
 bashio::log.info "Starting Helianthus gateway"
 bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
 bashio::log.info "Proxy profile: ${proxy_profile}"
 bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
 if bashio::var.true "${adapter_direct_enabled}"; then
   bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} address=${adapter_direct_address}"
-  if [ ${#proxy_listen_args[@]} -gt 0 ]; then
-    bashio::log.info "Proxy-listen: ${proxy_listen_args[1]}"
-  fi
 fi
 bashio::log.info "HTTP listen: ${http_addr}"
 bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
@@ -396,7 +331,6 @@ exec "${gateway_bin}" \
   -network "${effective_network}" \
   -address "${effective_address}" \
   "${source_addr_args[@]}" \
-  "${proxy_listen_args[@]}" \
   -scan-request-timeout "${scan_request_timeout}" \
   -http-addr "${http_addr}" \
   -graphql-path "${graphql_path}" \

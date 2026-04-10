@@ -12,6 +12,12 @@ permissions:
   contents: read
   packages: write
 
+env:
+  IMAGE_NAME: ghcr.io/project-helianthus/helianthus-ha-addon
+  OCI_SOURCE: https://github.com/Project-Helianthus/helianthus-ha-addon
+  OCI_DESCRIPTION: Helianthus Home Assistant add-on
+  OCI_LICENSE: AGPL-3.0-or-later
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -80,11 +86,14 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-${{ matrix.arch }}
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ env.OCI_SOURCE }}
+            org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
           build-args: |
             EBUSGATEWAY_VERSION=main
-            EBUSADAPTERPROXY_VERSION=main
             VRCEXPLORER_VERSION=${{ steps.vrc.outputs.ref }}
             BUILD_FROM=${{ matrix.base }}
           secrets: |
@@ -114,16 +123,34 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create \
-            -t ghcr.io/project-helianthus/helianthus-ha-addon:latest \
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-amd64 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-aarch64 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-armv7 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-armhf \
-            ghcr.io/project-helianthus/helianthus-ha-addon:latest-i386
+            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
+            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
+            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
+            -t "${IMAGE_NAME}:latest" \
+            "${IMAGE_NAME}:latest-amd64" \
+            "${IMAGE_NAME}:latest-aarch64" \
+            "${IMAGE_NAME}:latest-armv7" \
+            "${IMAGE_NAME}:latest-armhf" \
+            "${IMAGE_NAME}:latest-i386"
           docker buildx imagetools create \
-            -t ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }} \
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-amd64 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-aarch64 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armv7 \
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-armhf \
-            ghcr.io/project-helianthus/helianthus-ha-addon:${{ steps.addon.outputs.version }}-i386
+            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
+            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
+            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
+            -t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-aarch64" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armv7" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armhf" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"
+
+      - name: Verify GHCR package is public
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          visibility="$(gh api "/orgs/${{ github.repository_owner }}/packages/container/helianthus-ha-addon" --jq '.visibility')"
+          if [ "${visibility}" != "public" ]; then
+            echo "GHCR package visibility is '${visibility}'. Home Assistant Supervisor needs anonymous pull access."
+            echo "Open https://github.com/orgs/${{ github.repository_owner }}/packages/container/package/helianthus-ha-addon and set visibility to public."
+            exit 1
+          fi

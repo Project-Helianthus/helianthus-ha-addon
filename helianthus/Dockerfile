@@ -7,7 +7,6 @@ FROM --platform=$TARGETPLATFORM golang:1.26-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG EBUSGATEWAY_VERSION=main
-ARG EBUSADAPTERPROXY_VERSION=main
 
 RUN apk add --no-cache git ca-certificates
 
@@ -19,8 +18,7 @@ RUN --mount=type=secret,id=github_token \
       git config --global url."https://$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
     fi \
  && if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi \
- && GOBIN=/out go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION} \
- && GOBIN=/out go install github.com/Project-Helianthus/helianthus-ebus-adapter-proxy/cmd/helianthus-ebus-adapter-proxy@${EBUSADAPTERPROXY_VERSION}
+ && GOBIN=/out go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
 ARG VRCEXPLORER_VERSION=main
@@ -41,6 +39,5 @@ ARG VRCEXPLORER_VERSION=main
 RUN apk add --no-cache python3 ca-certificates
 
 COPY --from=builder /out/gateway /usr/local/bin/helianthus-gateway
-COPY --from=builder /out/helianthus-ebus-adapter-proxy /usr/local/bin/helianthus-ebus-adapter-proxy
 COPY --from=vrc-explorer /out/python /opt/helianthus-vrc-explorer
 COPY rootfs/ /
