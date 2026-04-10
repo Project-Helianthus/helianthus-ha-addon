@@ -25,6 +25,9 @@ write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_proxy_enabled=$(bashio::config 'adapter_proxy_enabled')
 adapter_proxy_port=$(bashio::config 'adapter_proxy_port')
+adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
+adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
+adapter_proxy_listen=$(bashio::config 'adapter_proxy_listen' 2>/dev/null || true)
 observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)
 passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
@@ -42,6 +45,15 @@ if [ -z "${passive_config_direct_apply}" ] || [ "${passive_config_direct_apply}"
 fi
 if [ -z "${external_write_policy}" ] || [ "${external_write_policy}" = "null" ]; then
   external_write_policy="record_only"
+fi
+if [ -z "${adapter_direct_enabled}" ] || [ "${adapter_direct_enabled}" = "null" ]; then
+  adapter_direct_enabled=false
+fi
+if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
+  adapter_direct_address=""
+fi
+if [ -z "${adapter_proxy_listen}" ] || [ "${adapter_proxy_listen}" = "null" ]; then
+  adapter_proxy_listen=""
 fi
 instance_guid_file="/data/instance_guid"
 
@@ -191,6 +203,20 @@ if [ "${proxy_profile}" = "enh" ] || [ "${proxy_profile}" = "ens" ]; then
   proxy_endpoint_marker="${effective_address}"
 fi
 
+# adapter-direct mode: override transport to adapter-direct:// URI
+if bashio::var.true "${adapter_direct_enabled}"; then
+  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  if [ -z "${adapter_direct_address_trimmed}" ]; then
+    bashio::exit.nok "adapter_direct_address is required when adapter_direct_enabled=true"
+  fi
+  if [ "${proxy_profile}" != "disabled" ]; then
+    bashio::log.warning "adapter_direct_enabled=true overrides proxy_profile=${proxy_profile}; adapter-direct takes precedence"
+  fi
+  effective_transport="adapter-direct"
+  effective_network="tcp"
+  effective_address="adapter-direct://${adapter_direct_address_trimmed}"
+fi
+
 if [ -z "${http_port}" ]; then
   http_port=8080
 fi
@@ -229,7 +255,7 @@ fi
 
 http_addr="0.0.0.0:${http_port}"
 
-if bashio::var.true "${adapter_proxy_enabled}"; then
+if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${adapter_direct_enabled}"; then
   if [ -z "${adapter_proxy_port}" ]; then
     adapter_proxy_port=19001
   fi
@@ -320,10 +346,25 @@ if bashio::var.true "${adapter_proxy_enabled}" && ! bashio::var.true "${broadcas
   broadcast=true
 fi
 
+# Build proxy-listen args for adapter-direct mode
+proxy_listen_args=()
+if bashio::var.true "${adapter_direct_enabled}"; then
+  adapter_proxy_listen_trimmed=$(printf '%s' "${adapter_proxy_listen}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  if [ -n "${adapter_proxy_listen_trimmed}" ]; then
+    proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
+  fi
+fi
+
 bashio::log.info "Starting Helianthus gateway"
 bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
 bashio::log.info "Proxy profile: ${proxy_profile}"
 bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
+if bashio::var.true "${adapter_direct_enabled}"; then
+  bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} address=${adapter_direct_address}"
+  if [ ${#proxy_listen_args[@]} -gt 0 ]; then
+    bashio::log.info "Proxy-listen: ${proxy_listen_args[1]}"
+  fi
+fi
 bashio::log.info "HTTP listen: ${http_addr}"
 bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
 bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
@@ -343,6 +384,7 @@ exec "${gateway_bin}" \
   -network "${effective_network}" \
   -address "${effective_address}" \
   "${source_addr_args[@]}" \
+  "${proxy_listen_args[@]}" \
   -scan-request-timeout "${scan_request_timeout}" \
   -http-addr "${http_addr}" \
   -graphql-path "${graphql_path}" \
