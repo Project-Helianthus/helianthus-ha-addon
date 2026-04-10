@@ -353,7 +353,9 @@ if bashio::var.true "${adapter_direct_enabled}"; then
   if [ -n "${adapter_proxy_listen_trimmed}" ]; then
     # Skip --proxy-listen when the standalone adapter proxy is already bound on the same port
     if bashio::var.true "${adapter_proxy_enabled}"; then
-      if [ "${adapter_proxy_listen_trimmed}" = "127.0.0.1:${adapter_proxy_port}" ] || [ "${adapter_proxy_listen_trimmed}" = "0.0.0.0:${adapter_proxy_port}" ]; then
+      # Extract port from adapter_proxy_listen (host:port or :port format)
+      listen_port="${adapter_proxy_listen_trimmed##*:}"
+      if [ "${listen_port}" = "${adapter_proxy_port}" ]; then
         bashio::log.warning "adapter_proxy is already listening on port ${adapter_proxy_port}; skipping --proxy-listen to avoid port conflict"
         proxy_listen_args=()
       else
