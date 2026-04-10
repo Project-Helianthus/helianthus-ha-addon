@@ -179,7 +179,7 @@ case "${proxy_profile}" in
     proxy_profile="disabled"
     ;;
   enh | ens)
-    if [ -z "${proxy_endpoint_trimmed}" ]; then
+    if [ -z "${proxy_endpoint_trimmed}" ] && ! bashio::var.true "${adapter_direct_enabled}"; then
       bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
     fi
     if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
@@ -351,7 +351,17 @@ proxy_listen_args=()
 if bashio::var.true "${adapter_direct_enabled}"; then
   adapter_proxy_listen_trimmed=$(printf '%s' "${adapter_proxy_listen}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   if [ -n "${adapter_proxy_listen_trimmed}" ]; then
-    proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
+    # Skip --proxy-listen when the standalone adapter proxy is already bound on the same port
+    if bashio::var.true "${adapter_proxy_enabled}"; then
+      if [ "${adapter_proxy_listen_trimmed}" = "127.0.0.1:${adapter_proxy_port}" ] || [ "${adapter_proxy_listen_trimmed}" = "0.0.0.0:${adapter_proxy_port}" ]; then
+        bashio::log.warning "adapter_proxy is already listening on port ${adapter_proxy_port}; skipping --proxy-listen to avoid port conflict"
+        proxy_listen_args=()
+      else
+        proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
+      fi
+    else
+      proxy_listen_args=(-proxy-listen "${adapter_proxy_listen_trimmed}")
+    fi
   fi
 fi
 
