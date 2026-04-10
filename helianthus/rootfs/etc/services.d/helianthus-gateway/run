@@ -199,16 +199,23 @@ fi
 
 # adapter-direct mode: override transport to adapter-direct:// URI
 if bashio::var.true "${adapter_direct_enabled}"; then
-  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  # Strip whitespace, then strip any scheme prefix (ens://, enh://, adapter-direct://)
+  # so the user can paste any URI format and we normalize to plain host:port.
+  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s|^[a-zA-Z][-a-zA-Z0-9]*://||')
   if [ -z "${adapter_direct_address_trimmed}" ]; then
     bashio::exit.nok "adapter_direct_address is required when adapter_direct_enabled=true"
   fi
   if [ "${proxy_profile}" != "disabled" ]; then
     bashio::log.warning "adapter_direct_enabled=true overrides proxy_profile=${proxy_profile}; adapter-direct takes precedence"
   fi
+  # Use adapter-direct-ens:// if proxy_profile is ens, otherwise adapter-direct:// (ENH default)
+  if [ "${proxy_profile}" = "ens" ]; then
+    effective_address="adapter-direct-ens://${adapter_direct_address_trimmed}"
+  else
+    effective_address="adapter-direct://${adapter_direct_address_trimmed}"
+  fi
   effective_transport="adapter-direct"
   effective_network="tcp"
-  effective_address="adapter-direct://${adapter_direct_address_trimmed}"
 fi
 
 if [ -z "${http_port}" ]; then
