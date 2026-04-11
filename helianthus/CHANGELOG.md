@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 (2026-04-11)
+
+### Gateway v0.4.0
+
+- **Adapter-direct mode stable** — dual-transport (setup + readLoop), stale comment cleanup
+- **Wire phase tracker** — accounts for ArbitrationSendsSource (B524 root discovery fix)
+- **INFO cache hardening** — volatile ID passthrough, invalidate on disconnect, rebuild on RESETTED
+- **MaxOwnershipDuration** increased to 5s for contended bus headroom
+- **B524 probe** timeout budget + retry backoff for adapter-direct reliability
+- **Byte-level debug logging** removed from receive path (performance)
+- **Startup scan** safety-net for unconfirmed passes
+
+### Addon
+
+- Bump gateway to v0.4.0 (commit 25d0636)
+- Standalone adapter-proxy removed (gateway-embedded mux replaces it)
+- VRC Explorer still bundled (main branch)
+
 ## 0.3.58 (2026-04-08)
 
 ### Transport reliability (ebusgo, proxy)

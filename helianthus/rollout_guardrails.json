@@ -1,5 +1,5 @@
 {
-  "stage": "pre_parity",
+  "stage": "post_parity",
   "allow_consumer_expansion": false,
   "required_gateway_gates": [
     "parity_contract",
