@@ -50,7 +50,7 @@ fi
 if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
   adapter_direct_address=""
 fi
-if [ -z "${proxy_listen_addr}" ] || [ "${proxy_listen_addr}" = "null" ]; then
+if [ "${proxy_listen_addr}" = "null" ]; then
   proxy_listen_addr="0.0.0.0:19001"
 fi
 instance_guid_file="/data/instance_guid"
