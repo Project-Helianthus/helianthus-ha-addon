@@ -25,6 +25,7 @@ write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
+proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)
 observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)
 passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
@@ -48,6 +49,9 @@ if [ -z "${adapter_direct_enabled}" ] || [ "${adapter_direct_enabled}" = "null" 
 fi
 if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
   adapter_direct_address=""
+fi
+if [ "${proxy_listen_addr}" = "null" ]; then
+  proxy_listen_addr="0.0.0.0:19001"
 fi
 instance_guid_file="/data/instance_guid"
 
@@ -316,8 +320,13 @@ bashio::log.info "Starting Helianthus gateway"
 bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
 bashio::log.info "Proxy profile: ${proxy_profile}"
 bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
+proxy_listen_args=()
 if bashio::var.true "${adapter_direct_enabled}"; then
   bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} address=${adapter_direct_address}"
+  if [ -n "${proxy_listen_addr}" ]; then
+    proxy_listen_args=(-proxy-listen "${proxy_listen_addr}")
+    bashio::log.info "Proxy listener: ${proxy_listen_addr}"
+  fi
 fi
 bashio::log.info "HTTP listen: ${http_addr}"
 bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
@@ -353,4 +362,5 @@ exec "${gateway_bin}" \
   -observe-first-enabled="${observe_first_enabled}" \
   -passive-state-direct-apply="${passive_state_direct_apply}" \
   -passive-config-direct-apply="${passive_config_direct_apply}" \
-  -external-write-policy "${external_write_policy}"
+  -external-write-policy "${external_write_policy}" \
+  "${proxy_listen_args[@]}"

@@ -1,6 +1,6 @@
 {
   "stage": "post_parity",
-  "allow_consumer_expansion": false,
+  "allow_consumer_expansion": true,
   "required_gateway_gates": [
     "parity_contract",
     "tool_classification"
