@@ -24,6 +24,7 @@
   "options": {
     "adapter_direct_enabled": true,
     "adapter_direct_address": "",
+    "proxy_listen_addr": "0.0.0.0:19001",
     "transport": "enh",
     "network": "tcp",
     "address": "HOST:PORT",
@@ -53,6 +54,7 @@
   "schema": {
     "adapter_direct_enabled": "bool",
     "adapter_direct_address": "str",
+    "proxy_listen_addr": "str",
     "transport": "list(enh|ens|udp-plain|ebusd-tcp)",
     "network": "list(tcp|unix|udp)",
     "address": "str",
