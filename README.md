@@ -75,19 +75,17 @@ mcp_path: /mcp
 mdns: true
 ```
 
-### 4) Transition configuration example (adapter-proxy ENH profile)
+### 4) Adapter-direct configuration with embedded proxy listener
 
 ```yaml
+adapter_direct_enabled: true
+adapter_direct_address: enh://203.0.113.10:9999
+proxy_listen_addr: 0.0.0.0:19001
 transport: enh
 network: tcp
 address: 203.0.113.10:9999
-adapter_proxy_enabled: true
-adapter_proxy_upstream: enh://203.0.113.10:9999
-adapter_proxy_port: 19001
-adapter_proxy_udp_plain_enabled: true
-adapter_proxy_udp_plain_port: 19002
-proxy_profile: enh
-proxy_endpoint: 127.0.0.1:19001
+proxy_profile: disabled
+proxy_endpoint: ""
 http_port: 8080
 graphql_path: /graphql
 subscription_path: /graphql/subscriptions

@@ -1,7 +1,7 @@
 # Helianthus HA Add-on Smoke Runbook
 
 This runbook validates the Home Assistant add-on path with a local `ebusd-tcp` topology and
-the adapter-proxy transition topology, and produces deterministic pass/fail output.
+the embedded gateway adaptermux proxy topology, and produces deterministic pass/fail output.
 
 ## Local ebusd-tcp topology
 
@@ -16,14 +16,15 @@ the adapter-proxy transition topology, and produces deterministic pass/fail outp
   - Subscriptions path: `/graphql/subscriptions`
   - MCP path: `/mcp`
 
-## Proxy transition topology (`helianthus-ebus-adapter-proxy`)
+## Embedded adaptermux proxy topology
 
-- Keep `ebusd` on direct adapter endpoint and point Helianthus add-on to adapter-proxy endpoint.
-- Set `proxy_profile` to `enh` or `ens` to enable transition mode marker + endpoint wiring.
+- Point the Helianthus add-on at the physical adapter with `adapter_direct_enabled=true`.
+- Use `proxy_listen_addr` to expose the gateway-embedded adaptermux proxy for other clients.
+- Keep `proxy_profile=disabled`; the add-on no longer starts or wires a standalone adapter-proxy.
 - Example values:
-  - proxy profile: `enh`
-  - proxy endpoint: `127.0.0.1:19001`
-  - effective transport marker: `Transport: enh (tcp enh://127.0.0.1:19001)`
+  - adapter direct address: `enh://192.168.100.2:9999`
+  - proxy listener: `0.0.0.0:19001`
+  - effective transport marker: `Transport: adapter-direct (tcp adapter-direct://192.168.100.2:9999)`
 
 ## Install and start add-on
 
@@ -109,16 +110,15 @@ python3 scripts/smoke_addon_checklist.py \
   --json
 ```
 
-Proxy transition checklist example (`enh` profile):
+Embedded adaptermux checklist example:
 
 ```bash
 python3 scripts/smoke_addon_checklist.py \
   --log-file /tmp/helianthus-addon.log \
-  --transport enh \
+  --transport adapter-direct \
   --network tcp \
-  --address 192.168.100.2:9999 \
-  --proxy-profile enh \
-  --proxy-endpoint 127.0.0.1:19001 \
+  --address adapter-direct://192.168.100.2:9999 \
+  --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
   --graphql-path /graphql \

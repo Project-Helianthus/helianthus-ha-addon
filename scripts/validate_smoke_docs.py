@@ -14,7 +14,7 @@ SMOKE_CHECKLIST_PATH = Path(__file__).with_name("smoke_addon_checklist.py")
 
 REQUIRED_HEADINGS = [
     "## Local ebusd-tcp topology",
-    "## Proxy transition topology (`helianthus-ebus-adapter-proxy`)",
+    "## Embedded adaptermux proxy topology",
     "## Install and start add-on",
     "## Add-on configuration (copy/paste)",
     "## Deterministic smoke checklist",

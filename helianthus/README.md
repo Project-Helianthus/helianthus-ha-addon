@@ -5,7 +5,7 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 ## Status
 
 - Builds and runs `helianthus-ebusgateway`
-- Optionally runs `helianthus-ebus-adapter-proxy` in the same container (s6 service)
+- Can expose the gateway-embedded adaptermux proxy listener for other eBUS clients
 - Exposes GraphQL + MCP over HTTP
 - Advertises `_helianthus-graphql._tcp` via mDNS (optional)
 - Bundles `helianthus_vrc_explorer` in `/usr/bin` for on-device debugging
@@ -20,11 +20,9 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 
 Key options are exposed in `config.json`:
 
-- `adapter_proxy_enabled`: start the local adapter proxy service
-- `adapter_proxy_upstream`: upstream endpoint for the proxy (e.g. `enh://<host>:<port>`)
-- `adapter_proxy_port`: local proxy listen port
-- `adapter_proxy_udp_plain_enabled`: enable a UDP-plain northbound listener for ebusd UDP mode
-- `adapter_proxy_udp_plain_port`: UDP-plain listener port (default `19002`)
+- `adapter_direct_enabled`: connect through the gateway adapter-direct path
+- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (e.g. `enh://<host>:<port>`)
+- `proxy_listen_addr`: gateway-embedded adaptermux proxy listener address (default `0.0.0.0:19001`)
 - `transport`: `enh`, `ens`, `udp-plain`, or `ebusd-tcp`
 - `network`: `tcp`, `udp`, or `unix`
 - `address`: transport address (e.g. `HOST:PORT`)
@@ -56,8 +54,9 @@ Stable instance GUID persistence:
 - The persisted GUID survives normal restarts and updates as long as `/data` is preserved.
 - Removing `/data/instance_guid` or reinstalling without restoring `/data` creates a new Helianthus instance identity.
 
-For transition mode via `helianthus-ebus-adapter-proxy`, set `proxy_profile=enh|ens` and
-`proxy_endpoint=<host:port>` (or full endpoint URI); startup logs emit proxy profile/endpoint markers.
+For embedded adaptermux proxy mode, set `adapter_direct_enabled=true`,
+`adapter_direct_address=<adapter-endpoint>`, and `proxy_listen_addr=<listen-host:port>`.
+Leave `proxy_profile=disabled` unless intentionally connecting the gateway to an external proxy endpoint.
 
 ## Debugging tools
 
@@ -73,4 +72,3 @@ helianthus_vrc_explorer --help
 For local smoke/debug, executable overrides are supported from add-on data:
 
 - `/data/helianthus-gateway` overrides `/usr/local/bin/helianthus-gateway`
-- `/data/helianthus-ebus-adapter-proxy` overrides `/usr/local/bin/helianthus-ebus-adapter-proxy`
