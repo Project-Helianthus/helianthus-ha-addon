@@ -1,3 +1,6 @@
 AGENT-local.md
 .DS_Store
 **/__pycache__/
+
+# Claude Code orchestrator-session artifacts (per-session tool/skills config, not repo-tracked)
+.claude/
