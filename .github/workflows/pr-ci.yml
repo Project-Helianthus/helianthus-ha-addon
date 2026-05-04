@@ -59,6 +59,12 @@ jobs:
           set -euo pipefail
           python3 scripts/validate_smoke_docs.py
 
+      - name: Validate source address wrapper migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_source_addr_wrapper.py
+
       - name: Validate gateway parity gate artifact
         shell: bash
         run: |

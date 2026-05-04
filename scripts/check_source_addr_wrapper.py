@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""Validate source-address wrapper migration behavior."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import stat
+import subprocess
+import tempfile
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
+TOP_README = REPO_ROOT / "README.md"
+ADDON_README = REPO_ROOT / "helianthus/README.md"
+
+VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
+
+BASHIO_PRELUDE = r'''
+bashio::config() {
+  case "$1" in
+    transport) printf '%s\n' "${TEST_TRANSPORT:-enh}" ;;
+    network) printf '%s\n' "${TEST_NETWORK:-tcp}" ;;
+    address) printf '%s\n' "${TEST_ADDRESS:-203.0.113.10:9999}" ;;
+    proxy_profile) printf '%s\n' "${TEST_PROXY_PROFILE:-disabled}" ;;
+    proxy_endpoint) printf '%s\n' "${TEST_PROXY_ENDPOINT:-}" ;;
+    host) printf '%s\n' "${TEST_HOST:-127.0.0.1}" ;;
+    port) printf '%s\n' "${TEST_PORT:-8080}" ;;
+    path) printf '%s\n' "${TEST_PATH:-/graphql}" ;;
+    http_port) printf '%s\n' "${TEST_HTTP_PORT:-8080}" ;;
+    graphql_path) printf '%s\n' "${TEST_GRAPHQL_PATH:-/graphql}" ;;
+    subscription_path) printf '%s\n' "${TEST_SUBSCRIPTION_PATH:-/graphql/subscriptions}" ;;
+    mcp_path) printf '%s\n' "${TEST_MCP_PATH:-/mcp}" ;;
+    mdns) printf '%s\n' "${TEST_MDNS:-true}" ;;
+    mdns_instance) printf '%s\n' "${TEST_MDNS_INSTANCE:-helianthus}" ;;
+    broadcast) printf '%s\n' "${TEST_BROADCAST:-true}" ;;
+    source_addr) printf '%s\n' "${TEST_SOURCE_ADDR:-auto}" ;;
+    source_addr_state_file) printf '%s\n' "${TEST_SOURCE_ADDR_STATE_FILE}" ;;
+    scan_request_timeout) printf '%s\n' "${TEST_SCAN_REQUEST_TIMEOUT:-400ms}" ;;
+    read_timeout) printf '%s\n' "${TEST_READ_TIMEOUT:-5s}" ;;
+    write_timeout) printf '%s\n' "${TEST_WRITE_TIMEOUT:-5s}" ;;
+    dial_timeout) printf '%s\n' "${TEST_DIAL_TIMEOUT:-5s}" ;;
+    adapter_direct_enabled) printf '%s\n' "${TEST_ADAPTER_DIRECT_ENABLED:-false}" ;;
+    adapter_direct_address) printf '%s\n' "${TEST_ADAPTER_DIRECT_ADDRESS:-}" ;;
+    proxy_listen_addr) printf '%s\n' "${TEST_PROXY_LISTEN_ADDR:-0.0.0.0:19001}" ;;
+    observe_first_enabled) printf '%s\n' "${TEST_OBSERVE_FIRST_ENABLED:-true}" ;;
+    passive_state_direct_apply) printf '%s\n' "${TEST_PASSIVE_STATE_DIRECT_APPLY:-true}" ;;
+    passive_config_direct_apply) printf '%s\n' "${TEST_PASSIVE_CONFIG_DIRECT_APPLY:-false}" ;;
+    external_write_policy) printf '%s\n' "${TEST_EXTERNAL_WRITE_POLICY:-record_only}" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+bashio::var.true() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+bashio::log.info() {
+  printf 'INFO: %s\n' "$*" >> "${TEST_LOG_FILE}"
+}
+
+bashio::log.warning() {
+  printf 'WARN: %s\n' "$*" >> "${TEST_LOG_FILE}"
+}
+
+bashio::exit.nok() {
+  printf 'NOK: %s\n' "$*" >&2
+  exit 1
+}
+'''
+
+
+def _run(command: list[str], *, cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+
+
+def _assert(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def _write_executable(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _write_gateway_stub(path: Path, mode: str) -> None:
+    help_by_mode = {
+        "old": "Usage of gateway:\n  -source-addr string\n",
+        "new": (
+            "Usage of gateway:\n"
+            "  -source-addr string\n"
+            "  -startup-source-override string\n"
+            "  -startup-source-override-validate\n"
+        ),
+    }
+    script = f"""#!/usr/bin/env python3
+from pathlib import Path
+import os
+import sys
+
+mode = {mode!r}
+if "--help" in sys.argv:
+    if mode == "unknown":
+        sys.stderr.write("help unavailable\\n")
+        sys.exit(2)
+    sys.stderr.write({help_by_mode.get(mode, "")!r})
+    sys.exit(0)
+
+Path(os.environ["TEST_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
+sys.exit(0)
+"""
+    _write_executable(path, script)
+
+
+def _write_test_wrapper(path: Path) -> None:
+    text = RUN_SCRIPT.read_text(encoding="utf-8")
+    text = text.replace("/usr/local/bin/helianthus-gateway", "${TEST_GATEWAY_BIN}")
+    text = text.replace("/data/helianthus-gateway", "${TEST_GATEWAY_OVERRIDE_BIN}")
+    text = text.replace("/data/instance_guid", "${TEST_INSTANCE_GUID_FILE}")
+    path.write_text(BASHIO_PRELUDE + "\n" + text, encoding="utf-8")
+
+
+def _run_wrapper_case(
+    *,
+    source_addr: str,
+    gateway_mode: str,
+    existing_state: str | None = None,
+    transport: str = "enh",
+) -> tuple[list[str], str, bool, str]:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        state_file = tmp / "source_addr.last"
+        if existing_state is not None:
+            state_file.write_text(existing_state, encoding="utf-8")
+
+        wrapper = tmp / "run-under-test.sh"
+        gateway = tmp / "gateway-stub.py"
+        argv_file = tmp / "argv.txt"
+        log_file = tmp / "wrapper.log"
+        instance_guid_file = tmp / "instance_guid"
+        instance_guid_file.write_text(VALID_INSTANCE_GUID + "\n", encoding="utf-8")
+        _write_test_wrapper(wrapper)
+        _write_gateway_stub(gateway, gateway_mode)
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "TEST_ARGV_FILE": str(argv_file),
+                "TEST_GATEWAY_BIN": str(gateway),
+                "TEST_GATEWAY_OVERRIDE_BIN": str(tmp / "missing-override"),
+                "TEST_INSTANCE_GUID_FILE": str(instance_guid_file),
+                "TEST_LOG_FILE": str(log_file),
+                "TEST_SOURCE_ADDR": source_addr,
+                "TEST_SOURCE_ADDR_STATE_FILE": str(state_file),
+                "TEST_TRANSPORT": transport,
+                "TEST_ADAPTER_DIRECT_ENABLED": "true",
+                "TEST_ADAPTER_DIRECT_ADDRESS": "203.0.113.10:9999",
+            },
+        )
+
+        result = subprocess.run(["bash", str(wrapper)], cwd=REPO_ROOT, env=env, text=True, capture_output=True, check=False)
+        _assert(
+            result.returncode == 0,
+            f"wrapper case source_addr={source_addr!r} gateway_mode={gateway_mode!r} failed\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+        )
+
+        argv = argv_file.read_text(encoding="utf-8").splitlines()
+        logs = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
+        state_exists = state_file.exists()
+        state_content = state_file.read_text(encoding="utf-8") if state_exists else ""
+        return argv, logs, state_exists, state_content
+
+
+def _check_static_run_script() -> None:
+    syntax = _run(["bash", "-n", str(RUN_SCRIPT)])
+    _assert(syntax.returncode == 0, f"run script shell syntax failed:\n{syntax.stderr}")
+
+    text = RUN_SCRIPT.read_text(encoding="utf-8")
+    legacy_log_term = "gentle" + "-join"
+    forbidden_terms = [
+        "load_source_addr_state",
+        "persist_source_addr_state",
+        "persist_source_addr=",
+        "persisted_source_addr",
+        legacy_log_term,
+        "reusing persisted source address",
+    ]
+    for term in forbidden_terms:
+        _assert(term not in text, f"run script still contains forbidden source-state term: {term}")
+
+    _assert(
+        'source_addr_args=(-source-addr "auto")' in text,
+        "source_addr=auto must pass the gateway default source-selection intent",
+    )
+    _assert(
+        "startup-source-override" in text and "startup-source-override-validate" in text,
+        "exact source validation flags must be capability-gated in the wrapper",
+    )
+    _assert(
+        "rollback only" in text,
+        "run script must log that leftover source state is rollback-only",
+    )
+
+
+def _check_docs() -> None:
+    forbidden_doc_claims = [
+        "stores the last explicit source address used by the gateway",
+        "reuses the persisted address",
+        "reusing persisted source address",
+    ]
+    for path in (TOP_README, ADDON_README):
+        text = path.read_text(encoding="utf-8")
+        lower = text.lower()
+        for claim in forbidden_doc_claims:
+            _assert(claim not in lower, f"{path.relative_to(REPO_ROOT)} still claims wrapper-side persisted source reuse")
+        _assert("source_addr=auto" in text, f"{path.relative_to(REPO_ROOT)} must document source_addr=auto")
+        _assert("rollback" in lower, f"{path.relative_to(REPO_ROOT)} must document rollback behavior for legacy state")
+
+
+def _check_runtime_cases() -> None:
+    argv, logs, state_exists, state_content = _run_wrapper_case(
+        source_addr="auto",
+        gateway_mode="old",
+        existing_state="0xf7\n",
+    )
+    _assert("-source-addr" in argv, "auto case must pass -source-addr to old gateway")
+    _assert(argv[argv.index("-source-addr") + 1] == "auto", "auto case must not pass legacy state file contents")
+    _assert("0xf7" not in argv, "auto case leaked persisted raw source as active source config")
+    _assert(state_exists and state_content == "0xf7\n", "auto case must not rewrite existing source state file")
+    _assert("gateway default source-selection policy" in logs, "auto case must log gateway default policy")
+    _assert("rollback only" in logs, "auto case must log rollback-only state-file handling")
+
+    argv, _, state_exists, _ = _run_wrapper_case(
+        source_addr="0x71",
+        gateway_mode="old",
+    )
+    _assert("-source-addr" in argv, "old gateway exact source must use legacy -source-addr")
+    _assert(argv[argv.index("-source-addr") + 1] == "0x71", "old gateway exact source changed operator intent")
+    _assert("-startup-source-override" not in argv, "old gateway must not receive new startup override flag")
+    _assert(not state_exists, "old gateway exact source must not create source state file")
+
+    argv, _, state_exists, _ = _run_wrapper_case(
+        source_addr="0x71",
+        gateway_mode="new",
+    )
+    _assert("-startup-source-override" in argv, "new gateway exact source must use startup override")
+    _assert(argv[argv.index("-startup-source-override") + 1] == "0x71", "new gateway exact source changed operator intent")
+    _assert("-startup-source-override-validate=true" in argv, "new gateway exact source must request validate-only startup override")
+    _assert("-source-addr" not in argv, "new gateway exact source must not also use legacy -source-addr")
+    _assert(not state_exists, "new gateway exact source must not create source state file")
+
+    argv, logs, state_exists, _ = _run_wrapper_case(
+        source_addr="0x71",
+        gateway_mode="unknown",
+    )
+    _assert("-source-addr" in argv, "unknown gateway exact source must fall back to legacy -source-addr")
+    _assert("-startup-source-override" not in argv, "unknown gateway must not receive unadvertised startup override flag")
+    _assert("without wrapper-side persistence" in logs, "unknown gateway fallback must not claim validate-only behavior")
+    _assert(not state_exists, "unknown gateway exact source must not create source state file")
+
+
+def main() -> int:
+    try:
+        _check_static_run_script()
+        _check_docs()
+        _check_runtime_cases()
+    except AssertionError as exc:
+        print(f"Source address wrapper check: FAIL ({exc})")
+        return 1
+
+    print("Source address wrapper check passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

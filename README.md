@@ -75,6 +75,8 @@ mcp_path: /mcp
 mdns: true
 ```
 
+`source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The legacy `source_addr_state_file` option is kept only so existing installations can retain the old rollback file during migration; the add-on wrapper does not read it as active source authority or rewrite it during startup. Exact `source_addr` values are passed to the gateway as explicit operator intent. With the currently pinned gateway this uses the legacy `-source-addr` compatibility path; newer gateway binaries that advertise startup override validation receive the validate-only startup override flags instead.
+
 ### 4) Adapter-direct configuration with embedded proxy listener
 
 ```yaml
@@ -128,6 +130,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | add-on config syntax | `python3 -m json.tool helianthus/config.json >/dev/null` |
 | terminology gate (CI parity) | `if git grep -nIwiE 'm[a]ster|s[l]ave'; then echo "Found legacy terminology."; exit 1; fi` |
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
+| source address wrapper migration | `python3 scripts/check_source_addr_wrapper.py` |
 | gateway parity gate readiness | `python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | rollout guardrails | `python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | post-parity enablement tasks | `python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
