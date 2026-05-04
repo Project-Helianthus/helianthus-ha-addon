@@ -41,11 +41,13 @@ For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<
 
 For direct UDP-plain adapters, use `transport=udp-plain`, `network=udp`, and set `address=<adapter-host>:<port>`.
 
-Source-address persistence:
+Source address selection:
 
 - `source_addr` defaults to `auto`.
-- `source_addr_state_file` (default `/data/source_addr.last`) stores the last explicit source address used by the gateway.
-- On restart with `source_addr=auto` (and non-`ebusd-tcp` transport), the add-on reuses the persisted address when present.
+- `source_addr=auto` delegates to the gateway default source-selection policy and ignores any legacy `/data/source_addr.last` value.
+- Exact `source_addr` values are passed as explicit gateway intent. The currently pinned gateway receives the legacy `-source-addr` argument; newer gateway binaries that advertise startup override validation receive validate-only startup override arguments.
+- `source_addr_state_file` (default `/data/source_addr.last`) is retained only as a migration/rollback marker for older add-on versions. The wrapper no longer writes this file or promotes it into active source configuration.
+- Rollback to an older add-on may still read the leftover file. To prevent that older behavior, remove `/data/source_addr.last` before rolling back.
 
 Stable instance GUID persistence:
 

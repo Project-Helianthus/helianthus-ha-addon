@@ -57,28 +57,6 @@ instance_guid_file="/data/instance_guid"
 
 source_addr_state_file=$(printf '%s' "${source_addr_state_file}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 
-normalize_source_addr_value() {
-  local raw normalized hex
-  raw="$1"
-  normalized=$(printf '%s' "${raw}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  if [ -z "${normalized}" ]; then
-    return 1
-  fi
-
-  if [[ "${normalized}" =~ ^0x[0-9a-f]{1,2}$ ]]; then
-    hex="${normalized#0x}"
-    printf '0x%02x' "$((16#${hex}))"
-    return 0
-  fi
-
-  if [[ "${normalized}" =~ ^[0-9a-f]{1,2}$ ]]; then
-    printf '0x%02x' "$((16#${normalized}))"
-    return 0
-  fi
-
-	return 1
-}
-
 normalize_instance_guid() {
 	local raw normalized
 	raw="$1"
@@ -132,37 +110,6 @@ generate_instance_guid() {
 		generated=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || true)
 	fi
 	normalize_instance_guid "${generated}"
-}
-
-load_source_addr_state() {
-  if [ -z "${source_addr_state_file}" ] || [ ! -f "${source_addr_state_file}" ]; then
-    return 1
-  fi
-
-  local stored
-  stored=$(head -n 1 "${source_addr_state_file}" 2>/dev/null || true)
-  if [ -z "${stored}" ]; then
-    return 1
-  fi
-
-  normalize_source_addr_value "${stored}"
-}
-
-persist_source_addr_state() {
-  local value tmp dir
-  value="$1"
-  if [ -z "${source_addr_state_file}" ] || [ -z "${value}" ]; then
-    return
-  fi
-
-  dir=$(dirname "${source_addr_state_file}")
-  tmp="${source_addr_state_file}.tmp"
-
-  mkdir -p "${dir}" 2>/dev/null || return
-  if printf '%s\n' "${value}" >"${tmp}" 2>/dev/null; then
-    mv -f "${tmp}" "${source_addr_state_file}" 2>/dev/null || true
-  fi
-  rm -f "${tmp}" 2>/dev/null || true
 }
 
 effective_transport="${transport}"
@@ -264,37 +211,6 @@ if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
 
-source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-source_addr_args=()
-persisted_source_addr=""
-persist_source_addr=""
-
-if [ "${source_addr_normalized}" = "auto" ] && [ "${effective_transport}" != "ebusd-tcp" ]; then
-  persisted_source_addr=$(load_source_addr_state || true)
-  if [ -n "${persisted_source_addr}" ]; then
-    bashio::log.info "source_addr=auto; reusing persisted source address ${persisted_source_addr}"
-    source_addr="${persisted_source_addr}"
-    source_addr_normalized="${persisted_source_addr}"
-  fi
-fi
-
-if [ "${source_addr_normalized}" = "auto" ]; then
-  if [ "${effective_transport}" = "ebusd-tcp" ]; then
-    bashio::log.info "source_addr=auto with transport=ebusd-tcp; forcing ebusd-compatible source selection"
-    source_addr_args=(-source-addr "auto")
-  else
-    bashio::log.info "source_addr=auto; enabling gentle-join source selection"
-    source_addr_args=(-source-addr "auto")
-  fi
-elif [ -n "${source_addr_normalized}" ]; then
-  source_addr_args=(-source-addr "${source_addr}")
-  persist_source_addr=$(normalize_source_addr_value "${source_addr}" || true)
-fi
-
-if [ -n "${persist_source_addr}" ] && [ "${effective_transport}" != "ebusd-tcp" ]; then
-  persist_source_addr_state "${persist_source_addr}"
-fi
-
 instance_guid=""
 if [ -f "${instance_guid_file}" ]; then
   instance_guid=$(load_instance_guid_state || true)
@@ -340,6 +256,38 @@ gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
   gateway_bin="/data/helianthus-gateway"
   bashio::log.info "Using gateway binary override from /data/helianthus-gateway"
+fi
+
+gateway_supports_flag() {
+  local flag output
+  flag="$1"
+  output=$("${gateway_bin}" --help 2>&1 || true)
+  printf '%s\n' "${output}" | grep -Eq -- "(^|[[:space:]])-${flag}([[:space:],=]|$)"
+}
+
+source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+source_addr_intent=$(printf '%s' "${source_addr}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+source_addr_args=()
+
+if [ "${source_addr_normalized}" = "auto" ] || [ "${source_addr_normalized}" = "null" ] || [ -z "${source_addr_normalized}" ]; then
+  if [ -n "${source_addr_state_file}" ] && [ -f "${source_addr_state_file}" ]; then
+    bashio::log.info "Legacy source address state file ${source_addr_state_file} is retained for rollback only; source_addr=auto uses gateway default source selection"
+  fi
+  if [ "${effective_transport}" = "ebusd-tcp" ]; then
+    bashio::log.info "source_addr=auto with transport=ebusd-tcp; using gateway default ebusd-compatible source selection"
+  else
+    bashio::log.info "source_addr=auto; using gateway default source-selection policy"
+  fi
+  source_addr_args=(-source-addr "auto")
+elif gateway_supports_flag "startup-source-override" && gateway_supports_flag "startup-source-override-validate"; then
+  bashio::log.info "source_addr=${source_addr_intent}; gateway supports startup source override validation"
+  source_addr_args=(-startup-source-override "${source_addr_intent}" -startup-source-override-validate=true)
+else
+  bashio::log.info "source_addr=${source_addr_intent}; using legacy -source-addr compatibility path without wrapper-side persistence"
+  if [ -n "${source_addr_state_file}" ] && [ -f "${source_addr_state_file}" ]; then
+    bashio::log.info "Legacy source address state file ${source_addr_state_file} is retained for rollback only; explicit source_addr does not rewrite it"
+  fi
+  source_addr_args=(-source-addr "${source_addr_intent}")
 fi
 
 exec "${gateway_bin}" \

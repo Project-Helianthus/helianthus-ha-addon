@@ -37,6 +37,9 @@ fi
 echo "==> validate smoke runbook structure"
 python3 scripts/validate_smoke_docs.py
 
+echo "==> source address wrapper migration"
+python3 scripts/check_source_addr_wrapper.py
+
 echo "==> gateway parity gate readiness"
 python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json
 
