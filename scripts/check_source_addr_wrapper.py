@@ -210,6 +210,8 @@ def _check_static_run_script() -> None:
 
 def _check_docs() -> None:
     forbidden_doc_claims = [
+        "gentle-join",
+        "gentle join",
         "stores the last explicit source address used by the gateway",
         "reuses the persisted address",
         "reusing persisted source address",
