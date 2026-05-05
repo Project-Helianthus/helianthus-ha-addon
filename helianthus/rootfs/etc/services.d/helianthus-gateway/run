@@ -18,7 +18,6 @@ mdns=$(bashio::config 'mdns')
 mdns_instance=$(bashio::config 'mdns_instance')
 broadcast=$(bashio::config 'broadcast')
 source_addr=$(bashio::config 'source_addr')
-source_addr_state_file=$(bashio::config 'source_addr_state_file')
 scan_request_timeout=$(bashio::config 'scan_request_timeout')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
@@ -54,8 +53,7 @@ if [ "${proxy_listen_addr}" = "null" ]; then
   proxy_listen_addr="0.0.0.0:19001"
 fi
 instance_guid_file="/data/instance_guid"
-
-source_addr_state_file=$(printf '%s' "${source_addr_state_file}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+legacy_source_addr_last_file="/data/source_addr.last"
 
 normalize_instance_guid() {
 	local raw normalized
@@ -270,8 +268,8 @@ source_addr_intent=$(printf '%s' "${source_addr}" | sed -E 's/^[[:space:]]+//; s
 source_addr_args=()
 
 if [ "${source_addr_normalized}" = "auto" ] || [ "${source_addr_normalized}" = "null" ] || [ -z "${source_addr_normalized}" ]; then
-  if [ -n "${source_addr_state_file}" ] && [ -f "${source_addr_state_file}" ]; then
-    bashio::log.info "Legacy source address state file ${source_addr_state_file} is retained for rollback only; source_addr=auto uses gateway default source selection"
+  if [ -f "${legacy_source_addr_last_file}" ]; then
+    bashio::log.info "Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; source_addr=auto uses gateway default source selection"
   fi
   if [ "${effective_transport}" = "ebusd-tcp" ]; then
     bashio::log.info "source_addr=auto with transport=ebusd-tcp; using gateway default ebusd-compatible source selection"
@@ -280,14 +278,13 @@ if [ "${source_addr_normalized}" = "auto" ] || [ "${source_addr_normalized}" = "
   fi
   source_addr_args=(-source-addr "auto")
 elif gateway_supports_flag "startup-source-override" && gateway_supports_flag "startup-source-override-validate"; then
-  bashio::log.info "source_addr=${source_addr_intent}; gateway supports startup source override validation"
+  bashio::log.info "source_addr=${source_addr_intent}; using validate-only gateway startup source override"
+  if [ -f "${legacy_source_addr_last_file}" ]; then
+    bashio::log.info "Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; explicit source_addr does not rewrite it"
+  fi
   source_addr_args=(-startup-source-override "${source_addr_intent}" -startup-source-override-validate=true)
 else
-  bashio::log.info "source_addr=${source_addr_intent}; using legacy -source-addr compatibility path without wrapper-side persistence"
-  if [ -n "${source_addr_state_file}" ] && [ -f "${source_addr_state_file}" ]; then
-    bashio::log.info "Legacy source address state file ${source_addr_state_file} is retained for rollback only; explicit source_addr does not rewrite it"
-  fi
-  source_addr_args=(-source-addr "${source_addr_intent}")
+  bashio::exit.nok "source_addr=${source_addr_intent} requires gateway startup source override validation support; upgrade helianthus-gateway or set source_addr=auto"
 fi
 
 exec "${gateway_bin}" \

@@ -36,7 +36,6 @@ bashio::config() {
     mdns_instance) printf '%s\n' "${TEST_MDNS_INSTANCE:-helianthus}" ;;
     broadcast) printf '%s\n' "${TEST_BROADCAST:-true}" ;;
     source_addr) printf '%s\n' "${TEST_SOURCE_ADDR:-auto}" ;;
-    source_addr_state_file) printf '%s\n' "${TEST_SOURCE_ADDR_STATE_FILE}" ;;
     scan_request_timeout) printf '%s\n' "${TEST_SCAN_REQUEST_TIMEOUT:-400ms}" ;;
     read_timeout) printf '%s\n' "${TEST_READ_TIMEOUT:-5s}" ;;
     write_timeout) printf '%s\n' "${TEST_WRITE_TIMEOUT:-5s}" ;;
@@ -122,6 +121,7 @@ def _write_test_wrapper(path: Path) -> None:
     text = text.replace("/usr/local/bin/helianthus-gateway", "${TEST_GATEWAY_BIN}")
     text = text.replace("/data/helianthus-gateway", "${TEST_GATEWAY_OVERRIDE_BIN}")
     text = text.replace("/data/instance_guid", "${TEST_INSTANCE_GUID_FILE}")
+    text = text.replace("/data/source_addr.last", "${TEST_LEGACY_SOURCE_ADDR_STATE_FILE}")
     path.write_text(BASHIO_PRELUDE + "\n" + text, encoding="utf-8")
 
 
@@ -131,7 +131,8 @@ def _run_wrapper_case(
     gateway_mode: str,
     existing_state: str | None = None,
     transport: str = "enh",
-) -> tuple[list[str], str, bool, str]:
+    expect_success: bool = True,
+) -> tuple[list[str], str, bool, str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         state_file = tmp / "source_addr.last"
@@ -156,7 +157,7 @@ def _run_wrapper_case(
                 "TEST_INSTANCE_GUID_FILE": str(instance_guid_file),
                 "TEST_LOG_FILE": str(log_file),
                 "TEST_SOURCE_ADDR": source_addr,
-                "TEST_SOURCE_ADDR_STATE_FILE": str(state_file),
+                "TEST_LEGACY_SOURCE_ADDR_STATE_FILE": str(state_file),
                 "TEST_TRANSPORT": transport,
                 "TEST_ADAPTER_DIRECT_ENABLED": "true",
                 "TEST_ADAPTER_DIRECT_ADDRESS": "203.0.113.10:9999",
@@ -164,17 +165,23 @@ def _run_wrapper_case(
         )
 
         result = subprocess.run(["bash", str(wrapper)], cwd=REPO_ROOT, env=env, text=True, capture_output=True, check=False)
-        _assert(
-            result.returncode == 0,
-            f"wrapper case source_addr={source_addr!r} gateway_mode={gateway_mode!r} failed\n"
-            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
-        )
+        if expect_success:
+            _assert(
+                result.returncode == 0,
+                f"wrapper case source_addr={source_addr!r} gateway_mode={gateway_mode!r} failed\n"
+                f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+            )
+        else:
+            _assert(
+                result.returncode != 0,
+                f"wrapper case source_addr={source_addr!r} gateway_mode={gateway_mode!r} unexpectedly succeeded",
+            )
 
-        argv = argv_file.read_text(encoding="utf-8").splitlines()
+        argv = argv_file.read_text(encoding="utf-8").splitlines() if argv_file.exists() else []
         logs = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
         state_exists = state_file.exists()
         state_content = state_file.read_text(encoding="utf-8") if state_exists else ""
-        return argv, logs, state_exists, state_content
+        return argv, logs, state_exists, state_content, result.stderr
 
 
 def _check_static_run_script() -> None:
@@ -190,6 +197,9 @@ def _check_static_run_script() -> None:
         "persisted_source_addr",
         legacy_log_term,
         "reusing persisted source address",
+        "source_addr_state_file",
+        "legacy -source-addr compatibility path",
+        "without wrapper-side persistence",
     ]
     for term in forbidden_terms:
         _assert(term not in text, f"run script still contains forbidden source-state term: {term}")
@@ -200,7 +210,11 @@ def _check_static_run_script() -> None:
     )
     _assert(
         "startup-source-override" in text and "startup-source-override-validate" in text,
-        "exact source validation flags must be capability-gated in the wrapper",
+        "exact source validation flags must be used by the wrapper",
+    )
+    _assert(
+        "upgrade helianthus-gateway or set source_addr=auto" in text,
+        "exact source config must fail closed when validate-only startup input is unavailable",
     )
     _assert(
         "rollback only" in text,
@@ -215,6 +229,8 @@ def _check_docs() -> None:
         "stores the last explicit source address used by the gateway",
         "reuses the persisted address",
         "reusing persisted source address",
+        "currently pinned gateway receives the legacy",
+        "legacy -source-addr compatibility path",
     ]
     for path in (TOP_README, ADDON_README):
         text = path.read_text(encoding="utf-8")
@@ -226,7 +242,7 @@ def _check_docs() -> None:
 
 
 def _check_runtime_cases() -> None:
-    argv, logs, state_exists, state_content = _run_wrapper_case(
+    argv, logs, state_exists, state_content, _ = _run_wrapper_case(
         source_addr="auto",
         gateway_mode="old",
         existing_state="0xf7\n",
@@ -238,33 +254,38 @@ def _check_runtime_cases() -> None:
     _assert("gateway default source-selection policy" in logs, "auto case must log gateway default policy")
     _assert("rollback only" in logs, "auto case must log rollback-only state-file handling")
 
-    argv, _, state_exists, _ = _run_wrapper_case(
-        source_addr="0x71",
-        gateway_mode="old",
-    )
-    _assert("-source-addr" in argv, "old gateway exact source must use legacy -source-addr")
-    _assert(argv[argv.index("-source-addr") + 1] == "0x71", "old gateway exact source changed operator intent")
-    _assert("-startup-source-override" not in argv, "old gateway must not receive new startup override flag")
-    _assert(not state_exists, "old gateway exact source must not create source state file")
-
-    argv, _, state_exists, _ = _run_wrapper_case(
+    argv, logs, state_exists, _state_content, _ = _run_wrapper_case(
         source_addr="0x71",
         gateway_mode="new",
+        existing_state="0xf7\n",
     )
     _assert("-startup-source-override" in argv, "new gateway exact source must use startup override")
     _assert(argv[argv.index("-startup-source-override") + 1] == "0x71", "new gateway exact source changed operator intent")
     _assert("-startup-source-override-validate=true" in argv, "new gateway exact source must request validate-only startup override")
     _assert("-source-addr" not in argv, "new gateway exact source must not also use legacy -source-addr")
-    _assert(not state_exists, "new gateway exact source must not create source state file")
+    _assert(state_exists, "new gateway exact source must not remove rollback-only source state file")
+    _assert("rollback only" in logs, "new gateway exact source must log rollback-only state-file handling")
 
-    argv, logs, state_exists, _ = _run_wrapper_case(
+    argv, logs, state_exists, state_content, stderr = _run_wrapper_case(
+        source_addr="0x71",
+        gateway_mode="old",
+        existing_state="0xf7\n",
+        expect_success=False,
+    )
+    _assert(argv == [], "old gateway exact source must fail before invoking gateway")
+    _assert("-source-addr" not in argv, "old gateway exact source must not use legacy active source input")
+    _assert(state_exists and state_content == "0xf7\n", "old gateway failure must not rewrite existing source state file")
+    _assert("requires gateway startup source override validation support" in stderr, "old gateway failure must explain missing startup override support")
+
+    argv, _logs, state_exists, _state_content, stderr = _run_wrapper_case(
         source_addr="0x71",
         gateway_mode="unknown",
+        expect_success=False,
     )
-    _assert("-source-addr" in argv, "unknown gateway exact source must fall back to legacy -source-addr")
-    _assert("-startup-source-override" not in argv, "unknown gateway must not receive unadvertised startup override flag")
-    _assert("without wrapper-side persistence" in logs, "unknown gateway fallback must not claim validate-only behavior")
+    _assert(argv == [], "unknown gateway exact source must fail before invoking gateway")
+    _assert("-source-addr" not in argv, "unknown gateway exact source must not use legacy active source input")
     _assert(not state_exists, "unknown gateway exact source must not create source state file")
+    _assert("requires gateway startup source override validation support" in stderr, "unknown gateway failure must explain missing startup override support")
 
 
 def main() -> int:

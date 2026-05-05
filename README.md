@@ -65,7 +65,6 @@ transport: ebusd-tcp
 network: tcp
 address: 203.0.113.10:9999
 source_addr: auto
-source_addr_state_file: /data/source_addr.last
 proxy_profile: disabled
 proxy_endpoint: ""
 http_port: 8080
@@ -75,7 +74,7 @@ mcp_path: /mcp
 mdns: true
 ```
 
-`source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The legacy `source_addr_state_file` option is kept only so existing installations can retain the old rollback file during migration; the add-on wrapper does not read it as active source authority or rewrite it during startup. Exact `source_addr` values are passed to the gateway as explicit operator intent. With the currently pinned gateway this uses the legacy `-source-addr` compatibility path; newer gateway binaries that advertise startup override validation receive the validate-only startup override flags instead.
+`source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The add-on no longer exposes `source_addr_state_file`; a leftover `/data/source_addr.last` is retained only as a rollback marker for older add-on versions and is never read as active source authority or rewritten during startup. Exact `source_addr` values are sent only as explicit validate-only gateway startup override input. If a gateway binary does not advertise that startup validation interface, startup fails closed instead of falling back to legacy active source configuration.
 
 ### 4) Adapter-direct configuration with embedded proxy listener
 
