@@ -45,8 +45,9 @@ Source address selection:
 
 - `source_addr` defaults to `auto`.
 - `source_addr=auto` delegates to the gateway default source-selection policy and ignores any legacy `/data/source_addr.last` value.
-- Exact `source_addr` values are passed as explicit gateway intent. The currently pinned gateway receives the legacy `-source-addr` argument; newer gateway binaries that advertise startup override validation receive validate-only startup override arguments.
-- `source_addr_state_file` (default `/data/source_addr.last`) is retained only as a migration/rollback marker for older add-on versions. The wrapper no longer writes this file or promotes it into active source configuration.
+- For source-selection-capable direct transports, exact `source_addr` values are passed only as explicit validate-only gateway startup override input. Gateway binaries that do not advertise startup override validation fail closed instead of receiving legacy active source configuration.
+- For `transport=ebusd-tcp`, exact `source_addr` values are passed through the ebusd-compatible `-source-addr` gateway argument because startup source-selection admission is not used on that transport.
+- The legacy `/data/source_addr.last` file is retained only as a migration/rollback marker for older add-on versions. The wrapper no longer exposes a state-file option, writes this file, or promotes it into active source configuration.
 - Rollback to an older add-on may still read the leftover file. To prevent that older behavior, remove `/data/source_addr.last` before rolling back.
 
 Stable instance GUID persistence:
