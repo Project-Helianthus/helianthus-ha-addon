@@ -257,6 +257,10 @@ def _check_docs() -> None:
             _assert(claim not in lower, f"{path.relative_to(REPO_ROOT)} still claims wrapper-side persisted source reuse")
         _assert("source_addr=auto" in text, f"{path.relative_to(REPO_ROOT)} must document source_addr=auto")
         _assert("rollback" in lower, f"{path.relative_to(REPO_ROOT)} must document rollback behavior for legacy state")
+        _assert(
+            "ebusd-compatible" in lower and "transport=ebusd-tcp" in text,
+            f"{path.relative_to(REPO_ROOT)} must document the ebusd-tcp exact source exception",
+        )
 
 
 def _check_runtime_cases() -> None:

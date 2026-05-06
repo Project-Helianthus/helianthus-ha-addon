@@ -74,7 +74,7 @@ mcp_path: /mcp
 mdns: true
 ```
 
-`source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The add-on no longer exposes `source_addr_state_file`; a leftover `/data/source_addr.last` is retained only as a rollback marker for older add-on versions and is never read as active source authority or rewritten during startup. Exact `source_addr` values are sent only as explicit validate-only gateway startup override input. If a gateway binary does not advertise that startup validation interface, startup fails closed instead of falling back to legacy active source configuration.
+`source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The add-on no longer exposes `source_addr_state_file`; a leftover `/data/source_addr.last` is retained only as a rollback marker for older add-on versions and is never read as active source authority or rewritten during startup. For source-selection-capable direct transports, exact `source_addr` values are sent only as explicit validate-only gateway startup override input. If a gateway binary does not advertise that startup validation interface, startup fails closed instead of falling back to legacy active source configuration. For `transport=ebusd-tcp`, exact `source_addr` values are passed through the ebusd-compatible `-source-addr` gateway argument because startup source-selection admission is not used on that transport.
 
 ### 4) Adapter-direct configuration with embedded proxy listener
 
