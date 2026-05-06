@@ -277,6 +277,12 @@ if [ "${source_addr_normalized}" = "auto" ] || [ "${source_addr_normalized}" = "
     bashio::log.info "source_addr=auto; using gateway default source-selection policy"
   fi
   source_addr_args=(-source-addr "auto")
+elif [ "${effective_transport}" = "ebusd-tcp" ]; then
+  bashio::log.info "source_addr=${source_addr_intent} with transport=ebusd-tcp; using ebusd-compatible gateway source input"
+  if [ -f "${legacy_source_addr_last_file}" ]; then
+    bashio::log.info "Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; explicit ebusd-tcp source_addr does not rewrite it"
+  fi
+  source_addr_args=(-source-addr "${source_addr_intent}")
 elif gateway_supports_flag "startup-source-override" && gateway_supports_flag "startup-source-override-validate"; then
   bashio::log.info "source_addr=${source_addr_intent}; using validate-only gateway startup source override"
   if [ -f "${legacy_source_addr_last_file}" ]; then
@@ -308,4 +314,4 @@ exec "${gateway_bin}" \
   -passive-state-direct-apply="${passive_state_direct_apply}" \
   -passive-config-direct-apply="${passive_config_direct_apply}" \
   -external-write-policy "${external_write_policy}" \
-  "${proxy_listen_args[@]}"
+  ${proxy_listen_args[@]+"${proxy_listen_args[@]}"}

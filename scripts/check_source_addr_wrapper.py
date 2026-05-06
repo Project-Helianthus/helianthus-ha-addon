@@ -134,6 +134,7 @@ def _run_wrapper_case(
     gateway_mode: str,
     existing_state: str | None = None,
     transport: str = "enh",
+    adapter_direct_enabled: bool = True,
     expect_success: bool = True,
 ) -> tuple[list[str], str, bool, str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,7 +163,7 @@ def _run_wrapper_case(
                 "TEST_SOURCE_ADDR": source_addr,
                 "TEST_LEGACY_SOURCE_ADDR_STATE_FILE": str(state_file),
                 "TEST_TRANSPORT": transport,
-                "TEST_ADAPTER_DIRECT_ENABLED": "true",
+                "TEST_ADAPTER_DIRECT_ENABLED": "true" if adapter_direct_enabled else "false",
                 "TEST_ADAPTER_DIRECT_ADDRESS": "203.0.113.10:9999",
             },
         )
@@ -212,6 +213,10 @@ def _check_static_run_script() -> None:
     _assert(
         'source_addr_args=(-source-addr "auto")' in text,
         "source_addr=auto must pass the gateway default source-selection intent",
+    )
+    _assert(
+        'source_addr_args=(-source-addr "${source_addr_intent}")' in text,
+        "transport=ebusd-tcp exact source must preserve ebusd-compatible -source-addr input",
     )
     _assert(
         "startup-source-override" in text and "startup-source-override-validate" in text,
@@ -278,6 +283,22 @@ def _check_runtime_cases() -> None:
     _assert("-source-addr" not in argv, "new gateway exact source must not also use legacy -source-addr")
     _assert(state_exists, "new gateway exact source must not remove rollback-only source state file")
     _assert("rollback only" in logs, "new gateway exact source must log rollback-only state-file handling")
+
+    argv, logs, state_exists, state_content, _ = _run_wrapper_case(
+        source_addr="0x71",
+        gateway_mode="new",
+        existing_state="0xf7\n",
+        transport="ebusd-tcp",
+        adapter_direct_enabled=False,
+    )
+    _assert("-source-addr" in argv, "ebusd-tcp exact source must use ebusd-compatible -source-addr")
+    _assert(argv[argv.index("-source-addr") + 1] == "0x71", "ebusd-tcp exact source changed operator intent")
+    _assert("-startup-source-override" not in argv, "ebusd-tcp exact source must not use direct-transport startup override")
+    _assert(
+        state_exists and state_content == "0xf7\n",
+        "ebusd-tcp exact source must not rewrite rollback-only source state file",
+    )
+    _assert("ebusd-compatible gateway source input" in logs, "ebusd-tcp exact source must log ebusd-compatible handling")
 
     argv, logs, state_exists, state_content, stderr = _run_wrapper_case(
         source_addr="0x71",
