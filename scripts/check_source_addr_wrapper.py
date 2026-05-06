@@ -13,6 +13,7 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 DOCKERFILE = REPO_ROOT / "helianthus/Dockerfile"
+BUILD_WORKFLOW = REPO_ROOT / ".github/workflows/build.yml"
 TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
@@ -192,6 +193,7 @@ def _check_static_run_script() -> None:
 
     text = RUN_SCRIPT.read_text(encoding="utf-8")
     dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
+    build_workflow_text = BUILD_WORKFLOW.read_text(encoding="utf-8")
     legacy_log_term = "gentle" + "-join"
     forbidden_terms = [
         "load_source_addr_state",
@@ -218,6 +220,10 @@ def _check_static_run_script() -> None:
     _assert(
         f"EBUSGATEWAY_VERSION={MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE}" in dockerfile_text,
         "pinned gateway must advertise startup-source-override for exact source_addr",
+    )
+    _assert(
+        f"EBUSGATEWAY_VERSION={MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE}" in build_workflow_text,
+        "published image workflow must use a gateway that advertises startup-source-override",
     )
     _assert(
         "upgrade helianthus-gateway or set source_addr=auto" in text,
