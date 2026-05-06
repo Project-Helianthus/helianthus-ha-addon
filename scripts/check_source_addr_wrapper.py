@@ -12,10 +12,12 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
+DOCKERFILE = REPO_ROOT / "helianthus/Dockerfile"
 TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
+MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE = "cb6df57451b200f1b1d966995be47f58b18ae6ef"
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -189,6 +191,7 @@ def _check_static_run_script() -> None:
     _assert(syntax.returncode == 0, f"run script shell syntax failed:\n{syntax.stderr}")
 
     text = RUN_SCRIPT.read_text(encoding="utf-8")
+    dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
     legacy_log_term = "gentle" + "-join"
     forbidden_terms = [
         "load_source_addr_state",
@@ -211,6 +214,10 @@ def _check_static_run_script() -> None:
     _assert(
         "startup-source-override" in text and "startup-source-override-validate" in text,
         "exact source validation flags must be used by the wrapper",
+    )
+    _assert(
+        f"EBUSGATEWAY_VERSION={MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE}" in dockerfile_text,
+        "pinned gateway must advertise startup-source-override for exact source_addr",
     )
     _assert(
         "upgrade helianthus-gateway or set source_addr=auto" in text,
