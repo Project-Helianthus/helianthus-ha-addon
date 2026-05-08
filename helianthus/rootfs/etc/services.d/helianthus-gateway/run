@@ -29,6 +29,7 @@ observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || tr
 passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
 external_write_policy=$(bashio::config 'external_write_policy' 2>/dev/null || true)
+enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null || true)
 
 # Apply defaults when Supervisor has not yet merged new config schema keys.
 if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ]; then
@@ -42,6 +43,9 @@ if [ -z "${passive_config_direct_apply}" ] || [ "${passive_config_direct_apply}"
 fi
 if [ -z "${external_write_policy}" ] || [ "${external_write_policy}" = "null" ]; then
   external_write_policy="record_only"
+fi
+if [ -z "${enable_static_seed_table}" ] || [ "${enable_static_seed_table}" = "null" ]; then
+  enable_static_seed_table=false
 fi
 if [ -z "${adapter_direct_enabled}" ] || [ "${adapter_direct_enabled}" = "null" ]; then
   adapter_direct_enabled=false
@@ -249,6 +253,7 @@ bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 bashio::log.info "Stable instance GUID: ${instance_guid}"
 bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
+bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (productids NETX3 0xF1/0xF6/0x04 + BASV2 0x15/0xEC)"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
@@ -262,6 +267,20 @@ gateway_supports_flag() {
   output=$("${gateway_bin}" --help 2>&1 || true)
   printf '%s\n' "${output}" | grep -Eq -- "(^|[[:space:]])-${flag}([[:space:],=]|$)"
 }
+
+# Gate `-enable-static-seed-table` on gateway support — the flag is
+# only present in builds containing P3 wiring. Older pinned gateway
+# binaries (or /data/helianthus-gateway overrides) would fail flag
+# parsing at startup. (Codex P1+P2 follow-up on PR #124, 2026-05-08:
+# this block must run AFTER gateway_bin selection + gateway_supports_flag
+# definition, otherwise the function call resolves to "command not
+# found" and the conditional is always false.)
+static_seed_args=()
+if gateway_supports_flag "enable-static-seed-table"; then
+  static_seed_args=(-enable-static-seed-table="${enable_static_seed_table}")
+elif bashio::var.true "${enable_static_seed_table}"; then
+  bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
+fi
 
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_intent=$(printf '%s' "${source_addr}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
@@ -314,4 +333,5 @@ exec "${gateway_bin}" \
   -passive-state-direct-apply="${passive_state_direct_apply}" \
   -passive-config-direct-apply="${passive_config_direct_apply}" \
   -external-write-policy "${external_write_policy}" \
+  ${static_seed_args[@]+"${static_seed_args[@]}"} \
   ${proxy_listen_args[@]+"${proxy_listen_args[@]}"}
