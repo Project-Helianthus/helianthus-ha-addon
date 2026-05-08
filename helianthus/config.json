@@ -48,7 +48,8 @@
     "observe_first_enabled": true,
     "passive_state_direct_apply": true,
     "passive_config_direct_apply": false,
-    "external_write_policy": "record_only"
+    "external_write_policy": "record_only",
+    "enable_static_seed_table": false
   },
   "schema": {
     "adapter_direct_enabled": "bool",
@@ -77,6 +78,7 @@
     "observe_first_enabled": "bool",
     "passive_state_direct_apply": "bool",
     "passive_config_direct_apply": "bool",
-    "external_write_policy": "list(record_only|invalidate_only|record_and_invalidate)"
+    "external_write_policy": "list(record_only|invalidate_only|record_and_invalidate)",
+    "enable_static_seed_table": "bool"
   }
 }
