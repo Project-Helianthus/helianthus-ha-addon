@@ -255,6 +255,17 @@ bashio::log.info "Stable instance GUID: ${instance_guid}"
 bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
 bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (productids NETX3 0xF1/0xF6/0x04 + BASV2 0x15/0xEC)"
 
+# Gate `-enable-static-seed-table` on gateway support — the flag is
+# only present in builds containing P3 wiring. Older pinned gateway
+# binaries (or /data/helianthus-gateway overrides) would fail flag
+# parsing at startup. (Codex P1 follow-up on PR #124, 2026-05-08.)
+static_seed_args=()
+if gateway_supports_flag "enable-static-seed-table"; then
+  static_seed_args=(-enable-static-seed-table="${enable_static_seed_table}")
+elif bashio::var.true "${enable_static_seed_table}"; then
+  bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
+fi
+
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
   gateway_bin="/data/helianthus-gateway"
@@ -319,5 +330,5 @@ exec "${gateway_bin}" \
   -passive-state-direct-apply="${passive_state_direct_apply}" \
   -passive-config-direct-apply="${passive_config_direct_apply}" \
   -external-write-policy "${external_write_policy}" \
-  -enable-static-seed-table="${enable_static_seed_table}" \
+  ${static_seed_args[@]+"${static_seed_args[@]}"} \
   ${proxy_listen_args[@]+"${proxy_listen_args[@]}"}
