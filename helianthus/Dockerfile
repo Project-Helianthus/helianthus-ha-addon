@@ -41,3 +41,4 @@ RUN apk add --no-cache python3 ca-certificates
 COPY --from=builder /out/gateway /usr/local/bin/helianthus-gateway
 COPY --from=vrc-explorer /out/python /opt/helianthus-vrc-explorer
 COPY rootfs/ /
+RUN chmod +x /usr/share/helianthus/check_runtime_state_wrapper.py

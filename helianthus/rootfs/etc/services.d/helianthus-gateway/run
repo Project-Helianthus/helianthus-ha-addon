@@ -213,26 +213,36 @@ if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
 
-instance_guid=""
-if [ -f "${instance_guid_file}" ]; then
-  instance_guid=$(load_instance_guid_state || true)
-  if [ -z "${instance_guid}" ]; then
-    bashio::log.warning "Invalid instance GUID in ${instance_guid_file}; regenerating"
+# Resolve instance_guid via the Python wrapper (M6_HA_ADDON_MIGRATION).
+# The wrapper implements AD09a/b/26/27 of runtime-state-w19-26.locked:
+#   - AD09b read precedence (runtime_state.json valid → use; legacy detected
+#     without migration → AD09a halt; both absent → generate fresh).
+#   - AD09a halt: marker file at /data/.helianthus_migration_required +
+#     HELIANTHUS_MIGRATION_REQUIRED log token + exit 1 (NOT sysexits-78 per
+#     consultant MF-1).
+#   - AD25 HELIANTHUS_FRESH_IDENTITY warn on case 3.
+#   - AD26 bounded ENOENT retries on runtime_state.json read.
+#   - AD27 emits HELIANTHUS_INSTANCE_GUID_SOURCE for the gateway flag.
+#
+# The wrapper writes structured logs to stderr and eval-able key=value lines
+# to stdout. We capture stdout for eval, let stderr stream through to
+# Supervisor logs.
+wrapper_script="/usr/share/helianthus/check_runtime_state_wrapper.py"
+if ! wrapper_eval=$(python3 "${wrapper_script}" 2>&1 >/dev/null && python3 "${wrapper_script}" 2>/dev/null); then
+  rc=$?
+  if [ "${rc}" -eq 1 ]; then
+    bashio::log.error "Helianthus migration required — see /data/.helianthus_migration_required"
+    exit 1
   fi
+  bashio::exit.nok "runtime-state wrapper failed with exit code ${rc}"
 fi
-
+eval "${wrapper_eval}"
+instance_guid="${HELIANTHUS_INSTANCE_GUID:-}"
+instance_guid_source="${HELIANTHUS_INSTANCE_GUID_SOURCE:-}"
 if [ -z "${instance_guid}" ]; then
-  instance_guid=$(generate_instance_guid || true)
-  if [ -z "${instance_guid}" ]; then
-    bashio::exit.nok "Failed to generate stable instance GUID"
-  fi
-  if ! persist_instance_guid_state "${instance_guid}"; then
-    bashio::exit.nok "Failed to persist stable instance GUID to ${instance_guid_file}"
-  fi
-  bashio::log.info "Generated stable instance GUID ${instance_guid}"
-else
-  bashio::log.info "Using persisted stable instance GUID ${instance_guid}"
+  bashio::exit.nok "runtime-state wrapper did not emit HELIANTHUS_INSTANCE_GUID"
 fi
+bashio::log.info "Helianthus instance GUID ${instance_guid} (source=${instance_guid_source})"
 
 bashio::log.info "Starting Helianthus gateway"
 bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
@@ -325,6 +335,7 @@ exec "${gateway_bin}" \
   -mdns="${mdns}" \
   -mdns-instance "${mdns_instance}" \
   -instance-guid "${instance_guid}" \
+  -instance-guid-source "${instance_guid_source}" \
   -broadcast="${broadcast}" \
   -read-timeout "${read_timeout}" \
   -write-timeout "${write_timeout}" \
