@@ -165,6 +165,92 @@ def test_ad09b_case5_corrupt_runtime_with_valid_legacy_triggers_halt(
     )
 
 
+@pytest.mark.parametrize(
+    "legacy_body",
+    [
+        "12345678-1234-4234-9234",  # truncated
+        "not-a-uuid-at-all\n",
+        "ffffffff-ffff-ffff-ffff-ffffffffffff\n",  # not v4 (third group must start with 4)
+        "",  # empty file (zero-byte write)
+        "  \n\n",  # whitespace only
+    ],
+    ids=["truncated", "garbage", "non_v4", "empty", "whitespace"],
+)
+def test_ad09b_invalid_legacy_file_triggers_halt(
+    tmp_path: Path, legacy_body: str
+) -> None:
+    """Codex P2 (PR #127): a legacy /data/instance_guid that is PRESENT but
+    not a valid UUIDv4 (truncated write, partial write, garbage) MUST trip
+    AD09a halt — falling through to fresh-id generation here would silently
+    orphan an existing HA pairing whose original GUID was the one being
+    truncated. Distinguish absent (legitimate fresh install → case 3)
+    from present-but-invalid (operator must migrate → case 2 halt)."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"  # absent
+    legacy_path = tmp_path / "instance_guid"
+    legacy_path.write_text(legacy_body)
+
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"present-but-invalid legacy ({legacy_body!r}) must trip AD09a halt, "
+        "not silently fall through to case 3 fresh-id generation"
+    )
+    assert result.source != module.IDENTITY_SOURCE_GENERATED, (
+        "halt path must not return a freshly-generated identity"
+    )
+    assert any(
+        module.LOG_TOKEN_MIGRATION_REQUIRED in line for line in result.log_lines
+    )
+    # The halt log must surface that the legacy file was the trigger.
+    assert any("legacy_guid_detected" in line for line in result.log_lines), (
+        "halt log must name the legacy file as the trigger"
+    )
+
+
+@pytest.mark.parametrize(
+    "json_body",
+    ["[]", "null", '"raw-string"', "42"],
+    ids=["array", "null", "string", "number"],
+)
+def test_ad09b_non_object_runtime_state_is_corrupt(
+    tmp_path: Path, json_body: str
+) -> None:
+    """Codex P2 (PR #127): valid JSON that is not a top-level object must be
+    treated as corrupt — previously `data.get("meta")` raised AttributeError
+    on `[]` / `null`, killing the wrapper before it could write the migration
+    marker. With a valid legacy file present we expect AD09a halt; without
+    a legacy file we expect the AD09b "runtime_state_unusable" halt path
+    (Codex R2 P2) — never a silent fall-through to fresh UUID generation."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    rs_path.write_text(json_body)
+    # Case 5b: legacy present → AD09a halt with marker.
+    legacy_path.write_text(VALID_GUID_A + "\n")
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"non-object top-level JSON ({json_body!r}) must trip AD09a halt, "
+        "not raise an unhandled exception"
+    )
+    # Case 5c: legacy absent → AD09b runtime_state_unusable halt (no fresh ID).
+    legacy_path.unlink()
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"non-object top-level JSON ({json_body!r}) without legacy must still "
+        "halt rather than orphan a paired GUID with a freshly-generated one"
+    )
+    assert result.source != module.IDENTITY_SOURCE_GENERATED, (
+        "non-object top-level JSON must not silently fall through to "
+        "generated identity"
+    )
+
+
 # -----------------------------------------------------------------------------
 # AD09a halt details — marker file content + exit code.
 # -----------------------------------------------------------------------------
@@ -233,12 +319,114 @@ def test_ad26_enoent_retry_budget(tmp_path: Path) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Case-3 bootstrap persistence (Codex P2 follow-up on PR #127).
+# -----------------------------------------------------------------------------
+
+
+def test_case3_bootstrap_persists_runtime_state(tmp_path: Path) -> None:
+    """Case 3 must write runtime_state.json so identity is stable across restarts
+    even when /data/helianthus-gateway predates M2_GATEWAY_LOADER and never
+    writes the file itself."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    marker_path = tmp_path / "marker"
+    monkey_env = {
+        "HELIANTHUS_RUNTIME_STATE_PATH": str(rs_path),
+        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(legacy_path),
+        "HELIANTHUS_MIGRATION_MARKER_PATH": str(marker_path),
+    }
+    saved = {k: os.environ.get(k) for k in monkey_env}
+    os.environ.update(monkey_env)
+    try:
+        rc = module.main([])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    assert rc == module.EXIT_OK
+    assert rs_path.exists(), "case 3 must bootstrap runtime_state.json"
+    body = json.loads(rs_path.read_text())
+    assert body["schema_version"] == 1
+    assert "meta" in body and re.match(
+        module.INSTANCE_GUID_REGEX, body["meta"]["instance_guid"]
+    )
+    # Second run with the same paths must read the bootstrap file (case 1)
+    # rather than generate a new identity.
+    first_guid = body["meta"]["instance_guid"]
+    result2 = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result2.source == module.IDENTITY_SOURCE_RUNTIME_STATE, (
+        "after bootstrap persistence, restart must read runtime_state.json"
+    )
+    assert result2.guid == first_guid, (
+        "identity must remain stable across restarts after bootstrap"
+    )
+
+
+def test_case1_does_not_overwrite_runtime_state(tmp_path: Path) -> None:
+    """When runtime_state.json already exists (case 1), main() must not
+    rewrite it — only the gateway owns ongoing writes. Bootstrap is a
+    case-3-only side effect."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    marker_path = tmp_path / "marker"
+    _write_runtime_state(rs_path, guid=VALID_GUID_A)
+    original_body = rs_path.read_text()
+    original_mtime = rs_path.stat().st_mtime_ns
+    monkey_env = {
+        "HELIANTHUS_RUNTIME_STATE_PATH": str(rs_path),
+        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(legacy_path),
+        "HELIANTHUS_MIGRATION_MARKER_PATH": str(marker_path),
+    }
+    saved = {k: os.environ.get(k) for k in monkey_env}
+    os.environ.update(monkey_env)
+    try:
+        rc = module.main([])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    assert rc == module.EXIT_OK
+    # File untouched: bytes + mtime unchanged.
+    assert rs_path.read_text() == original_body, (
+        "case 1 (valid runtime_state) must not be overwritten by the wrapper"
+    )
+    assert rs_path.stat().st_mtime_ns == original_mtime, (
+        "case 1 must not rewrite the file (mtime preserved)"
+    )
+
+
+# -----------------------------------------------------------------------------
 # CLI smoke — main() must accept argv and return an int.
 # -----------------------------------------------------------------------------
 
 
-def test_main_returns_int_zero_during_m1() -> None:
-    """During M1, main() exits 0 with a skip message so CI passes."""
+def test_main_returns_int_zero_during_m1(tmp_path: Path) -> None:
+    """main() returns EXIT_OK on a fresh-install case."""
     module = _wrapper_module()
-    rc = module.main([])
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    marker_path = tmp_path / "marker"
+    monkey_env = {
+        "HELIANTHUS_RUNTIME_STATE_PATH": str(rs_path),
+        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(legacy_path),
+        "HELIANTHUS_MIGRATION_MARKER_PATH": str(marker_path),
+    }
+    saved = {k: os.environ.get(k) for k in monkey_env}
+    os.environ.update(monkey_env)
+    try:
+        rc = module.main([])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
     assert rc == module.EXIT_OK

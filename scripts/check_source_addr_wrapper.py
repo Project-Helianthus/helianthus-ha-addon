@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import stat
@@ -12,6 +13,7 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
+RUNTIME_STATE_WRAPPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
 DOCKERFILE = REPO_ROOT / "helianthus/Dockerfile"
 BUILD_WORKFLOW = REPO_ROOT / ".github/workflows/build.yml"
 TOP_README = REPO_ROOT / "README.md"
@@ -92,12 +94,19 @@ def _write_executable(path: Path, content: str) -> None:
 
 def _write_gateway_stub(path: Path, mode: str) -> None:
     help_by_mode = {
+        # `old` predates startup-source-override AND -instance-guid-source —
+        # the bash run script must suppress -instance-guid-source via the
+        # AD27 compatibility gate (Codex P2 follow-up on PR #127).
         "old": "Usage of gateway:\n  -source-addr string\n",
+        # `new` advertises both the M2_GATEWAY_LOADER -instance-guid-source
+        # flag and the source-override flags. The bash gate must pass through
+        # the provenance tag in this mode.
         "new": (
             "Usage of gateway:\n"
             "  -source-addr string\n"
             "  -startup-source-override string\n"
             "  -startup-source-override-validate\n"
+            "  -instance-guid-source string\n"
         ),
     }
     script = f"""#!/usr/bin/env python3
@@ -147,8 +156,31 @@ def _run_wrapper_case(
         gateway = tmp / "gateway-stub.py"
         argv_file = tmp / "argv.txt"
         log_file = tmp / "wrapper.log"
+        # The bash run script delegates instance_guid resolution to the
+        # Python wrapper (M6_HA_ADDON_MIGRATION). For these source-address
+        # tests we want the wrapper to take the AD09b case (1) read-precedence
+        # path: pre-write a schema-valid runtime_state.json and redirect the
+        # wrapper's path env vars into the temp sandbox so it reads our test
+        # GUID without touching /data/.
+        runtime_state_file = tmp / "runtime_state.json"
+        runtime_state_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "meta": {
+                        "instance_guid": VALID_INSTANCE_GUID,
+                        "written_at": "2026-05-10T00:00:00Z",
+                    },
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         instance_guid_file = tmp / "instance_guid"
-        instance_guid_file.write_text(VALID_INSTANCE_GUID + "\n", encoding="utf-8")
+        # Legacy file deliberately absent; runtime_state.json is the source.
+        legacy_marker_file = tmp / "migration_marker"
         _write_test_wrapper(wrapper)
         _write_gateway_stub(gateway, gateway_mode)
 
@@ -165,6 +197,13 @@ def _run_wrapper_case(
                 "TEST_TRANSPORT": transport,
                 "TEST_ADAPTER_DIRECT_ENABLED": "true" if adapter_direct_enabled else "false",
                 "TEST_ADAPTER_DIRECT_ADDRESS": "203.0.113.10:9999",
+                # M6 wrapper integration: redirect bash + Python sides at the
+                # in-repo wrapper script and the temp-sandboxed runtime-state
+                # paths so the test runs on a host without /data/ (CI).
+                "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(RUNTIME_STATE_WRAPPER),
+                "HELIANTHUS_RUNTIME_STATE_PATH": str(runtime_state_file),
+                "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(instance_guid_file),
+                "HELIANTHUS_MIGRATION_MARKER_PATH": str(legacy_marker_file),
             },
         )
 
@@ -275,6 +314,14 @@ def _check_runtime_cases() -> None:
     _assert(state_exists and state_content == "0xf7\n", "auto case must not rewrite existing source state file")
     _assert("gateway default source-selection policy" in logs, "auto case must log gateway default policy")
     _assert("rollback only" in logs, "auto case must log rollback-only state-file handling")
+    _assert(
+        "-instance-guid-source" not in argv,
+        "old gateway lacking AD27 flag must not receive -instance-guid-source (compatibility gate)",
+    )
+    _assert(
+        "does not support -instance-guid-source" in logs,
+        "old gateway path must log the AD27 compatibility-gate warning",
+    )
 
     argv, logs, state_exists, _state_content, _ = _run_wrapper_case(
         source_addr="0x71",
@@ -287,6 +334,14 @@ def _check_runtime_cases() -> None:
     _assert("-source-addr" not in argv, "new gateway exact source must not also use legacy -source-addr")
     _assert(state_exists, "new gateway exact source must not remove rollback-only source state file")
     _assert("rollback only" in logs, "new gateway exact source must log rollback-only state-file handling")
+    _assert(
+        "-instance-guid-source" in argv,
+        "new gateway advertising AD27 flag must receive -instance-guid-source",
+    )
+    _assert(
+        argv[argv.index("-instance-guid-source") + 1] == "runtime_state",
+        "new gateway must receive the resolver-emitted identity-source tag",
+    )
 
     argv, logs, state_exists, state_content, _ = _run_wrapper_case(
         source_addr="0x71",

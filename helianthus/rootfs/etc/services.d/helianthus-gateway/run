@@ -213,26 +213,40 @@ if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
 
-instance_guid=""
-if [ -f "${instance_guid_file}" ]; then
-  instance_guid=$(load_instance_guid_state || true)
-  if [ -z "${instance_guid}" ]; then
-    bashio::log.warning "Invalid instance GUID in ${instance_guid_file}; regenerating"
-  fi
-fi
-
-if [ -z "${instance_guid}" ]; then
-  instance_guid=$(generate_instance_guid || true)
-  if [ -z "${instance_guid}" ]; then
-    bashio::exit.nok "Failed to generate stable instance GUID"
-  fi
-  if ! persist_instance_guid_state "${instance_guid}"; then
-    bashio::exit.nok "Failed to persist stable instance GUID to ${instance_guid_file}"
-  fi
-  bashio::log.info "Generated stable instance GUID ${instance_guid}"
+# Resolve instance_guid via the Python wrapper (M6_HA_ADDON_MIGRATION).
+# The wrapper implements AD09a/b/26/27 of runtime-state-w19-26.locked:
+#   - AD09b read precedence (runtime_state.json valid → use; legacy detected
+#     without migration → AD09a halt; both absent → generate fresh).
+#   - AD09a halt: marker file at /data/.helianthus_migration_required +
+#     HELIANTHUS_MIGRATION_REQUIRED log token + exit 1 (NOT sysexits-78 per
+#     consultant MF-1).
+#   - AD25 HELIANTHUS_FRESH_IDENTITY warn on case 3.
+#   - AD26 bounded ENOENT retries on runtime_state.json read.
+#   - AD27 emits HELIANTHUS_INSTANCE_GUID_SOURCE for the gateway flag.
+#
+# The wrapper writes structured logs to stderr and eval-able key=value lines
+# to stdout. Invoke ONCE and capture stdout for eval; stderr streams through
+# to Supervisor logs. The earlier two-invocation form was broken: it ran the
+# resolver twice (generating two different UUIDs in case 3) and the
+# `2>&1 >/dev/null` redirect captured stderr into the eval text, so a fresh
+# install tried to eval the warning banner and exited under set -e.
+wrapper_script="${HELIANTHUS_RUNTIME_STATE_WRAPPER:-/usr/share/helianthus/check_runtime_state_wrapper.py}"
+if wrapper_eval=$(python3 "${wrapper_script}"); then
+  eval "${wrapper_eval}"
 else
-  bashio::log.info "Using persisted stable instance GUID ${instance_guid}"
+  rc=$?
+  if [ "${rc}" -eq 1 ]; then
+    bashio::log.error "Helianthus migration required — see /data/.helianthus_migration_required"
+    exit 1
+  fi
+  bashio::exit.nok "runtime-state wrapper failed with exit code ${rc}"
 fi
+instance_guid="${HELIANTHUS_INSTANCE_GUID:-}"
+instance_guid_source="${HELIANTHUS_INSTANCE_GUID_SOURCE:-}"
+if [ -z "${instance_guid}" ]; then
+  bashio::exit.nok "runtime-state wrapper did not emit HELIANTHUS_INSTANCE_GUID"
+fi
+bashio::log.info "Helianthus instance GUID ${instance_guid} (source=${instance_guid_source})"
 
 bashio::log.info "Starting Helianthus gateway"
 bashio::log.info "Transport: ${effective_transport} (${effective_network} ${effective_address})"
@@ -282,6 +296,19 @@ elif bashio::var.true "${enable_static_seed_table}"; then
   bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
 fi
 
+# Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
+# version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
+# but a `/data/helianthus-gateway` override predating M2 would reject it during
+# flag parsing before the add-on can start. Older overrides still receive
+# `-instance-guid` so identity continuity is preserved; only the new
+# provenance-tagging flag is suppressed. (Codex P2 follow-up on PR #127.)
+instance_guid_source_args=()
+if gateway_supports_flag "instance-guid-source"; then
+  instance_guid_source_args=(-instance-guid-source "${instance_guid_source}")
+else
+  bashio::log.warning "Pinned gateway binary does not support -instance-guid-source; identity provenance tag (${instance_guid_source}) will not be propagated. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the M2_GATEWAY_LOADER patch."
+fi
+
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_intent=$(printf '%s' "${source_addr}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_args=()
@@ -325,6 +352,7 @@ exec "${gateway_bin}" \
   -mdns="${mdns}" \
   -mdns-instance "${mdns_instance}" \
   -instance-guid "${instance_guid}" \
+  ${instance_guid_source_args[@]+"${instance_guid_source_args[@]}"} \
   -broadcast="${broadcast}" \
   -read-timeout "${read_timeout}" \
   -write-timeout "${write_timeout}" \

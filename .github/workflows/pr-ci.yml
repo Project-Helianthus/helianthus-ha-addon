@@ -69,7 +69,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/check_runtime_state_wrapper.py
+          # Sandbox the wrapper into a temp dir so CI never touches the
+          # runner's /data/ (a real /data/instance_guid would trip AD09a;
+          # case-3 fall-through would create /data/runtime_state.json on
+          # the runner). Codex P2 follow-up on PR #127.
+          tmp_state_dir=$(mktemp -d)
+          trap 'rm -rf "${tmp_state_dir}"' EXIT
+          HELIANTHUS_RUNTIME_STATE_PATH="${tmp_state_dir}/runtime_state.json" \
+          HELIANTHUS_LEGACY_INSTANCE_GUID_PATH="${tmp_state_dir}/instance_guid" \
+          HELIANTHUS_MIGRATION_MARKER_PATH="${tmp_state_dir}/.helianthus_migration_required" \
+            python3 scripts/check_runtime_state_wrapper.py
+          # Confirm the case-3 bootstrap landed in the temp dir, not /data.
+          test -f "${tmp_state_dir}/runtime_state.json"
+          test ! -e /data/runtime_state.json || {
+            echo "FAIL: wrapper wrote /data/runtime_state.json on the CI runner"
+            exit 1
+          }
+
+      - name: Run runtime-state wrapper contract tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The contract test suite (covers all 5 AD09b read-precedence
+          # cases, AD09a halt details, AD25/AD26/AD27 invariants, and the
+          # case-3 bootstrap persistence path) — each test uses tmp_path
+          # fixtures + explicit HELIANTHUS_* env-overrides, so it never
+          # touches the runner's /data/.
+          python3 -m pip install --quiet --user pytest
+          python3 -m pytest tests/test_runtime_state_wrapper_red.py -q
 
       - name: Validate gateway parity gate artifact
         shell: bash
