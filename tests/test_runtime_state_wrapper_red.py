@@ -166,6 +166,50 @@ def test_ad09b_case5_corrupt_runtime_with_valid_legacy_triggers_halt(
 
 
 @pytest.mark.parametrize(
+    "legacy_body",
+    [
+        "12345678-1234-4234-9234",  # truncated
+        "not-a-uuid-at-all\n",
+        "ffffffff-ffff-ffff-ffff-ffffffffffff\n",  # not v4 (third group must start with 4)
+        "",  # empty file (zero-byte write)
+        "  \n\n",  # whitespace only
+    ],
+    ids=["truncated", "garbage", "non_v4", "empty", "whitespace"],
+)
+def test_ad09b_invalid_legacy_file_triggers_halt(
+    tmp_path: Path, legacy_body: str
+) -> None:
+    """Codex P2 (PR #127): a legacy /data/instance_guid that is PRESENT but
+    not a valid UUIDv4 (truncated write, partial write, garbage) MUST trip
+    AD09a halt — falling through to fresh-id generation here would silently
+    orphan an existing HA pairing whose original GUID was the one being
+    truncated. Distinguish absent (legitimate fresh install → case 3)
+    from present-but-invalid (operator must migrate → case 2 halt)."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"  # absent
+    legacy_path = tmp_path / "instance_guid"
+    legacy_path.write_text(legacy_body)
+
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"present-but-invalid legacy ({legacy_body!r}) must trip AD09a halt, "
+        "not silently fall through to case 3 fresh-id generation"
+    )
+    assert result.source != module.IDENTITY_SOURCE_GENERATED, (
+        "halt path must not return a freshly-generated identity"
+    )
+    assert any(
+        module.LOG_TOKEN_MIGRATION_REQUIRED in line for line in result.log_lines
+    )
+    # The halt log must surface that the legacy file was the trigger.
+    assert any("legacy_guid_detected" in line for line in result.log_lines), (
+        "halt log must name the legacy file as the trigger"
+    )
+
+
+@pytest.mark.parametrize(
     "json_body",
     ["[]", "null", '"raw-string"', "42"],
     ids=["array", "null", "string", "number"],

@@ -138,17 +138,31 @@ def _read_runtime_state(path: str) -> tuple[str | None, str | None]:
     return None, last_err
 
 
-def _read_legacy_guid(path: str) -> str | None:
-    """Read the legacy /data/instance_guid file. Returns the validated UUIDv4
-    or None if the file is absent / unreadable / not a valid UUIDv4."""
+def _read_legacy_guid(path: str) -> tuple[str | None, str | None]:
+    """Read the legacy /data/instance_guid file.
+
+    Returns (guid, error_kind):
+      - (validated_uuidv4, None) on success
+      - (None, "absent") when the file is not present
+      - (None, "unreadable") on OSError other than ENOENT
+      - (None, "invalid_uuid") when present but contents don't match
+        the AD22 lowercase UUIDv4 regex (truncated / corrupted writes)
+
+    The caller must distinguish absent (legitimate fresh install → case 3)
+    from present-but-invalid (truncated legacy file → AD09a halt) per
+    Codex P2 follow-up on PR #127, otherwise a partial legacy write would
+    silently orphan an HA pairing.
+    """
     try:
         with open(path, "r", encoding="utf-8") as fp:
             raw = fp.read().strip().lower()
-    except (FileNotFoundError, OSError):
-        return None
+    except FileNotFoundError:
+        return None, "absent"
+    except OSError:
+        return None, "unreadable"
     if re.match(INSTANCE_GUID_REGEX, raw):
-        return raw
-    return None
+        return raw, None
+    return None, "invalid_uuid"
 
 
 def _generate_uuid4() -> str:
@@ -168,13 +182,18 @@ def resolve_instance_guid(
 
     Precedence (AD09b):
       1. runtime_state.json valid + meta.instance_guid valid → use it.
-      2. legacy /data/instance_guid present + runtime_state invalid/absent → AD09a halt.
+      2. legacy /data/instance_guid present (valid OR truncated) + runtime
+         invalid/absent → AD09a halt. A present-but-invalid legacy file
+         must NOT fall through to fresh-id generation: it likely carries a
+         partial write of the original HA-paired GUID and dropping it
+         silently would orphan the pairing (Codex P2 follow-up #3).
       3. both absent → generate fresh uuid4 + AD25 warn.
       4. mismatch (runtime has GUID-A, legacy has GUID-B) → runtime wins, log warn.
-      5. corrupt runtime + valid legacy → AD09a halt.
+      5. corrupt runtime + present-or-truncated legacy → AD09a halt.
     """
     rs_guid, rs_err = _read_runtime_state(runtime_state_path)
-    legacy_guid = _read_legacy_guid(legacy_path)
+    legacy_guid, legacy_err = _read_legacy_guid(legacy_path)
+    legacy_present = legacy_err != "absent"
 
     if rs_guid is not None:
         # Case 1 / Case 4 — runtime is valid.
@@ -196,16 +215,21 @@ def resolve_instance_guid(
         )
 
     # rs_guid is None — runtime invalid / absent / corrupt / missing field.
-    if legacy_guid is not None:
-        # Case 2 / Case 5 — legacy present but runtime unusable → AD09a halt.
-        reason = "absent" if rs_err == "absent" else (rs_err or "invalid")
+    # If the legacy file is present (whether parseable or truncated), the
+    # operator MUST migrate before we will generate any new identity.
+    if legacy_present:
+        # Case 2 / Case 5 — legacy file detected (valid or truncated) +
+        # runtime unusable → AD09a halt.
+        rs_reason = "absent" if rs_err == "absent" else (rs_err or "invalid")
+        legacy_reason = "valid" if legacy_guid is not None else (legacy_err or "invalid")
         return ResolveResult(
             guid="",
             source="",
             halt=True,
             log_lines=[
                 f"ERROR {LOG_TOKEN_MIGRATION_REQUIRED} "
-                f"legacy_guid_detected runtime_state_status={reason}; "
+                f"legacy_guid_detected legacy_status={legacy_reason} "
+                f"runtime_state_status={rs_reason}; "
                 f"see {MIGRATION_MARKER_FILE} for the migration template, then restart"
             ],
         )
