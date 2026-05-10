@@ -225,10 +225,15 @@ fi
 #   - AD27 emits HELIANTHUS_INSTANCE_GUID_SOURCE for the gateway flag.
 #
 # The wrapper writes structured logs to stderr and eval-able key=value lines
-# to stdout. We capture stdout for eval, let stderr stream through to
-# Supervisor logs.
+# to stdout. Invoke ONCE and capture stdout for eval; stderr streams through
+# to Supervisor logs. The earlier two-invocation form was broken: it ran the
+# resolver twice (generating two different UUIDs in case 3) and the
+# `2>&1 >/dev/null` redirect captured stderr into the eval text, so a fresh
+# install tried to eval the warning banner and exited under set -e.
 wrapper_script="/usr/share/helianthus/check_runtime_state_wrapper.py"
-if ! wrapper_eval=$(python3 "${wrapper_script}" 2>&1 >/dev/null && python3 "${wrapper_script}" 2>/dev/null); then
+if wrapper_eval=$(python3 "${wrapper_script}"); then
+  eval "${wrapper_eval}"
+else
   rc=$?
   if [ "${rc}" -eq 1 ]; then
     bashio::log.error "Helianthus migration required — see /data/.helianthus_migration_required"
@@ -236,7 +241,6 @@ if ! wrapper_eval=$(python3 "${wrapper_script}" 2>&1 >/dev/null && python3 "${wr
   fi
   bashio::exit.nok "runtime-state wrapper failed with exit code ${rc}"
 fi
-eval "${wrapper_eval}"
 instance_guid="${HELIANTHUS_INSTANCE_GUID:-}"
 instance_guid_source="${HELIANTHUS_INSTANCE_GUID_SOURCE:-}"
 if [ -z "${instance_guid}" ]; then
