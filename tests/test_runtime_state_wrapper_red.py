@@ -165,6 +165,48 @@ def test_ad09b_case5_corrupt_runtime_with_valid_legacy_triggers_halt(
     )
 
 
+@pytest.mark.parametrize(
+    "json_body",
+    ["[]", "null", '"raw-string"', "42"],
+    ids=["array", "null", "string", "number"],
+)
+def test_ad09b_non_object_runtime_state_is_corrupt(
+    tmp_path: Path, json_body: str
+) -> None:
+    """Codex P2 (PR #127): valid JSON that is not a top-level object must be
+    treated as corrupt — previously `data.get("meta")` raised AttributeError
+    on `[]` / `null`, killing the wrapper before it could write the migration
+    marker. With a valid legacy file present we expect AD09a halt; without
+    a legacy file we expect the AD09b "runtime_state_unusable" halt path
+    (Codex R2 P2) — never a silent fall-through to fresh UUID generation."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    rs_path.write_text(json_body)
+    # Case 5b: legacy present → AD09a halt with marker.
+    legacy_path.write_text(VALID_GUID_A + "\n")
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"non-object top-level JSON ({json_body!r}) must trip AD09a halt, "
+        "not raise an unhandled exception"
+    )
+    # Case 5c: legacy absent → AD09b runtime_state_unusable halt (no fresh ID).
+    legacy_path.unlink()
+    result = module.resolve_instance_guid(
+        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
+    )
+    assert result.halt is True, (
+        f"non-object top-level JSON ({json_body!r}) without legacy must still "
+        "halt rather than orphan a paired GUID with a freshly-generated one"
+    )
+    assert result.source != module.IDENTITY_SOURCE_GENERATED, (
+        "non-object top-level JSON must not silently fall through to "
+        "generated identity"
+    )
+
+
 # -----------------------------------------------------------------------------
 # AD09a halt details — marker file content + exit code.
 # -----------------------------------------------------------------------------

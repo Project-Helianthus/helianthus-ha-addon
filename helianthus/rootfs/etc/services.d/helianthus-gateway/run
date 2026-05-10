@@ -296,6 +296,19 @@ elif bashio::var.true "${enable_static_seed_table}"; then
   bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
 fi
 
+# Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
+# version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
+# but a `/data/helianthus-gateway` override predating M2 would reject it during
+# flag parsing before the add-on can start. Older overrides still receive
+# `-instance-guid` so identity continuity is preserved; only the new
+# provenance-tagging flag is suppressed. (Codex P2 follow-up on PR #127.)
+instance_guid_source_args=()
+if gateway_supports_flag "instance-guid-source"; then
+  instance_guid_source_args=(-instance-guid-source "${instance_guid_source}")
+else
+  bashio::log.warning "Pinned gateway binary does not support -instance-guid-source; identity provenance tag (${instance_guid_source}) will not be propagated. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the M2_GATEWAY_LOADER patch."
+fi
+
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_intent=$(printf '%s' "${source_addr}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
 source_addr_args=()
@@ -339,7 +352,7 @@ exec "${gateway_bin}" \
   -mdns="${mdns}" \
   -mdns-instance "${mdns_instance}" \
   -instance-guid "${instance_guid}" \
-  -instance-guid-source "${instance_guid_source}" \
+  ${instance_guid_source_args[@]+"${instance_guid_source_args[@]}"} \
   -broadcast="${broadcast}" \
   -read-timeout "${read_timeout}" \
   -write-timeout "${write_timeout}" \

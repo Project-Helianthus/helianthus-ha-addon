@@ -113,6 +113,12 @@ def _read_runtime_state(path: str) -> tuple[str | None, str | None]:
         try:
             with open(path, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
+            # Top-level must be a JSON object; `[]`, `null`, scalars are
+            # treated as corrupt so the AD09a halt path runs (previously
+            # data.get("meta") raised AttributeError, killing the wrapper
+            # before it could write the migration marker — Codex P2).
+            if not isinstance(data, dict):
+                return None, "corrupt"
             meta = data.get("meta")
             if not isinstance(meta, dict):
                 return None, "missing_field"

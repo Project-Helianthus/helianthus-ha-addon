@@ -94,12 +94,19 @@ def _write_executable(path: Path, content: str) -> None:
 
 def _write_gateway_stub(path: Path, mode: str) -> None:
     help_by_mode = {
+        # `old` predates startup-source-override AND -instance-guid-source —
+        # the bash run script must suppress -instance-guid-source via the
+        # AD27 compatibility gate (Codex P2 follow-up on PR #127).
         "old": "Usage of gateway:\n  -source-addr string\n",
+        # `new` advertises both the M2_GATEWAY_LOADER -instance-guid-source
+        # flag and the source-override flags. The bash gate must pass through
+        # the provenance tag in this mode.
         "new": (
             "Usage of gateway:\n"
             "  -source-addr string\n"
             "  -startup-source-override string\n"
             "  -startup-source-override-validate\n"
+            "  -instance-guid-source string\n"
         ),
     }
     script = f"""#!/usr/bin/env python3
@@ -307,6 +314,14 @@ def _check_runtime_cases() -> None:
     _assert(state_exists and state_content == "0xf7\n", "auto case must not rewrite existing source state file")
     _assert("gateway default source-selection policy" in logs, "auto case must log gateway default policy")
     _assert("rollback only" in logs, "auto case must log rollback-only state-file handling")
+    _assert(
+        "-instance-guid-source" not in argv,
+        "old gateway lacking AD27 flag must not receive -instance-guid-source (compatibility gate)",
+    )
+    _assert(
+        "does not support -instance-guid-source" in logs,
+        "old gateway path must log the AD27 compatibility-gate warning",
+    )
 
     argv, logs, state_exists, _state_content, _ = _run_wrapper_case(
         source_addr="0x71",
@@ -319,6 +334,14 @@ def _check_runtime_cases() -> None:
     _assert("-source-addr" not in argv, "new gateway exact source must not also use legacy -source-addr")
     _assert(state_exists, "new gateway exact source must not remove rollback-only source state file")
     _assert("rollback only" in logs, "new gateway exact source must log rollback-only state-file handling")
+    _assert(
+        "-instance-guid-source" in argv,
+        "new gateway advertising AD27 flag must receive -instance-guid-source",
+    )
+    _assert(
+        argv[argv.index("-instance-guid-source") + 1] == "runtime_state",
+        "new gateway must receive the resolver-emitted identity-source tag",
+    )
 
     argv, logs, state_exists, state_content, _ = _run_wrapper_case(
         source_addr="0x71",
