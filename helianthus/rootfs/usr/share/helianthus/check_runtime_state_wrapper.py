@@ -268,14 +268,14 @@ def write_migration_marker(
                 pass  # best-effort
         os.replace(tmp, marker_p)
     finally:
-        # Successful os.replace consumes the temp file, so the unlink is a
-        # no-op in the happy path; we only land here to clean up after a
-        # rename failure. FileNotFoundError is therefore the expected case
-        # under success, not an error worth reporting.
+        # The try below cleans up the temp file only when os.replace failed.
+        # In the happy path os.replace consumed the temp, so this unlink
+        # raises FileNotFoundError, which is the expected case here — there
+        # is nothing to report or recover from.
         try:
             tmp.unlink()
         except FileNotFoundError:
-            pass
+            pass  # happy-path: temp already consumed by os.replace above
 
 
 def persist_bootstrap_runtime_state(
