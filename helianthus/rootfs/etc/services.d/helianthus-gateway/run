@@ -230,7 +230,7 @@ fi
 # resolver twice (generating two different UUIDs in case 3) and the
 # `2>&1 >/dev/null` redirect captured stderr into the eval text, so a fresh
 # install tried to eval the warning banner and exited under set -e.
-wrapper_script="/usr/share/helianthus/check_runtime_state_wrapper.py"
+wrapper_script="${HELIANTHUS_RUNTIME_STATE_WRAPPER:-/usr/share/helianthus/check_runtime_state_wrapper.py}"
 if wrapper_eval=$(python3 "${wrapper_script}"); then
   eval "${wrapper_eval}"
 else
