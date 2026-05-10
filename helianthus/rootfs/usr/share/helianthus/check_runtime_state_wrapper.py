@@ -203,7 +203,29 @@ def resolve_instance_guid(
             ],
         )
 
-    # Case 3 — both absent. Generate fresh.
+    # Both runtime_state and legacy unavailable. Distinguish "truly absent"
+    # (case 3 — fresh install, generate UUIDv4) from "present but unusable"
+    # (corrupt / missing required field / invalid UUID) — the latter must
+    # halt rather than silently orphan an existing HA pairing whose original
+    # GUID was in the now-broken runtime_state file (Codex R2 P2). The
+    # operator must investigate the corrupt file before we generate a new
+    # identity.
+    if rs_err is not None and rs_err != "absent":
+        return ResolveResult(
+            guid="",
+            source="",
+            halt=True,
+            log_lines=[
+                f"ERROR {LOG_TOKEN_MIGRATION_REQUIRED} "
+                f"runtime_state_unusable status={rs_err}; "
+                "refusing to generate a new instance_guid because the "
+                "existing file may carry an HA-paired GUID. Inspect "
+                f"{RUNTIME_STATE_FILE} (or its quarantine sibling) to recover "
+                "the original GUID, then restart."
+            ],
+        )
+
+    # Case 3 — both truly absent (fresh install). Generate fresh.
     fresh = _generate_uuid4()
     return ResolveResult(
         guid=fresh,
