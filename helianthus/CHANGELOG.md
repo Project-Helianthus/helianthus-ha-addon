@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.6.6 (2026-05-11)
+
+### Revert C4/R4 upstream-reconnect on cancelled STARTED (v0.6.5 regression)
+
+**Urgent revert.** The C4/R4 path in `handleArbitrationResponse`
+shipped in 0.6.4 (and unchanged in 0.6.5) closed the upstream TCP to
+the adapter every time an external session re-submitted a START
+while a previous request was still in flight at the adapter. Live
+capture on 0.6.5 showed this produces a continuous ~5-second cycle:
+
+    device invalid → signal lost → signal acquired (5.013 s later)
+    → device invalid → ...
+
+with the addon functionally worse than 0.6.3 in this regime. Symptom
+recurred every time any external session re-submitted a START.
+
+The "force reconnect for adapter resync" theory that prompted the
+close-call was wrong on the live bus: eBUS arbitration is per-SYN
+stateless from the adapter's perspective, so the next SYN boundary
+resets adapter arbitration state naturally. No TCP rebuild is
+required when a cancelled-bid STARTED arrives.
+
+Restore the original C4 spec — absorb the STARTED, deliver
+`granted=false` on the abandoned notify, advance the queue, **don't
+touch the transport.**
+
+Log line:
+
+    - 0.6.4-0.6.5: "suppressing STARTED for session N — request was
+                   replaced; forcing reconnect for adapter resync (C4/R4)"
+    + 0.6.6:       "suppressing STARTED for session N — request was
+                   cancelled/replaced; absorbed (C4/R4)"
+
+The `"cancelled-STARTED triggered transport reconnect"` companion
+line is gone with the close call.
+
+### Regression guards
+
+Two new tests pin the revert so it can't reappear silently:
+
+- `TestHandleArbitrationResponse_CancelledStartedAbsorbsWithoutReconnect`
+  — asserts `pendingStartAbsorb == 0` AND that `conn.Close` was NOT
+  called on an upstream mock when a cancelled-bid STARTED arrives.
+- `TestCancelledStartedLog_DoesNotMentionReconnect` — string-level
+  guard. Banned substrings: `"forcing reconnect for adapter resync"`,
+  `"cancelled-STARTED triggered transport reconnect"`, `"cancelled-
+  STARTED reconnect close"`. Required substring: `"absorbed (C4/R4)"`.
+
+### Other 0.6.4/0.6.5 fixes are retained
+
+C1 (bus-idle fast path), C3 (PendingStartTTL drain), C5 (phantom-
+byte filter), `IsKnownInitiatorByte` callback, `requestStartForSession`
+wrapper with in-flight cancel + idle-kick, passive wire-activity
+tracking, and the round-6 `lastWireActivity` bumps on consumed
+arbitration bytes all stay in place. Only the upstream-reconnect on
+cancelled STARTED is reverted.
+
+### Expected verification post-deploy
+
+    # Continuous ebusctl loop should show "ERR: arbitration lost"
+    # (bus contention) but NOT "ERR: no signal", "device invalid",
+    # or "signal lost". TCP to .2:9999 stays up indefinitely.
+    while true; do docker exec addon_2ad9b828_ebusd ebusctl scan ec; done
+
+    # Pre-revert: ~6 reconnects/min. Post-revert: 0.
+    ha apps logs local_helianthus --lines 1000 \
+      | grep -cE 'triggered transport reconnect|old conn close'
+
+### Gateway
+
+- Bump pin to `63a9b15`.
+
+### Process note
+
+This regression originated from following Codex review round 3 on PR
+#623, which asked for an adapter resync after cancelled STARTED. The
+review reasoning was internally consistent ("adapter is one
+arbitration ahead") but turned out to be wrong on the live bus. The
+two-test regression guard added here prevents the same conclusion
+from being reintroduced via a different code path.
+
+---
+
 ## 0.6.5 (2026-05-11)
 
 ### Round-6 follow-ups on the proxy-bug stack
