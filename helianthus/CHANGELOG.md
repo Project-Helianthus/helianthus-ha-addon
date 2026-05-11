@@ -1,5 +1,372 @@
 # Changelog
 
+## 0.6.5 (2026-05-11)
+
+### Round-6 follow-ups on the proxy-bug stack
+
+Two post-merge Codex P2 findings on the 0.6.4 release, addressed
+inline:
+
+- **Wire activity tracked on consumed arbitration bytes.** When the
+  adapter reports `StreamEventFailed` (or the mismatched-STARTED
+  branch inside `handleArbitrationResponse`), the winning initiator
+  byte has been consumed from the wire — but only later
+  `StreamEventByte`s used to bump `lastWireActivity`. A new external
+  START enqueued in that gap could see a stale timestamp and take
+  the C1 idle-kick path mid-third-party-transaction. `lastWireActivity =
+  time.Now()` now fires at every arbitration-byte consumption site
+  (STARTED + FAILED in `readLoop`, AM56 mismatched-STARTED in
+  `handleArbitrationResponse`).
+
+- **FAILED bookkeeping fused into one `stateMu` critical section.**
+  The first fix for the above had a sub-race: the
+  bump/snapshot/phantom-substitution happened across an unlock/relock
+  gap, so a concurrent `requestStartForSession` could still observe
+  the old timestamp. Restructured into a single acquire/release that
+  fuses `lastWireActivity = time.Now()` → active-bidder snapshot →
+  phantom-byte substitution atomically. The `IsKnownInitiatorByte`
+  predicate runs **before** the lock (callback is read-only by
+  contract; we don't want operator code executing under stateMu).
+
+### Gateway
+
+- Bump pin to `34a71c7`.
+
+### No new config knobs
+
+This release is a correctness follow-up; the Config surface is
+unchanged from 0.6.4.
+
+---
+
+## 0.6.4 (2026-05-11)
+
+### Proxy-bug fixes — unblock external sessions on idle bus
+
+Live capture revealed ebusd, when connected to the gateway-embedded
+adaptermux proxy on `:19001`, had never put a single frame on the
+bus (`ebusctl grab result all` showed 0 frames with `src=0x31` over
+multi-hour soak). Root cause: the proxy delivered arbitration grants
+seconds-to-tens-of-seconds after ebusd's local arbitration deadline.
+Latency capture before this release: REQ-burst → STARTED p50 = 2 s,
+p99 = 12 s, max = 39 s. Bus utilization at the time was only ~15 %.
+
+This release fixes that path with five corrective changes:
+
+- **C1 — Bus-idle fast path.** New `SYNInterval` knob (default 4576 µs
+  at 2400 baud). When the wire has been quiet for at least one SYN
+  interval, the arbitrator grants external sessions immediately and
+  skips the fairness-rotation counter. Fairness is for contention; on
+  an idle bus there's nothing to balance.
+
+- **C3 — Stale-START TTL.** New `PendingStartTTL` knob (default
+  250 ms; negative disables). External pending requests whose enqueue
+  age exceeds the TTL are drained from the queue head and rejected
+  with `errStaleStartRequest`, so the client retries cleanly instead
+  of receiving a grant past its own local deadline.
+
+- **C4 — In-flight cancel + adapter resync.** When a session re-
+  submits a START while a previous request is still in flight at the
+  adapter, the late STARTED is converted to a FAILED and the
+  transport is reconnected to resync the adapter's bus state. Stops
+  the leak where ebusd would otherwise be handed a bus grant it had
+  already abandoned.
+
+- **C5 — Phantom-byte filter.** New `IsKnownInitiatorByte` config
+  callback. FAILED data bytes classified as fictitious AND-collision
+  artifacts (e.g. `0x7F & 0xF1 = 0x71` on a bus that has no `0x71`
+  initiator) are substituted with the bidder's own initiator on the
+  notify path AND suppressed from mirror delivery to other sessions —
+  no more `0x71`/`0x01` pollution in ebusd's passive view.
+
+- **Idle-kick on enqueue + passive wire-activity tracking.** The
+  Mux-level `requestStartForSession` wrapper kicks `tryGrantAndStart`
+  on enqueue when the wire is quiet (so external STARTs land within
+  microseconds instead of waiting up to ReadTimeout for the next
+  SYN-driven cycle), and `lastWireActivity` now bumps on *every*
+  non-SYN adapter byte regardless of ownership, so third-party
+  frames correctly register as wire activity.
+
+The PR cycle drew **8 rounds of Codex P1+P2 review** (in-flight
+cancel API gap, idle-kick gating, zero-TTL semantic, absorb-arm
+drop, reconnect-on-cancelled-STARTED, stateMu race closure, pre-
+notify phantom filter, passive wire-activity tracking). All addressed
+inline.
+
+### Observability scope alignment (Option A)
+
+Active-path errors now bump `ebus_frames_observed_total` and
+`ebus_frame_bytes_total` in addition to `ebus_errors_total` —
+matching the long-standing passive-path semantic. Both scopes now
+share the contract:
+
+    frames_observed = attempts (success + failure)
+    errors_total    = subset of failures, by class
+    success ratio   = 1 - rate(errors) / rate(frames_observed)
+
+**Dashboard migration:** anyone reading
+`rate(ebus_frames_observed_total{scope="active"})` as "successful
+active txns / sec" must subtract `sum(rate(ebus_errors_total{scope=
+"active"}))` to recover the old meaning.
+
+### Live evidence (post-deploy, against the pre-deploy baseline)
+
+| Signal | Before | After |
+| --- | --- | --- |
+| Gateway `0x7f` frames in `ebusctl grab result all` | 0 | 90+ |
+| ebusd `SEND 0xFE` forwarded by proxy | 0 | yes (live trace) |
+| `max arbitration micros` | ~1228 | 14 |
+| Frame pipeline latency (47k samples) | n/a | **100 % ≤ 5 ms** |
+| ebusd error rate / min | ~30 | ~22 |
+| Remaining error class (dominant) | self-inflicted mid-frame yanks | genuine bus contention from a third-party initiator at 0x10 |
+
+The proxy-internal starvation is fixed. The remaining ebusd error
+rate is **bus-physics**: ebusd at `0x31` loses bit-level arbitration
+against the heavy `0x10` initiator on this physical bus, independent
+of the gateway. That track is being investigated separately.
+
+### Gateway
+
+- Bump pin to `0f48902` (helianthus-ebusgateway main with PRs #622 +
+  #623 merged).
+- New `adaptermux.Config` fields: `SYNInterval`, `PendingStartTTL`,
+  `ExternalSessionSYNGrace`, `LatencyHistogramReportInterval`,
+  `IsKnownInitiatorByte`.
+
+### Cache-bypass deploy note
+
+HA Supervisor caches the local-addon version under its first-seen
+tag. When the host already has 0.6.3 installed, the deploy path is
+`docker pull :0.6.4-aarch64` + `docker tag … :0.6.1` + `ha addons
+start` (Supervisor's internal version stays pinned to the original
+install). A clean install picks the correct tag automatically.
+
+---
+
+## 0.6.3 (2026-05-11)
+
+### F-10v2 — SYN-timeout grace asymmetry for external sessions
+
+Pre-0.6.3, `wirePhaseEventSYNTimeout` released bus ownership
+immediately regardless of who owned the bus. That fits the gateway's
+own tight protocol (B5.24 directed reads, no inter-byte gap) but
+wrongly tore down ebusd's broadcast scans whose multi-second inter-
+responder gaps look identical to SYN-timeout to the wire-phase
+machine. A 5000-log-line capture showed 80 false-positive releases
+on ebusd's session vs 0 on the gateway's — a 96 % false-positive
+rate against ebusd.
+
+The release policy now splits on owner identity AND on the actual
+idle gap, not the grant timestamp:
+
+- **Gateway owner**: release immediately on SYN-timeout; 200 ms
+  grace on SYNIdle measured from `busOwned` (legacy behaviour,
+  unchanged).
+- **External owner**: both wire-phase events use a grace measured
+  from `lastWireActivity` (bumped on every non-SYN adapter byte),
+  threshold `ExternalSessionSYNGrace` (new config knob, default
+  **2 s**, calibrated to the ~190 ms inter-responder gap observed
+  in a live ebusd scan trace).
+
+### Diagnostic improvements (carries forward from 0.6.2)
+
+- `adaptermux_session_frame_latency_us_bucket_total` is now also
+  emitted as a single log line every 60 s. Cumulative semantics
+  preserved in the log surface; histogram is visible in
+  `ha addons logs` without curling `/debug/vars` from inside the
+  addon container.
+
+- Ownership-release log lines carry `remote=<addr>` for external
+  sessions; the gateway's internal session shows `remote=unknown`
+  (no TCP client).
+
+### Gateway
+
+- Bump pin to `df75035`.
+- New `adaptermux.Config` fields: `ExternalSessionSYNGrace`,
+  `LatencyHistogramReportInterval`.
+
+---
+
+## 0.6.2 (2026-05-11)
+
+### F-9 — Arbitration-winner byte synthesis (root cause of "invisible gateway traffic")
+
+The ENH adapter consumes the arbitration-winner byte as a
+`StreamEventStarted` control event instead of echoing it through
+`StreamEventByte`. Pre-0.6.2, external sessions (ebusd) never saw
+the gateway's initiator byte (`0x7F`) on the wire — their ENH parser
+then misread the next target/PB byte as the frame source, dropped
+the frame as malformed, and the gateway's traffic was invisible in
+`ebusctl grab result all` / initiator enumeration.
+
+The mux now synthesizes the arbitration-winner byte into the per-
+session ENH stream and the passive observer pipeline at the
+StreamEventStarted/StreamEventFailed boundary. The synthesis covers
+every arbitration outcome (matched STARTED — gateway wins / external
+wins, mismatched STARTED — third-party won, FAILED — gateway lost /
+external lost / absorbed-stale / no-pending).
+
+**Net effect for ebusd**: gateway-initiated frames (initiator
+`0x7F`) now appear in `ebusctl grab result all` and contribute to
+the initiator count. Capture before/after the F-9 fix: `2` frames →
+`145` frames in the same window.
+
+8 rounds of Codex P2 review inline during the PR (STARTED ordering,
+gateway-lost FAILED, multi-session non-bidder routing, disconnect
+race, passive emit, mismatched STARTED, winner-byte-in-FAILED-
+notify, FAILED-absorb preservation).
+
+### F-10 — Byte-pipeline latency histogram
+
+New expvar surface at `/debug/vars`:
+`adaptermux_session_frame_latency_us_bucket_total` — Prometheus-style
+cumulative histogram of enqueue → TCP-write latency. Buckets:
+`le_1000`, `le_5000`, `le_25000`, `le_100000` (cumulative) plus
+`gt_100000` (non-cumulative overflow bin).
+
+Per-frame slow-log line when elapsed > 25 ms (= ebusd's default
+`--receivetimeout`).
+
+Timestamps captured via a process-start monotonic anchor so wall-
+clock NTP/chrony steps cannot distort samples. Storage is an `int64`
+nanosecond delta in each `sessionFrame` (8 bytes vs 24 for
+`time.Time`) — saves ~128 MiB of baseline channel capacity at the
+1000-session ceiling.
+
+**Live result**: 100 % of frames ≤ 5 ms; the latency-as-root-cause
+hypothesis for the "ebusd read timeout" cascade was falsified at
+47 000+ samples on the live bus.
+
+### Gateway
+
+- Bump pin to `df75035`.
+- Companion docs PR in `helianthus-docs-ebus` (`architecture/
+  observability.md` extended with the F-10 histogram contract).
+
+---
+
+## 0.6.1 (2026-05-11)
+
+### F-7 — Raw-TCP client diagnostic
+
+ebusd configured with `network_device: HOST:PORT` (no `enh:` scheme
+prefix) sends raw eBUS frames over TCP to our ENH-only listener,
+producing a flood of `SEND … rejected — session does not own bus`
+log lines until the operator notices.
+
+After 16 SEND frames without a preceding ENH `INIT`/`INFO`/`START`
+handshake, the session is now auto-closed with a clear log line:
+
+    adaptermux: session N (pipe) sent 16 SEND frames with no
+    preceding ENH INIT/INFO/START — closing as suspected raw-TCP
+    client (did you forget the `enh:` scheme prefix? e.g. ebusd
+    `network_device: enh:HOST:PORT`)
+
+### Gateway
+
+- Bump pin to `0cd06bd`.
+
+---
+
+## 0.6.0 (2026-05-11)
+
+### Runtime state file — `/data/runtime_state.json`
+
+Single persistent state file replaces the legacy
+`/data/instance_guid` text file and centralises bus-membership
+caching. Schema (v1):
+
+    {
+      "schema_version": 1,
+      "meta": { "instance_guid", "written_at", "gateway_build", "addon_version" },
+      "ebus": {
+        "schema_version": 1,
+        "self": { "last_join_initiator", "last_join_at", "join_method", "companion_target" },
+        "known_bus_members": [ { addr, companion_addr, identity, last_seen_at, last_source, confidence } ]
+      }
+    }
+
+- **Sole writer**: gateway. The addon wrapper only reads
+  `meta.instance_guid` at startup and passes it via the
+  `-instance-guid` flag.
+- **Persistence cadence**: shutdown + every 15 min + on
+  `JoinResult.Initiator` change.
+- **Atomic writes** via temp + rename.
+- **Schema versioning**: top-level `schema_version` + per-plugin
+  `<plugin>.schema_version`. Mismatch per plugin = ignore that
+  namespace, not fail startup.
+- **Member cap**: 256 (one per eBUS address). Pruning via startup
+  `07 04` directed re-validation; non-responders are dropped.
+- **Corruption handling**: missing file = empty start; corrupt
+  file = rename to `.corrupt-<ts>` and empty start, log warning.
+  Gateway never blocks startup on cache state.
+
+**Migration from 0.5.x is manual.** If you skipped 0.6.0 and went
+straight to 0.6.1+, copy the value from `/data/instance_guid` into
+`/data/runtime_state.json` under `meta.instance_guid` before
+restarting, or delete `/data/runtime_state.json` to start fresh.
+
+### F-1 — `proxy_listen_addr` fallback for HA Supervisor cache bug
+
+When the HA Supervisor's option-rendering cache lags behind a config
+update, the wrapper now falls back to a sane default for
+`proxy_listen_addr` instead of refusing to start.
+
+### F-4 — External-session fairness window
+
+`FairnessRatio = 4` — when both the gateway and ≥ 1 external session
+have pending START requests, every 4th `tryGrant` rotation goes to
+the external FIFO instead of gateway-priority. Bounds the worst-case
+external START latency to ~4 gateway-transaction windows.
+
+### F-6 — Per-session frame logging
+
+Each external session's INIT/INFO/START/SEND frames produce a single
+log line, useful for distinguishing "no client traffic" from "client
+traffic but no grants" when debugging arbitration starvation.
+
+### Gateway
+
+- Bump pin to `8fc34a2`.
+
+### Other
+
+- M0..M5 milestones of the `runtime-state-w19-26` execution plan
+  shipped together. M6 (wrapper integration with AD09a/b/26/27) +
+  M8 (Codex P1 follow-up) also included.
+
+---
+
+## 0.5.0 (2026-04-18)
+
+### Source-address authority migration (SAS-02A / SAS-08A)
+
+The legacy `/data/source_addr.last` file is no longer the authority
+for source-address selection. The wrapper:
+
+- No longer reads or writes `source_addr.last`.
+- No longer exposes a `state-file` option.
+- Treats any leftover `/data/source_addr.last` as a rollback marker
+  only.
+
+The runtime authority is the join-admission result tracked in
+process state (the precursor to the `runtime_state.ebus.self.last_
+join_initiator` field that landed in 0.6.0).
+
+### `enable_static_seed_table` option (P3)
+
+New advanced-config flag (default **off**) — when on, the gateway
+seeds its address table from `helianthus-ebus-vaillant-productids`
+for known Vaillant deployments. Operator-only escape hatch for
+unusual bus topologies.
+
+### Gateway
+
+- Bump pin to `25d0636`.
+
+---
+
 ## 0.4.0 (2026-04-11)
 
 ### Gateway v0.4.0
