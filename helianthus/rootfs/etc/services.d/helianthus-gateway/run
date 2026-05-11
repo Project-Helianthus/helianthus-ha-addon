@@ -25,6 +25,20 @@ dial_timeout=$(bashio::config 'dial_timeout')
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
 proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)
+# F-1 defensive fallback (EBUSD-VERIFICATION-2026-05-10.md): HA Supervisor's
+# /addons/self/options/config endpoint has been observed silently returning
+# empty for proxy_listen_addr despite the value being correctly stored in
+# /data/options.json AND surfaced by /addons/local_helianthus/info. The
+# Supervisor cache-invalidation bug appears specific to this key and reproduces
+# only after the addon options POST without a container recreation. When
+# bashio returns empty, parse the JSON directly via jq as the source of truth.
+if [ -z "${proxy_listen_addr}" ] && [ -f /data/options.json ] && command -v jq >/dev/null 2>&1; then
+  proxy_listen_addr_fallback=$(jq -r '.proxy_listen_addr // empty' /data/options.json 2>/dev/null || true)
+  if [ -n "${proxy_listen_addr_fallback}" ] && [ "${proxy_listen_addr_fallback}" != "null" ]; then
+    bashio::log.warning "bashio::config 'proxy_listen_addr' returned empty; falling back to /data/options.json (value=${proxy_listen_addr_fallback}). Supervisor cache-invalidation bug — see EBUSD-VERIFICATION-2026-05-10.md F-1."
+    proxy_listen_addr="${proxy_listen_addr_fallback}"
+  fi
+fi
 observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)
 passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
