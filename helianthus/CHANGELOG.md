@@ -209,7 +209,7 @@ external lost / absorbed-stale / no-pending).
 
 **Net effect for ebusd**: gateway-initiated frames (initiator
 `0x7F`) now appear in `ebusctl grab result all` and contribute to
-the master count. Capture before/after the F-9 fix: `2` frames →
+the initiator count. Capture before/after the F-9 fix: `2` frames →
 `145` frames in the same window.
 
 8 rounds of Codex P2 review inline during the PR (STARTED ordering,
