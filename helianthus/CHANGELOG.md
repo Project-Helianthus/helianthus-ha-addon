@@ -1,5 +1,127 @@
 # Changelog
 
+## 0.6.7 (2026-05-12)
+
+### F-17: close the ebusd retry-feedback-loop (pcap-confirmed root cause)
+
+**Headline.** Microsecond-resolution TCP capture (operator's batch-9
+audit, `EBUSD-VERIFICATION-2026-05-11-batch9.md`) showed every
+`ReqStart(0x31)` from ebusd received `ENHResFailed(0x31)` within
+~0.3 ms — far faster than the bus can physically arbitrate (eBUS
+bit-time ~4 ms). The proxy was synthesizing these failures locally
+with `data = 0x31` (ebusd's own initiator byte), telling ebusd "you
+lost to yourself."
+
+`startRequest` carries a struct-field `cancelled atomic.Bool` for
+in-flight-at-adapter suppression. `startResult` carries a value-field
+`cancelled bool` for the channel handshake. Both must be set on
+cancellation: the struct flag lets `handleArbitrationResponse`
+suppress late STARTED/FAILED; the value flag lets
+`session.handleStart` silent-return instead of falling through to
+`deliverFailed(initiator)` and emitting `ENHResFailed` on the wire.
+
+`arbitration.requestStart`'s same-session-replace paths set the
+struct flag but NOT the value flag. Result: every same-session
+replace produced `ENHResFailed(0x31)` on the wire in ~0.3 ms. ebusd
+read it as arbitration-lost-to-self, retried within ~50 ms, cancelled
+the just-queued entry, produced another spurious FAILED —
+positive-feedback loop. **No bid ever physically arbitrated on the
+bus.** This is the root cause of "ebusd never lands a frame through
+the proxy" that survived through 0.6.4 / 0.6.5 / 0.6.6.
+
+### F-15: gate AM8 deadline reconnect on transport type
+
+The AM8 deadline callback previously used `needReconnect := true`
+unconditionally. Every deadline expiry forced an upstream conn.Close
+— including on the non-blocking ENH RequestStart path where the
+adapter is merely slow, not hung. Under F-17's retry storm this
+asymmetry amplified into a feedback loop: adapter backlog → slow
+STARTED → AM8 trips → forced reconnect → next ReqStart dropped →
+another retry.
+
+Fix: mirror `cancelPendingStart`'s `wasBlocking := pending.blockingArb`
+pattern. Blocking transport keeps its reconnect (goroutine may still
+be hung in the transport call). Non-blocking transport relies on the
+absorb safety-net inside `armPendingStartAbsorbLocked` for the rare
+truly-hung case (its own StartDeadline-bounded reconnect timer).
+
+### Cancelled-flag contract surface (10 paths now consistent)
+
+PR #626 swept every code path that resolves a cancelled
+`startRequest`. The contract: any path that resolves via the
+**normal (non-boundary) resolution path** MUST set `cancelled: true`
+on the `startResult`. Paths that resolve via a
+**transport-level boundary error** (`failAllPending`, `reconnect`,
+`handleReset`, `Close`) MUST NOT set `cancelled: true` —
+`session.handleStart`'s branch order
+(`granted → cancelled → err(reset) → deliverFailed`) requires
+err-routing to drive `deliverReset(...)` on RESETTED/disconnect.
+
+Paths now honoring the contract:
+
+| Path | Branch |
+| --- | --- |
+| `arb.requestStart` | gateway-replace + external-replace |
+| `arb.cancelStart` | gateway + external |
+| `handleArbitrationResponse` | matched STARTED + cancelled in flight |
+| `handleArbitrationResponse` | AM56 STARTED-mismatch + cancelled in flight |
+| `handleArbitrationResponse` | FAILED + cancelled in flight |
+| AM8 deadline callback | deadline expired + cancelled in flight |
+| `RequestStart` err callback | transport err + cancelled in flight (gated on `!isResetOrDisconnectError`) |
+| `StartArbitration` err callback | transport err + cancelled in flight (gated on `!isResetOrDisconnectError`) |
+
+### Codex bot findings (P1 + P2, both addressed in-PR)
+
+- **P1**: F-15's fix only prevented the IMMEDIATE AM8 deadline
+  reconnect on the non-blocking path. `handleArbitrationResponse`'s
+  absorb-consume branch still had `needReconnect := started`, so a
+  LATE STARTED arriving after the deadline armed `pendingStartAbsorb`
+  would still tear down TCP via the absorb path — preserving the
+  retry-feedback-loop on a delayed path. Fixed: mirror F-15's
+  transport-type gate in the absorb branch by determining
+  `isBlockingPath` from the upstream transport's interface satisfaction.
+- **P2**: The M2 transport-err fix violated the contract documented
+  in `arbitration.failAllPending` by setting `cancelled: true` even
+  when the err matched `isResetOrDisconnectError`. session.go's
+  branch order would silent-return and the client would miss
+  RESETTED. Fixed: gate `deliverAsCancelled` on
+  `cancelledInFlight && !isResetOrDisconnectError(err)`.
+
+### New diagnostic log markers
+
+For operator log-grep during verification:
+
+    "absorbed (C4/R4)"              — matched STARTED for cancelled bid (existing in 0.6.6)
+    "absorbed (C4/R4 AM56-half)"    — STARTED-mismatch for cancelled bid (new)
+    "absorbed (C4/R4 FAILED-half)"  — FAILED for cancelled bid (new)
+    "wasBlocking=false"             — AM8 deadline on non-blocking path (no reconnect)
+    "cancelledInFlight=true"        — AM8 deadline on cancelled bid (suppressed)
+    "isBlockingPath=false"          — absorb-consume on non-blocking (no reconnect)
+
+### Predicted post-deploy outcome (batch-9 table)
+
+| Metric | 0.6.6 | After 0.6.7 |
+| --- | --- | --- |
+| `FAILED(0x31)` response within <1 ms of ReqStart | 100 % | < 5 % |
+| `grab result all` frames with src=0x31 | 0 | > 0 within 60 s |
+| ebusd `messages` counter (15 min uptime) | 17 plateau | > 50 |
+| ebusd "won in invalid state" rate | many/scan | < 1/5 min |
+
+### Gateway
+
+- Bump pin to `61fc36c`.
+
+### Review process
+
+PR #626 went through four rounds of adversarial review
+(angry-tester subagent), addressing 7 cycles of findings (F-1, F-2,
+F-3, F-4, F-5, F-NEW-1, F-NEW-2, F-NEW-4, F-NEW-5, F-NEW-6, M1, M2,
+L2, L3) plus two Codex bot findings (P1, P2). All findings closed
+in-PR with regression tests. 16 new tests across 5 files. Full
+adaptermux suite + `-race` green throughout the iteration.
+
+---
+
 ## 0.6.6 (2026-05-11)
 
 ### Revert C4/R4 upstream-reconnect on cancelled STARTED (v0.6.5 regression)
