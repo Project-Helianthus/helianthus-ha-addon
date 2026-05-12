@@ -1,5 +1,102 @@
 # Changelog
 
+## 0.6.8 (2026-05-12)
+
+### F-18: external ENH sessions must receive own echoes
+
+**Companion to 0.6.7.** v0.6.7 fixed the F-17 retry-feedback-loop and
+cancelled-flag contract; ebusd's `0x31` now wins arbitration through
+the proxy. But live capture after 0.6.7 deploy showed ebusd issued
+`ENHReqSend(0xFE)` once per scan attempt, then **never** issued
+`ENHReqSend(0x07)` (length byte) or anything after. 237
+`passive_reconstructor abandon reason=corrupted_request phase=1
+src=0x31` events per 30k log lines.
+
+### Root cause
+
+The embedded mux suppressed every byte the adapter echoed back to the
+owning external ENH session. Per john30/ebusd's
+[`enhanced_proto.md`](https://github.com/john30/ebusd/blob/main/docs/enhanced_proto.md):
+
+> "Note that this message [ENH_RES_RECEIVED] shall not be sent when
+>  the byte received was part of an arbitration request initiated
+>  by ebusd."
+
+So the protocol forbids echo for the **arbitration byte** (handled
+correctly by `deliverWinnerByteToOtherSessions` which skips the
+winner), but **requires echo for every subsequent SEND byte**.
+john30/ebusd's [`DirectProtocolHandler` at
+`protocol_direct.cpp:412-414`](https://github.com/john30/ebusd/blob/main/src/lib/ebus/protocol_direct.cpp)
+compares `recvSymbol != sentSymbol` after each send and collapses to
+`bs_skip` on mismatch or `SEND_TIMEOUT` (~10 ms). Without the echo,
+ebusd cannot advance past byte 1 — the entire post-arbitration phase
+abandons silently, and the next retry cycle repeats the failure.
+
+The standalone `helianthus-ebus-adapter-proxy` at `server.go:126`
+uses a single shared `ownerObserverSeen []byte` and works correctly
+for ENH external clients. The bug was introduced when the embedded
+mux generalized `echoTracker` per-session and applied it to ENH
+externals that should have been pass-through.
+
+### Code changes
+
+1. `mux.go` `deliverToSessions`: deleted the per-session `matchEcho`
+   block. Every session now receives every byte. The latent
+   `echoMatchFlushed` reorder hazard (Codex bonus finding) is
+   eliminated by the same deletion.
+2. `mux.go` `doSend`: deleted the external-session `recordSent` +
+   `rollbackSent` blocks (would have grown the `expectedEchoes` queue
+   to its 256-byte cap and triggered spurious `totalOverflowResets`
+   alarms every 256 external SENDs).
+3. `session.go`: removed per-session `echoTracker` field +
+   initializer. Cleaned up 5 helper-call sites and 2 helper
+   functions (`flushSessionEchoTrackers`, `resetAllSessionEchoes`).
+4. Retargeted `echo_tracker_test.go` → `echo_tracker_gateway_test.go`:
+   the 8 unit tests continue to validate `m.gatewayEcho` (gateway
+   path is unchanged and still uses the `echoTracker` struct).
+5. New `echo_passthrough_test.go`: 10 hermetic tests covering F-18
+   contract + adversarial-review risk mitigations + Codex round-1
+   integration test (`onReceived` → `phase.advance` →
+   `wirePhaseEventTransactionDone` → `releaseOwnership` →
+   `tryGrantAndStart` pipeline).
+
+### Documentation
+
+`helianthus-docs-ebus#307` documents the converse of the existing
+arbitration-byte non-echo rule in `protocols/enh.md`:
+post-arbitration bytes MUST be echoed via `ENH_RES_RECEIVED`. Merged
+alongside this gateway PR per the `AGENTS.md` doc-gate (Codex P1
+review finding on the gateway PR).
+
+### Expected verification post-deploy (batch-13 pass criteria)
+
+| Metric | 0.6.7 | After 0.6.8 |
+|---|---|---|
+| Distinct `SEND 0xXX forwarded` byte values | 1 (0xFE only) | ≥ 5 (full broadcast scan) |
+| `corrupted_request reason=phase=1 src=0x31` per 30k lines | ~237 | < 10 |
+| ebusctl `messages` after 5 min uptime | 17 | > 100 |
+| `grab result all` frames with src=0x31 | 0 | > 0 |
+| `totalOverflowResets` increments | 0 | 0 |
+| `ebusctl scan 08` returns real BAI00 identity | from passive cache | from real ebusd-initiated scan |
+
+### Adversarial-review trail
+
+- Four independent agents (Explore code-walk, angry-tester
+  adversarial attack, consultant with direct john30/ebusd source
+  citations, and Codex CLI) converged on F-18 with no surviving
+  alternative hypothesis. Full agent reports in
+  `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-12-batch13.md`.
+- Codex round-1 review on the gateway PR surfaced one LOW finding
+  (the phase-tracker unit test wasn't covering the full integration
+  path) and one P1 doc-gate finding. Both addressed in-PR /
+  companion docs-ebus#307.
+
+### Gateway
+
+- Bump pin to `7aa1d8b`.
+
+---
+
 ## 0.6.7 (2026-05-12)
 
 ### F-17: close the ebusd retry-feedback-loop (pcap-confirmed root cause)
