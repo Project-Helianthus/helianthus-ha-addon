@@ -1,5 +1,111 @@
 # Changelog
 
+## 0.6.10 (2026-05-12)
+
+### F-19c: eBUS spec bound checks at QQ/ZZ/NN/buffer
+
+**Companion to 0.6.9.** v0.6.9 partially fixed F-19 but live
+verification (batch-16) surfaced 14 abandons per 75-min log window
+where the LEN byte itself was corrupted to a spec-illegal value
+(0x84=132, 0xAF=175, 0xFF=255). F-19a's `5+LEN+1` completion target
+overshot the next bus SYN, so the buffer ate next-frame bytes before
+the SYN-trigger path classified the abandon.
+
+### Root cause + fix
+
+The passive reconstructor previously trusted any byte at logical
+offset 4 as the initiator-side LEN. The OSI-7 spec caps NN at 14
+(mfr-specific)
+/ 10 (standardised); the codebase uses 16 via the existing
+`maxPassiveDataLen` constant per industry folklore. Similarly, no
+defensive checks existed for QQ (initiator nibble rule), ZZ
+(non-SYN/non-ESC), or NN_s on the responder side.
+
+Code changes:
+
+1. Five new abandon reason constants:
+   - `invalid_qq` — QQ violates the nibble rule (defense-in-depth)
+   - `invalid_zz` — ZZ is SYN/ESC (per symbol.h:41 QQ/ZZ never escape-encoded)
+   - `invalid_nn_m` — initiator-side LEN > 16
+   - `invalid_nn_s` — responder-side LEN > 16
+   - `buffer_overflow` — post-unescape buffer > 50 bytes (tight cap,
+     replaces the looser 512-byte one)
+
+2. Helper functions in `passive_reconstructor_f19c_helpers.go`:
+   `isInitiatorAddr`, `isInitiatorNibble`, `isValidTargetAddr`.
+   Reference: john30/ebusd `symbol.cpp:209-229` (25-initiator nibble rule).
+
+3. Bound checks fire at byte-observation time:
+   - QQ check at the Idle-handler call site (between Layer 2 gate
+     and `startRequestLocked`)
+   - ZZ + NN_m + watchdog in `handleRequestSymbolLocked` post-append
+   - NN_s in `handleResponseSymbolLocked` before
+     `responseExpectedLen` is computed
+
+4. Layer-1 reset: all F-19c abandons use plain `resetStateLocked`
+   (no AfterSyn) — the offending byte is never a wire SYN; the next
+   bus SYN re-engages the Layer-1 gate via the Idle handler.
+
+5. Observability: F-19c reasons added to
+   `shouldLogReconstructorForensics` (Codex bot P2 round 1) and to
+   `classifyPassiveAbandon`'s non-error bucket (Codex bot P2 round 2)
+   — preserves the `req_raw=...` diagnostic evidence AND prevents
+   passive error metrics from spuriously incrementing on reclassified
+   noise abandons.
+
+### Adversarial review trail
+
+- 2-agent pre-PR convergence (Explore code-walk + angry-tester
+  adversarial attack) decomposed F-19c into the 5-reason fix surface
+- Codex CLI: VERDICT NEEDS-CHANGES → FIXED in-PR. Caught that the
+  per-byte switch's `case 1` (QQ check) was dead code because
+  `startRequestLocked` appends QQ before `handleRequestSymbolLocked`
+  runs. Relocated to Idle-handler call site.
+- Codex bot round 1 (P2): F-19c reasons missing from forensic-log
+  predicate. Added.
+- Codex bot round 2 (P2-A): F-19c reasons missing from non-error
+  metric bucket. Added.
+- Codex bot round 2 (P2-B): NN_s byte lost from forensic log because
+  abandon fired before responseRaw append. Reordered.
+- Zero unresolved threads at merge.
+
+### Tests added
+
+11 regression tests in `passive_reconstructor_f19c_test.go` covering:
+- All 3 live-evidence wire patterns (0x84, 0xAF, 0xFF)
+- NN=16 boundary acceptance
+- QQ defense-in-depth + nibble-rule unit test
+- ZZ SYN + ESC variants
+- NN_s response-side path with log-capture assertion
+- Buffer-overflow watchdog
+- F-19a regression guard (valid LEN + bad CRC still hits F-19a)
+- F-18 echo-passthrough separation
+- Forensic-log predicate inclusion (5 sub-cases)
+
+### Predicted pass criteria (batch-17)
+
+| Metric | v0.6.9 | v0.6.10 target |
+|---|---|---|
+| `corrupted_request phase=1 src=0x10` rate | 2.21/min | < 0.8/min |
+| `corrupted_request phase=1 src=0xF1` rate | 1.19/min | < 0.5/min |
+| `invalid_nn_m` / `invalid_nn_s` events | 0/min | ~0.2/min |
+| `buffer_overflow` events | 0/min | ~0/min |
+| F-18 metrics | green | unchanged |
+
+### Out of scope
+
+- F-19d forensic instrumentation (WasEscaped plumbing): future work
+- F-19b reconsideration (dead `arbitration_fragment` branch):
+  unchanged
+- Tightening the cap below 16 for strict spec fidelity:
+  operator-deferred
+
+### Gateway
+
+- Bump pin to `dd8750c`.
+
+---
+
 ## 0.6.9 (2026-05-12)
 
 ### F-19: passive reconstructor early-abandon + arbitration fragment classification
