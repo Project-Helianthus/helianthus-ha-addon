@@ -1,5 +1,102 @@
 # Changelog
 
+## 0.6.9 (2026-05-12)
+
+### F-19: passive reconstructor early-abandon + arbitration fragment classification
+
+**Companion to 0.6.8.** v0.6.8 (F-18) verified working: ebusd actively
+scans the bus and identifies all 6 slaves including stealth SOL00@0xEC.
+But batch-14 live measurement surfaced F-19: passive reconstructor
+abandons 146 src=0x10 + 115 src=0xF1 frames per 30k log lines as
+`corrupted_request phase=1`.
+
+### Root cause (decomposed into F-19a + F-19b)
+
+Operator hypothesis: "interleaved-initiator frame extraction in the
+passive reconstructor's state machine. Two SYN terminators (AA AA)
+caught inside what was treated as one frame." 2-agent convergence
+(Explore code-walk + angry-tester adversarial attack) confirmed the
+hypothesis is correct for src=0x10 **and** decomposed F-19 into TWO
+distinct sub-mechanisms that both produce the same
+`corrupted_request phase=1` string, masking them as one bug.
+
+**F-19a — LEN-completion CRC fail (src=0x10, ~146/30k)**
+
+`req_raw=10 26 B5 23 01 AA AA resp_raw=<empty>`. The eBUS CRC8(0x9B)
+of `10 26 B5 23 01 AA` is 0x7C, not 0xAA. The
+`isMidRequestFrame()` predicate routes both 0xAA bytes into the
+buffer as data+CRC (correct P7.1 behavior for escape-decoded 0xAA).
+At `len=6+LEN`, parseFrame fails. **Pre-F-19a: the parser kept
+accumulating**, consuming bytes from the NEXT frame into a buffer
+that would never validate — cascading the corruption.
+
+Fix: abandon early at LEN-completion when parseFrame fails, re-parsing
+to disambiguate Broadcast-defer (preserves pre-F-19a behavior) from
+true parseFrame failure (F-19a abandon path). Replicate the same
+classification helpers (`self_echo` / `scan_collision` /
+`corrupted_request`) the SYN-triggered path uses. Layer-1 invariant:
+plain `resetStateLocked` (NOT `AfterSyn`) — the tap does not carry a
+`WasEscaped` flag, so a logical 0xAA cannot be reliably distinguished
+from an escape-decoded data byte; the next wire SYN re-engages the
+gate.
+
+**F-19b — 4-byte truncated arbitration fragment (src=0xF1, ~115/30k)**
+
+`req_raw=F1 15 B5 24 resp_raw=<empty>`. A 4-byte buffer reaches SB
+but never observes LEN — structurally a truncated arbitration attempt
+(lost to a higher-priority initiator, or wire byte loss), not a
+corrupted frame. **Pre-F-19b: the `<= 3` threshold for
+`arbitration_fragment` mis-classified these as `corrupted_request`**,
+inflating the F-19 metric.
+
+Fix: widen `arbitration_fragment` threshold from `<= 3` to `< 5`.
+Pure metric-attribution change; abandon still fires.
+
+### Adversarial review trail
+
+- 2-agent convergence pre-PR: Explore code-walk + angry-tester
+  adversarial attack converged on the diagnosis. Angry-tester
+  decomposed F-19 into F-19a + F-19b and surfaced Finding C
+  (classification replication mandatory).
+- Codex CLI review on diff: **VERDICT: SHIP**, no real defects.
+- Codex bot review round 1 (P2): caught a subtle Layer-1 invariant
+  bug in my P2 fix. Addressed in commit.
+- Codex bot review round 2 (P2): caught that my round-1 fix was
+  ALSO wrong (escape-decoded 0xAA isn't a real wire SYN; without
+  WasEscaped plumbing, the safe-fail choice is always plain
+  `resetStateLocked`). Addressed in commit.
+
+### Predicted pass criteria (batch-15)
+
+| Metric | v0.6.8 | v0.6.9 target |
+|---|---|---|
+| `passive_reconstructor abandon ... reason=corrupted_request phase=1 src=0x10` per 30k | ~146 | < 20 |
+| `passive_reconstructor abandon ... reason=corrupted_request phase=1 src=0xF1` per 30k | ~115 | ≈ 0 |
+| `passive_reconstructor abandon ... reason=arbitration_fragment` per 30k | small | ≈ 115 + epsilon |
+| Other F-18 metrics (SEND-byte multiplicity, ebusctl `messages`, `signal: acquired`) | green | unchanged |
+
+### Tests added
+
+8 new tests in `passive_reconstructor_f19_test.go` (operator's exact
+wire example, classification replication for self_echo and
+scan_collision, F-19b reclassification, P7.1 regression guards, Layer-1
+gate behavior for both escape-decoded and non-SYN trigger cases). Plus
+1 updated test in `passive_reconstructor_p71_escape_test.go` to assert
+the new F-19b semantic.
+
+### Out of scope
+
+- **F-19c** (forensic instrumentation: per-byte timestamps,
+  abandon-trigger-site logging) — deferred
+- **F-20** (`phase=4 unexpected_symbol` abandons — response-side,
+  different fault class)
+
+### Gateway
+
+- Bump pin to `cb2d641`.
+
+---
+
 ## 0.6.8 (2026-05-12)
 
 ### F-18: external ENH sessions must receive own echoes
