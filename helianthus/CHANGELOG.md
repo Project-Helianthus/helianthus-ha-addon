@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.6.12 (2026-05-13)
+
+### F-19e: forensic instrumentation for unexpected_symbol diagnostics
+
+**Companion to 0.6.11.** v0.6.11 (F-19d) eliminated the AA-cascade
+fingerprint (7 → 0 mid-frame wire-SYN events per batch-18
+verification). Batch-18 then surfaced `unexpected_symbol` as the
+next-largest abandon category at ~50 events / 69 min (0.72/min).
+Pre-F-19e these abandons emitted reason/phase/src/dst/prim/sec and
+req_raw/resp_raw forensics — but NOT the single observed wire byte
+that triggered the abandon, so the rate was undiagnosable.
+
+### What changed
+
+**Instrumentation only.** No behavior changes, no new abandon reasons,
+no logic changes.
+
+- `abandonLocked` signature extended with `offendingSymbol byte,
+  offendingWasEscaped bool` (trailing params).
+- `PassiveClassifiedEvent` gains `OffendingSymbol` +
+  `OffendingWasEscaped` fields.
+- `logForensicsLocked` log line now ends with
+  `offending_symbol=0x%02X offending_was_escaped=%v` AFTER the
+  existing `observed_at=` token (preserving legacy regex
+  compatibility).
+- F-19d `wasEscaped` flag threaded into handleACKSymbolLocked,
+  handleFinalACKSymbolLocked, handleTerminalSymbolLocked (informational
+  at these phases since they don't observe ambiguous 0xAA bytes, but
+  forwarded for forensic uniformity).
+- All 27 `abandonLocked` call sites updated. Byte-driven sites
+  forward the current byte + `wasEscaped`; lifecycle abandons
+  (Shutdown, TransportReset, NoProgress watchdog, etc.) pass
+  `(0, false)` and are gated out of forensics by
+  `shouldLogReconstructorForensics`.
+
+### Post-deploy
+
+Run ≥60 min then bucket the `offending_symbol=0xXX
+offending_was_escaped=v` distribution from logs. The distribution
+guides v0.6.13:
+
+- Clustering near 0x00 / 0xFF → upstream phase-tracking drift in
+  the WaitACK / WaitFinalACK arms (reclassify as `near_ack_drift`?).
+- Clustering at escape-sequence fragments (0xA9 / 0xAA with
+  `was_escaped=true`) → upstream decoder fault, F-19f territory.
+- Uniform random distribution → wire corruption on the live bus,
+  no Helianthus-side fix.
+
+### Codex bot review
+
+One P2 finding addressed in PR #631 (commit d0a7104): the two
+`InvalidZZ` branches initially hardcoded `offendingWasEscaped=false`
+based on the sender-side spec invariant (`symbol.h:41` — QQ/ZZ are
+never escape-encoded). Fix: forward the handler's `wasEscaped`
+parameter so spec-violating escape-encoded bytes at ZZ position are
+preserved in the forensic data.
+
+### Sample log line
+
+```
+passive_reconstructor abandon reason=unexpected_symbol phase=2
+  src=0x10 dst=0x08 prim=0xB5 sec=0x16
+  req_raw=10 08 B5 16 01 55 BF resp_raw=<empty>
+  observed_at=2026-05-13T13:01:20Z
+  offending_symbol=0x42 offending_was_escaped=false
+```
+
+### Refs
+
+- helianthus-ebusgateway PR #631 (commit 259243c)
+- `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-13-batch18.md`
+
 ## 0.6.11 (2026-05-13)
 
 ### F-19d: WasEscaped plumbing for SYN-vs-data disambiguation
