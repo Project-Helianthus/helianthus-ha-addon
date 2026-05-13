@@ -1,5 +1,111 @@
 # Changelog
 
+## 0.6.13 (2026-05-13)
+
+### F-22: absorb-timeout no transport reconnect
+
+**Companion to 0.6.12.** Batch-19 live verification measured the
+`unexpected_symbol` rate that F-19e instrumented post-deploy: 0.87
+events/min, dominated by Pattern A (offending=0x00 @ WaitTerminal,
+26/68 min). Same window measured a parallel issue: 13 transport
+reconnects / 90 min from the active-mux absorb-safety-net, each
+producing cascade `RequestStart failed` events (263 total) on
+external sessions (ebusd) that had no transport-level reason to
+fail.
+
+F-22 (helianthus-ebusgateway PR #632) replaces the transport-
+reconnect side effect with a counter-reset-only behavior. When the
+absorb-safety-net fires (an expected stale STARTED/FAILED never
+arrived from the adapter), the mux now logs the event, bumps a new
+`absorbResetTotal` counter, clears `pendingStartAbsorb`, and lets
+the next semantic poll iteration issue a fresh `RequestStart` on
+the still-open ENH connection. Mirrors F-15's reasoning that
+internal state-machine timeouts don't justify a transport reset.
+
+**F-15 blocking-path AM8 reconnect** (legacy `StartArbitration`
+goroutine that may genuinely hang) is UNAFFECTED — that's a
+separate code path keyed on `blockingArb=true` and pinned by
+`TestF15_AM8_DeadlineReconnect`.
+
+### F-23: ENH transport unescapes eBUS byte pairs + WasEscaped propagation
+
+**Two-repo change merged together** (ebusgo PR #154 → 5215685 and
+ebusgateway PR #632 → 6f44780).
+
+Before F-23, the ENH transport claimed `BytesAreUnescaped()=true`
+but actually forwarded raw wire bytes — escape pairs leaked through
+as two-byte sequences. Live evidence (batch-19): two recurring
+fingerprints:
+
+- **Pattern A** (CRC=0xA9 wire-encoded `A9 00`): the trailing 0x00
+  was misclassified as a spurious byte at WaitTerminal phase →
+  `unexpected_symbol offending=0x00` (~26/68 min).
+- **Pattern B** (data byte 0xA9 at response index 13): wire-encoded
+  `A9 00` overran the response-length counter by 1 → response
+  overrun at WaitFinalACK with `offending=0x1B` (~4/68 min).
+
+CRC arithmetic verification (operator pre-flight): three production
+sequences matched expected CRCs under the escape-leak hypothesis
+(`0xA9`, `0xA9`, `0x1B`).
+
+#### What changed
+
+- **PR-1 (ebusgo)**: new `EbusEscapeDecoder` runs on every
+  StreamEventByte emission in `ENHTransport`. `BytesAreUnescaped()`
+  contract is now honest. New `StreamEvent.WasEscaped` field carries
+  the wire-side truth flag. New `EscapeFlaggedReader` interface
+  exposes `ReadByteWithEscape()`. 16 reset call sites cover every
+  Layer-1 boundary (reconnect, RESETTED, parse-error, arbitration
+  abort/timeout/expiry/completion, RequestStart write-failure).
+  8 rounds of Codex bot adversarial review converged on yes-ship.
+
+- **PR-2 (ebusgateway)**: WasEscaped propagation end-to-end through
+  both adapter-direct passive path and active mux path. New fields
+  `PassiveEvent.WasEscaped` and `activeEvent.wasEscaped`.
+  `onReceived(symbol, wasEscaped)` signature change. SYN-detection
+  at mux level now provenance-aware (`isWireSyn := symbol ==
+  SymbolSyn && !wasEscaped`) so escape-decoded payload 0xAA is not
+  misclassified as wire SYN — preventing false ownership release and
+  phase-tracker corruption. `activeTransport` implements
+  `EscapeFlaggedReader` so `protocol.Bus`'s post-F-23 waitForSyn /
+  sendRawWithEcho guards activate on the gateway's active bus.
+  4 rounds of Codex bot adversarial review.
+
+- **F-22 stale-absorb window**: secondary fix triggered by Codex
+  P1 on PR-2 — software-side equivalent of the pre-F-22 transport
+  reconnect boundary. When the absorb-safety-net fires, set
+  `staleAbsorbDeadline = now + StartDeadline`. `readLoop` drops any
+  STARTED/FAILED arriving inside this window. Prevents reused-
+  initiator-grants-wrong-owner and stale-FAILED-fails-new-request.
+
+### Gateway version
+
+- `cmd/gateway/main.go` `buildVersion` bumped `0.4.0` → `0.6.0`
+  (was stale; aligns with addon's 0.6.x cadence). Surfaces via
+  `GatewayVersion` (portal HTTP responses) and `GatewayBuild`
+  (runtime_state.json `<version>+<build_id>`).
+
+### Post-deploy
+
+Operator runs ≥60 min then dispatches the batch-20 bucketing agent.
+Expected metrics per operator's predicted outcome (batch-19 spec):
+
+- F-22 path: 5 transport reconnects/68min → 0; cascade RequestStart
+  failures 92/68min → <10/68min.
+- F-23 Pattern A (offending=0x00 @ WaitTerminal) 10/68min → 0.
+- F-23 Pattern B (offending=0x1B @ WaitFinalACK) 4/68min → 0.
+- Total unexpected_symbol: 20/68min → ~5–7/68min residual.
+- F-18, F-15, F-17, F-19a/c/d/e: unchanged.
+- ebusd messages counter: continues climbing.
+- ebusd reconnects: stays at 0.
+
+### Refs
+
+- helianthus-ebusgo PR #154 (commit 5215685): F-23 ENH unescape.
+- helianthus-ebusgateway PR #632 (commit 6f44780): F-22 + F-23
+  consumer cleanup + buildVersion 0.6.0.
+- `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-13-batch19.md`.
+
 ## 0.6.12 (2026-05-13)
 
 ### F-19e: forensic instrumentation for unexpected_symbol diagnostics
