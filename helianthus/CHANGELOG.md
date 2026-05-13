@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.6.11 (2026-05-13)
+
+### F-19d: WasEscaped plumbing for SYN-vs-data disambiguation
+
+**Companion to 0.6.10.** v0.6.10 (F-19c) shipped spec-bound checks at
+QQ/ZZ/NN/buffer; live verification (batch-17) confirmed the F-19c
+gate works but surfaced ~9 cascade-fingerprint events/hour where a
+wire SYN arrives mid-frame and the heuristic `isMidRequestFrame()` /
+`isMidResponseFrame()` misclassifies it as escape-decoded data 0xAA.
+The buffer absorbs the SYN, eats the next frame's
+SRC/DST/PB/SB/LEN, and F-19a abandons the bogus 16+ byte buffer as
+`corrupted_request` — masking a true bus-event SYN as a CRC fault.
+
+### Root cause + fix
+
+Wire encoding (john30/ebusd `symbol.h:79-82`): both `0xA9 0x01` and
+raw wire `0xAA` produce logical 0xAA after upstream decoding. The
+previous heuristic disambiguated by buffer length — wrong on a
+3-initiator Vaillant bus where wire SYNs mid-data happen during bus
+errors / collisions.
+
+Fix: carry a per-byte `WasEscaped bool` flag from the passive bus
+tap's escape decoder through `PassiveTapEvent` into the
+reconstructor. Replace the heuristic with the wire-side ground
+truth. Reuse the existing `unexpected_syn` reason for the
+SYN-mid-frame abandon path (distinct from `corrupted_request`).
+
+Path 1 (raw wire transports): the local escape decoder produces
+WasEscaped precisely.
+
+Path 2 (already-logical observer streams: adapter-direct via
+PassiveTransport, ENH/ENS proxy-like): the upstream layer has
+already decoded escapes. WasEscaped=false is the conservative
+default. The reconstructor treats !wasEscaped logical 0xAA as a
+wire SYN — the dominant interpretation for production Vaillant
+traffic per batch-17 evidence.
+
+### Adversarial review
+
+- Operator-locked spec (single-repo per AGENTS.md invariant).
+- Codex CLI: VERDICT SHIP, no real defects.
+
+### Observability
+
+The new `unexpected_syn` reason is distinct from `corrupted_request`
+in the abandon-reason metric. Operators can grep:
+
+```
+passive_reconstructor abandon reason=unexpected_syn phase=1 …
+                                                   ^^^^^^^^^^
+```
+
+to identify frames terminated by a bus event mid-stream (vs frames
+with a bad CRC at LEN-completion which still classify as
+`corrupted_request`).
+
+### Predicted pass criteria (batch-18)
+
+| Metric | v0.6.10 | v0.6.11 target |
+|---|---|---|
+| `corrupted_request phase=1 src=0x10` rate | 0.98/min | < 0.4/min |
+| `corrupted_request phase=1 src=0xF1` rate | 0.86/min | < 0.4/min |
+| `unexpected_syn` reason events | small | rising to ~0.15/min |
+| `invalid_nn_m` / `invalid_nn_s` / `buffer_overflow` | unchanged | unchanged |
+| F-18 metrics | green | unchanged |
+
+### Out of scope
+
+- F-19b cleanup (dead `arbitration_fragment` branch): tracked separately.
+- Spec-strict tightening (`> 16` → `> 14`): deferred per batch-16.
+
+### Gateway
+
+- Bump pin to `837cdfe`.
+
+---
+
 ## 0.6.10 (2026-05-12)
 
 ### F-19c: eBUS spec bound checks at QQ/ZZ/NN/buffer
