@@ -299,6 +299,7 @@ bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 bashio::log.info "Stable instance GUID: ${instance_guid}"
 bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
 bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (productids NETX3 0xF1/0xF6/0x04/0xFF + BASV2 0x15/0xEC)"
+bashio::log.info "v8 classifier mode: ${v8_classifier_mode} (HELIANTHUS_V8_CLASSIFIER_MODE — off=zero-overhead default, shadow=canary, enforce=production filtering)"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then
