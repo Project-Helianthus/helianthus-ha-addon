@@ -44,6 +44,10 @@ passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/
 passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)
 external_write_policy=$(bashio::config 'external_write_policy' 2>/dev/null || true)
 enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null || true)
+# Step C / v8 frame-atomic-visibility: read the classifier mode option
+# (off|shadow|enforce). Exported as HELIANTHUS_V8_CLASSIFIER_MODE env
+# below so cmd/gateway/main.go's startup wiring (PR #651) picks it up.
+v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 
 # Apply defaults when Supervisor has not yet merged new config schema keys.
 if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ]; then
@@ -61,6 +65,19 @@ fi
 if [ -z "${enable_static_seed_table}" ] || [ "${enable_static_seed_table}" = "null" ]; then
   enable_static_seed_table=false
 fi
+# v8 classifier mode default: "off" — production-safe; the rollout
+# (helianthus-ebusgateway v0.6.18) defaults to ModeOff with zero
+# behavior change. Operators opt in by setting this option to "shadow"
+# (canary) or "enforce" (production filtering). See deployment/
+# prometheus-alerts.md in helianthus-docs-ebus for the gate procedure.
+if [ -z "${v8_classifier_mode}" ] || [ "${v8_classifier_mode}" = "null" ]; then
+  v8_classifier_mode="off"
+fi
+# Export so the gateway binary's startup wiring (cmd/gateway/main.go
+# os.Getenv(v8classifier.EnvVarName)) reads it. ParseMode validates
+# the value; unrecognized values cause log.Fatalf at startup so
+# operators see typos immediately.
+export HELIANTHUS_V8_CLASSIFIER_MODE="${v8_classifier_mode}"
 if [ -z "${adapter_direct_enabled}" ] || [ "${adapter_direct_enabled}" = "null" ]; then
   adapter_direct_enabled=false
 fi
