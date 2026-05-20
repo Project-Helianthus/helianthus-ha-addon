@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.20 (2026-05-20)
+
+### Observability: v8 rollout + round-9 counters now on /metrics and /debug/vars
+
+Bumps the bundled `helianthus-gateway` to commit
+[`0690e66`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/0690e661690a64508d4efc2fecee25ec304de9b6)
+(PR #655), which publishes five new counters needed to evaluate the
+`v8_classifier_mode` shadow → enforce promotion gate:
+
+- `helianthus_round9_absorb_entered_total` — backs the
+  `HelianthusRound9FiredUnderProxy` alert.
+- `helianthus_payload_aa_auto_syn_absorbed_total` — forensic
+  byte-cost of round-9 firings.
+- `helianthus_payload_aa_auto_syn_recovered_total` — forensic
+  recovery rate of round-9 firings.
+- `helianthus_payload_aa_auto_syn_drain_exhausted_total` — forensic
+  unrecovered round-9 firings.
+- `helianthus_v8_shadow_would_have_dropped_total` — backs the
+  `HelianthusV8ShadowWouldHaveDroppedGrowing` alert; reports 0 when
+  `v8_classifier_mode` is `off` or `enforce`.
+
+All five names are exposed both on `/metrics` (Prometheus) and
+`/debug/vars` (expvar). Operator usage documented in
+helianthus-docs-ebus/deployment/prometheus-alerts.md.
+
+No config schema changes. No behavior changes — observability only.
+
 ## 0.6.13 (2026-05-13)
 
 ### F-22: absorb-timeout no transport reconnect
