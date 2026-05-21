@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.21 (2026-05-21)
+
+### Bug fix: F-22 absorb-reset debounce (defense-in-depth)
+
+Bumps the bundled `helianthus-gateway` to commit
+[`953f641`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/953f641f393db829ce0867c25053a4af194d803a)
+(PR #656), which replaces the per-arm `time.AfterFunc` +
+generation-invalidation pattern in `armPendingStartAbsorbLocked` with
+a single persistent `*time.Timer` + `Reset()` (debounce).
+
+The old pattern had a theoretical livelock failure mode when
+re-arming faster than `StartDeadline`: each new arm bumped the
+generation counter, invalidating its own AfterFunc's gen check at
+fire time. The reset never executed and `pendingStartAbsorb` could
+stay > 0 indefinitely, blocking new RequestStart grants.
+
+The 2026-05-20 12:25 UTC drop in active B524 polling on this addon
+was investigated and the root cause was bus-physical (signal-loss
+storms on the eBUS adapter), NOT this livelock. The semantic
+read-breaker correctly opened during the impaired period and the
+gateway recovered when the bus stabilized. This PR closes the
+class of bug structurally so it cannot manifest in any future
+condition.
+
+Also includes a stale-callback race fix flagged by Codex round-1
+review: a pre-empted AfterFunc callback acquiring stateMu after a
+fresh arm could clear a fresh post-arm counter. Fixed via
+`pendingAbsorbResetDueAt` — the callback no-ops when a fresh arm
+has bumped the deadline.
+
+No config schema changes. No observable behavior changes in
+healthy paths.
+
 ## 0.6.20 (2026-05-20)
 
 ### Observability: v8 rollout + round-9 counters now on /metrics and /debug/vars
