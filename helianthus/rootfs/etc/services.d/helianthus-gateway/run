@@ -65,13 +65,26 @@ fi
 if [ -z "${enable_static_seed_table}" ] || [ "${enable_static_seed_table}" = "null" ]; then
   enable_static_seed_table=false
 fi
-# v8 classifier mode default: "off" — production-safe; the rollout
-# (helianthus-ebusgateway v0.6.18) defaults to ModeOff with zero
-# behavior change. Operators opt in by setting this option to "shadow"
-# (canary) or "enforce" (production filtering). See deployment/
-# prometheus-alerts.md in helianthus-docs-ebus for the gate procedure.
+# v8 classifier mode default: "enforce" as of addon 0.6.23
+# (2026-05-21). Per the shadow→enforce promotion gate procedure in
+# helianthus-docs-ebus/deployment/prometheus-alerts.md, the live HA
+# host validation (_work_adaptermux_audit/v8-shadow-validation-*) at
+# iter-7 confirmed 100% true-positive AA-injection signal under
+# shadow mode (every flagged byte was canonical raw-wire 0xAA mid-
+# telegram, with WasEscaped=false — the textbook AA-injection
+# pattern). Zero false-positives observed across multiple sustained
+# observation windows. Enforcing the filter for new installs removes
+# ~3 bytes/s of validated wire garbage from cross-proxy byte streams.
+#
+# In-place upgrade contract: existing addon installations whose
+# /data/options.json explicitly sets `v8_classifier_mode` to "off"
+# or "shadow" are NOT affected by this default change — bashio reads
+# the option value, the fallback only fires when the key is unset.
+# Operators wanting to opt out of enforce mode for their own
+# installation must explicitly set v8_classifier_mode=off or shadow
+# in the addon options before/after upgrade.
 if [ -z "${v8_classifier_mode}" ] || [ "${v8_classifier_mode}" = "null" ]; then
-  v8_classifier_mode="off"
+  v8_classifier_mode="enforce"
 fi
 # Export so the gateway binary's startup wiring (cmd/gateway/main.go
 # os.Getenv(v8classifier.EnvVarName)) reads it. ParseMode validates
@@ -299,7 +312,7 @@ bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 bashio::log.info "Stable instance GUID: ${instance_guid}"
 bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
 bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (productids NETX3 0xF1/0xF6/0x04/0xFF + BASV2 0x15/0xEC)"
-bashio::log.info "v8 classifier mode: ${v8_classifier_mode} (HELIANTHUS_V8_CLASSIFIER_MODE — off=zero-overhead default, shadow=canary, enforce=production filtering)"
+bashio::log.info "v8 classifier mode: ${v8_classifier_mode} (HELIANTHUS_V8_CLASSIFIER_MODE — off=zero-overhead, shadow=canary, enforce=production filtering [addon default since 0.6.23])"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -x "/data/helianthus-gateway" ]; then

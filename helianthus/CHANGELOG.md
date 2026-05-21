@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.6.23 (2026-05-21)
+
+### Default `v8_classifier_mode` promoted from `off` → `enforce`
+
+Closes the shadow→enforce promotion gate documented in
+helianthus-docs-ebus/deployment/prometheus-alerts.md. New addon
+installations now default to enforce mode — the v8 classifier
+actively filters mid-telegram wire AUTO-SYN (0xAA) bytes out of
+cross-proxy session byte streams.
+
+**Why this is safe** (live-bus validation evidence):
+
+- `_work_adaptermux_audit/v8-shadow-validation-20260520T055414Z.md`
+  iter-7 captured the per-event distribution behind the aggregate
+  `helianthus_v8_shadow_would_have_dropped_total` counter using the
+  new `GET /debug/v8/admin-events?peek=true` endpoint added in
+  addon 0.6.22.
+- 100% of `aa_injection_drop` events showed the canonical pattern:
+  `byte=0xAA, was_escaped=false, fsm_state=PASSIVE_TRACKING`. Zero
+  false-positives across multiple sustained observation windows.
+- The signal is bounded — ~3 bytes/s under healthy bus, all
+  validated as real wire garbage that enforce mode now filters out
+  of cross-proxy streams.
+
+**In-place upgrade contract:**
+
+- Existing addon installations whose `/data/options.json` explicitly
+  sets `v8_classifier_mode` to `"off"` or `"shadow"` are NOT
+  affected — the addon options blob overrides the config-schema
+  default. Operators opting out of enforce must explicitly set the
+  option in addon options.
+- Operators who never set the option (using the implicit `off`
+  default) get the new `enforce` default automatically on next
+  addon restart.
+
+**Operator opt-out:** for any reason an operator wants the previous
+`off` or `shadow` behavior, set the option explicitly in the addon
+config UI or via `ha addons options local_helianthus --options
+'{"v8_classifier_mode": "off"}'`.
+
+**Observability post-promotion:**
+
+- `helianthus_v8_shadow_would_have_dropped_total` stays at 0 in
+  enforce mode (Classifier.ShadowWouldHaveDroppedTotal returns 0
+  outside ModeShadow).
+- The byte filtering is observable via the inverse counter:
+  `helianthus_v8_classifier_enforce_drops_applied_total` (via
+  `EnforceDropsAppliedTotal()` — already exported by the
+  gateway's classifier; not in PR scope here).
+- `helianthus_round9_absorb_entered_total` should stay at 0 under
+  enforce; any non-zero rate fires
+  `HelianthusRound9FiredUnderProxy` per
+  prometheus-alerts.md.
+
+No config schema changes (option already existed since 0.6.18).
+No gateway pin change (consumes commit `1c76be8` from addon
+0.6.22).
+
 ## 0.6.22 (2026-05-21)
 
 ### v8 admin events HTTP endpoint
