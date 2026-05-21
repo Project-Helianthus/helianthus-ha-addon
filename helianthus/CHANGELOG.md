@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.6.22 (2026-05-21)
+
+### v8 admin events HTTP endpoint
+
+Bumps the bundled `helianthus-gateway` to commit
+[`1c76be8`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/1c76be8f332f10f6f2cbc881529461c4006485ee)
+(PR #657), which adds:
+
+- New `AdminEventKindAaInjectionDrop` v8 classifier admin event,
+  emitted on every `DecisionDropAaInjection` in ModeShadow or
+  ModeEnforce. Captures wire byte, FSM state at decision time,
+  escape-decoded provenance, and observation timestamp.
+
+- New HTTP endpoint `GET /debug/v8/admin-events`:
+  - Default: drains the classifier's admin event ring buffer
+    (destructive — the long-running poller contract).
+  - `?peek=true`: returns the ring without clearing (for ad-hoc
+    operator inspection like `curl | jq` or dashboards).
+
+This unblocks the shadow→enforce promotion gate documented in
+helianthus-docs-ebus/deployment/prometheus-alerts.md by making the
+`helianthus_v8_shadow_would_have_dropped_total` counter
+introspectable byte-by-byte. Operators can now decide whether
+v8's would-have-drops are true-positive (real wire AA-injection,
+safe to enforce) or false-positive (legitimate traffic v8
+over-eagerly flags, do not promote).
+
+Wire format (stable for operator tooling):
+
+```
+{
+  "events": [
+    {
+      "at": "2026-05-21T...",
+      "kind": "aa_injection_drop",
+      "fsm_state": "<TELEGRAM_STATE>",
+      "byte": "0xAA",
+      "was_escaped": false
+    }
+  ],
+  "dropped": 0
+}
+```
+
+No config schema changes. No observable behavior changes in healthy
+paths (the v8 classifier was already running with shadow-mode
+counters; this exposes per-event detail behind those counters).
+
 ## 0.6.21 (2026-05-21)
 
 ### Bug fix: F-22 absorb-reset debounce (defense-in-depth)
