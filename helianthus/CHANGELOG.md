@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.6.24 (2026-05-21)
+
+### F-NEW-27: close StreamEventWireSyn classifier bypass
+
+Bumps the bundled `helianthus-gateway` to commit
+[`267d243`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/267d243fe3305d04a2d41376215ae462edac9eed)
+(PR #658). Closes a v8 classifier bypass surfaced during the
+2026-05-21 enforce-mode stress test:
+
+- PR #155 (2026-05-15) introduced `StreamEventWireSyn` — a
+  pre-grant SYN passive marker emitted by enh_transport during
+  awaiting-start. The mux routes WireSyn to
+  `onReceived(event.Byte, wasEscaped=false)`, treating it as a
+  raw wire 0xAA byte downstream.
+- The v8 classifier's `Observe()` switch (designed before
+  WireSyn existed) had no case for `StreamEventWireSyn` — the
+  event fell through, returning `drop=false` regardless of mode.
+- Consequence: wire SYNs delivered via this newer event kind
+  bypassed the v8 filter entirely and reached the gateway's
+  echo position unfiltered, producing sustained
+  `helianthus_round9_absorb_entered_total` ticks (~2.6/min) in
+  enforce mode — the I8 invariant violation the
+  `HelianthusRound9FiredUnderProxy` alert exists to catch.
+
+Diagnosed via Codex + fresh Opus adversarial reviews of the
+2026-05-21 enforce stress test baseline snapshot (test was
+held at T+1m for this exact reason). Independently verified by
+reading `classifier.go:298-321` vs `mux.go:1946-1952`.
+
+Fix: classifier's `Observe()` switch gets a `StreamEventWireSyn`
+case that delegates to the same FSM-driven classification path
+as `StreamEventByte`, with `WasEscaped` forced to `false` (kind
+implies raw wire; trusting `event.WasEscaped` would re-open the
+bypass). In enforce mode, mid-frame WireSyn now returns
+`drop=true` and is filtered out of session dispatch.
+
+Post-deploy expectation: `helianthus_round9_absorb_entered_total`
+PLATEAUS in enforce mode. Any continued ticking indicates a
+different bypass path that needs separate investigation.
+
+No config schema changes. No new env vars.
+
 ## 0.6.23 (2026-05-21)
 
 ### Default `v8_classifier_mode` promoted from `off` → `enforce`
