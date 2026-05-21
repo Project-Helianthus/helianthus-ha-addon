@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.6.25 (2026-05-21)
+
+### F-NEW-28: layer-correct round-9 fix — close midWriteSyn payload-0xAA leak
+
+Bumps the bundled `helianthus-gateway` to commit
+[`6c982e1`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/6c982e1)
+(PR #659), which pins to `helianthus-ebusgo` commit
+[`f9919f4`](https://github.com/Project-Helianthus/helianthus-ebusgo/commit/f9919f4)
+(PR #168).
+
+**What v0.6.24 missed.** PR #658 closed a real classifier-layer bypass
+for `StreamEventWireSyn` (pre-grant SYN markers). But the stress-test
+re-baseline showed `helianthus_round9_absorb_entered_total` still
+ticking at ~4/min — same rate as pre-fix. Dual adversarial review
+(Codex + fresh Opus angry-tester) converged on the actual leak path:
+
+  mux.go:2487 `midWriteSyn` predicate distinguished by BYTE VALUE
+  alone. Pending `(SymbolSyn, structural-terminator)` and
+  `(SymbolSyn, payload-0xAA)` expected echoes were indistinguishable.
+  The predicate treated BOTH as "not mid-write" and let wire AUTO-SYNs
+  through to bus.go's echo position during payload-0xAA writes.
+
+**This fix (cross-repo).**
+
+1. `helianthus-ebusgo` PR #168: new optional transport interface
+   `StructuralWriteSignaler`. `sendRawWithEcho` calls
+   `SignalNextWriteIsStructuralSyn()` before each structural-SymbolSyn
+   write (i.e. `expectRawSyn=true`). Backward-compatible: transports
+   that don't implement the interface degrade gracefully (round-9
+   absorb at `bus.go:1204` remains the canonical filter for them,
+   per v8 §1.8).
+
+2. `helianthus-ebusgateway` PR #659: `activeTransport` implements
+   `StructuralWriteSignaler`. Threads the flag through
+   `sendRequest.structural` into `echoTracker.expectedStructural`
+   (new length-locked slice). `midWriteSyn` predicate updated to
+   `hasPendingEcho && !(nextByte == SymbolSyn && nextStructural)` —
+   correctly distinguishes structural-terminator (allow through) from
+   payload-0xAA (suppress wire SYN interference).
+
+**Production expectation.** After deploy: `round9_absorb_entered_total`
+rate → 0 within 5 min on the HA host (where v8 is in enforce mode).
+The 99.78% suppression rate v0.6.24 already provided was the v8
+classifier doing its job; this fix closes the remaining 0.22% leak
+at the SYN-delivery gate.
+
+**Risk note.** Batch-25 reverted an earlier wider suppression that
+caused 65% throughput drop. This fix is **strictly narrower**: it
+only suppresses when the pending echo is specifically
+`(SymbolSyn, structural=false)`, which corresponds to a payload-0xAA
+in-flight write. Legitimate terminator SYNs (the common case after
+non-0xAA-ending frames) are unaffected. To be empirically verified
+in the post-deploy stress test.
+
+Full diagnosis: `_work_adaptermux_audit/v8-enforce-stress/findings.md`.
+
 ## 0.6.24 (2026-05-21)
 
 ### F-NEW-27: close StreamEventWireSyn classifier bypass
