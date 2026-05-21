@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.24",
+  "version": "0.6.25",
   "slug": "helianthus",
   "description": "Helianthus eBUS gateway (GraphQL + MCP)",
   "arch": [
