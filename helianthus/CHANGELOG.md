@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.26 (2026-05-22)
+
+### Operator-observability: rate-limit F-22 absorb-skip log spam (1Hz)
+
+Bumps the bundled `helianthus-gateway` to commit
+[`18bbcd7`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/18bbcd7)
+(PR #660), which adds a 1Hz rate-limit + `(N suppressed)` suffix to the
+`tryGrantAndStart skipped — waiting to absorb N stale arbitration
+response(s)` log line in `adaptermux/mux.go`.
+
+**Why.** Under sustained stress (v0.6.25 post-deploy verification on
+2026-05-22), the skip-log emitted up to 144 lines/second (763
+lines/minute under steady contention). The skip itself is a microsecond
+no-op; only the log was noisy. Operators reading logs lost signal-to-
+noise on real errors.
+
+**Fix shape.** Add a 1-second rate-limit at the log site; while
+suppressed, increment an internal counter. The next eligible emission
+appends `(M suppressed)` so operators see the true rate without spam.
+Per Codex review on PR #660, the counter is reset at every path that
+brings `pendingStartAbsorb` to zero (4 unconditional zero-resets + 4
+decrement sites) so a stale `(N suppressed)` suffix cannot leak across
+absorb episodes.
+
+**No functional change** — the early-return + state check are
+unchanged, only the `logger.Printf` rate changes. Round-9 fix from
+v0.6.25 is unaffected.
+
 ## 0.6.25 (2026-05-21)
 
 ### F-NEW-28: layer-correct round-9 fix — close midWriteSyn payload-0xAA leak
