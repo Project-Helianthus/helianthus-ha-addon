@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.30 (2026-05-23)
+
+### M4 startup L1 semantic barrier release
+
+Bumps the bundled `helianthus-gateway` to commit
+[`1bd068b`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/1bd068b08534be86d06e630b3d46674e23ab0bef)
+(PR #664).
+
+This release fixes the real v0.6.29 startup O1 failure where startup scan
+enrichment and source-selection/root-confirmation work could consume the first
+60 seconds before semantic L1 priming completed. The gateway now releases
+source-selection semantic bootstrap as soon as active source evidence exists,
+retries the DHW singleton before the startup zone sweep, and defers delayed
+physical serial identity enrichment beyond the L1 semantic window.
+
+Local HA override proof before this add-on pin:
+`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T150427Z_m4.txt`
+showed all 12 MCP planes non-null at 48s and
+`semantic_b524_root_discovery address=0x15` at 2026-05-23 18:04:36 local.
+
+Docs evidence:
+[helianthus-docs-ebus PR #315](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/315).
+
 ## 0.6.29 (2026-05-23)
 
 ### M4 startup L1 direct probes and empty-plane preservation
