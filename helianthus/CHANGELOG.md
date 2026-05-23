@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.29 (2026-05-23)
+
+### M4 startup L1 direct probes and empty-plane preservation
+
+Bumps the bundled `helianthus-gateway` to commit
+[`e068f46`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/e068f46c713ea7dee86c87ffd6fb7397577c4a04)
+(PR #663).
+
+This release fixes the real v0.6.28 startup O1 failure where `solar` and
+`cylinders` remained null in the first 60 seconds. The gateway now publishes
+non-null empty FM5 semantic planes for known non-interpreted/GPIO-only FM5
+states, preserves empty `cylinders` and `radio_devices` through GraphQL and
+MCP adapters, and uses direct live B524 startup probes so the first-minute L1
+readiness path is not blocked by semantic read-breaker cooldown. Interpreted
+FM5 mode still requires non-empty cylinder evidence before startup L1 can pass.
+
+Local HA override proof before this add-on pin:
+`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T132412Z_m4.txt`
+showed all 12 MCP planes non-null at 48s; logs showed
+`semantic_b524_root_discovery address=0x15` about 12s after gateway startup.
+
+Docs evidence:
+[helianthus-docs-ebus PR #313](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/313)
+and
+[helianthus-docs-ebus PR #314](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/314).
+
 ## 0.6.28 (2026-05-23)
 
 ### M4 startup L1 semantic priming
