@@ -27,7 +27,7 @@ which combines two merged gateway PRs:
   `ErrBusCollision`, and `sendWithRetries` never retries. The fix
   adds an event-driven revalidation predicate: when
   `matchCount==0 && writeCount==1` and the first wire byte is a
-  foreign master-class address mismatching `preMatchHead`, forward
+  foreign initiator-class address mismatching `preMatchHead`, forward
   the byte to `activeCh` (do NOT drop) so `bus.go`'s classifier
   engages naturally. P11 round-2 strict drop preserved for all
   other mismatches.
