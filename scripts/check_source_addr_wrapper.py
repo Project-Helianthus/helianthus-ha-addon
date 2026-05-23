@@ -20,7 +20,10 @@ TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
-MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE = "cc0beb1323306bf0b9da7cb3a16ef11a69ec5c98"
+GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE = {
+    "cc0beb1323306bf0b9da7cb3a16ef11a69ec5c98",
+    "2fbef5ab5e8510b0442c6b61416804ee1b51a0d5",
+}
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -262,11 +265,11 @@ def _check_static_run_script() -> None:
         "exact source validation flags must be used by the wrapper",
     )
     _assert(
-        f"EBUSGATEWAY_VERSION={MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE}" in dockerfile_text,
+        any(f"EBUSGATEWAY_VERSION={version}" in dockerfile_text for version in GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE),
         "pinned gateway must advertise startup-source-override for exact source_addr",
     )
     _assert(
-        f"EBUSGATEWAY_VERSION={MIN_GATEWAY_WITH_STARTUP_SOURCE_OVERRIDE}" in build_workflow_text,
+        any(f"EBUSGATEWAY_VERSION={version}" in build_workflow_text for version in GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE),
         "published image workflow must use a gateway that advertises startup-source-override",
     )
     _assert(

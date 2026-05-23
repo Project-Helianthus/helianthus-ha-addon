@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.28 (2026-05-23)
+
+### M4 startup L1 semantic priming
+
+Bumps the bundled `helianthus-gateway` to commit
+[`2fbef5a`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/2fbef5ab5e8510b0442c6b61416804ee1b51a0d5)
+(PR #662).
+
+This release keeps the Direction C first-byte arbitration revalidation from
+v0.6.27 and adds the startup semantic priming needed for the M4 live gate:
+after B524 root discovery, the gateway primes zones, circuits, DHW,
+radio devices, FM5 mode, solar, cylinders, system, and boiler status with
+bounded startup probes so all 12 MCP semantic planes can populate inside
+the 60-second O1 window.
+
+Local HA override proof before this add-on pin:
+`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T121840Z_m4.txt`
+showed `discoverB524Root` at 12s and all 12 MCP planes non-null at 47s.
+
 ## 0.6.27 (2026-05-23)
 
 ### F-NEW-29: first-byte arbitration revalidation + F-22 log spam rate-limit
