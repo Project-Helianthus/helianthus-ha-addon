@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.31 (2026-05-23)
+
+### Adaptermux idle-boundary fairness
+
+Bumps the bundled `helianthus-gateway` to commit
+[`b1e228f`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/b1e228fe172b50fa8ae9c4a2683d33c0280b5f7f)
+(PR #665).
+
+This release fixes a temporal starvation bug observed during the M4 retry:
+continuous external B524 scanner traffic from source `0x31` could repeatedly
+take the adaptermux bus-idle fast path while gateway source `0x7f` was also
+pending. The gateway now keeps the external-only idle fast path, but routes
+both-pending idle-boundary decisions through the F-25 fairness rotation.
+
+Docs evidence:
+[helianthus-docs-ebus PR #316](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/316).
+
 ## 0.6.30 (2026-05-23)
 
 ### M4 startup L1 semantic barrier release
