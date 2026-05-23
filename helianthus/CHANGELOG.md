@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.6.27 (2026-05-23)
+
+### F-NEW-29: first-byte arbitration revalidation + F-22 log spam rate-limit
+
+Bumps the bundled `helianthus-gateway` to commit
+[`cc0beb1`](https://github.com/Project-Helianthus/helianthus-ebusgateway/commit/cc0beb1)
+which combines two merged gateway PRs:
+
+- **PR #660 (F-22 log spam debounce)** — rate-limits the
+  `tryGrantAndStart skipped — waiting to absorb N stale arbitration
+  response(s)` log line to 1 Hz with `(N suppressed)` suffix. Under
+  sustained stress this line was emitting at 144 lines/sec (763
+  lines/min steady-state); operators lost log signal-to-noise.
+
+- **PR #661 (F-NEW-29 first-byte arbitration revalidation)** — closes
+  the semantic-layer recovery-time regression. Pre-fix on production
+  HA host: `discoverB524Root` took ~9 hours to resolve `0x15` after
+  addon restart under bus contention. Root cause: the P11 round-2
+  strict mid-write byte filter at `mux.go:2315-2317` (commit
+  `a35b51d1`, 2026-05-10) drops every wire byte that doesn't match
+  `preMatchHead`. When the gateway "wins" arbitration but the wire
+  actually has a competing Vaillant internal initiator (e.g. 0xF1)
+  mid-frame, all foreign bytes are suppressed, `bus.go`'s
+  first-byte-after-arbitration classifier never raises
+  `ErrBusCollision`, and `sendWithRetries` never retries. The fix
+  adds an event-driven revalidation predicate: when
+  `matchCount==0 && writeCount==1` and the first wire byte is a
+  foreign master-class address mismatching `preMatchHead`, forward
+  the byte to `activeCh` (do NOT drop) so `bus.go`'s classifier
+  engages naturally. P11 round-2 strict drop preserved for all
+  other mismatches.
+
+**Plan**: [helianthus-execution-plans#30](https://github.com/Project-Helianthus/helianthus-execution-plans/issues/30)
+(adversarial converged: Codex R1 + fresh Opus R1+R2).
+
+**Verification gates** (run M4 verification on .4 after deploy):
+- Within 60s of addon startup, all 12 MCP semantic planes return non-null.
+- `discoverB524Root: address=0x15` log line within 60s.
+- `round9_absorb_entered_total` slope = 0/min over 90-min stress.
+- `post_grant_ack` rate ≤ 10/hour absolute.
+- collision rate ≤ 1.5× pre-fix baseline (~825/hr).
+
+(v0.6.26 was prepared but never released; superseded by v0.6.27 which
+combines both fixes.)
+
 ## 0.6.25 (2026-05-21)
 
 ### F-NEW-28: layer-correct round-9 fix — close midWriteSyn payload-0xAA leak
