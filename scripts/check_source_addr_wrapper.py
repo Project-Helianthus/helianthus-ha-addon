@@ -113,6 +113,7 @@ def _write_gateway_stub(path: Path, mode: str) -> None:
             "  -startup-source-override string\n"
             "  -startup-source-override-validate\n"
             "  -instance-guid-source string\n"
+            "  -semantic-cache-path string\n"
         ),
     }
     script = f"""#!/usr/bin/env python3
@@ -283,6 +284,10 @@ def _check_static_run_script() -> None:
         "rollback only" in text,
         "run script must log that leftover source state is rollback-only",
     )
+    _assert(
+        'semantic_cache_args=(-semantic-cache-path "/data/semantic_cache.json")' in text,
+        "run script must persist semantic startup cache under /data/",
+    )
 
 
 def _check_docs() -> None:
@@ -316,10 +321,15 @@ def _check_runtime_cases() -> None:
     )
     _assert("-source-addr" in argv, "auto case must pass -source-addr to old gateway")
     _assert(argv[argv.index("-source-addr") + 1] == "auto", "auto case must not pass legacy state file contents")
+    _assert("-semantic-cache-path" not in argv, "old gateway must not receive unsupported semantic cache flag")
     _assert("0xf7" not in argv, "auto case leaked persisted raw source as active source config")
     _assert(state_exists and state_content == "0xf7\n", "auto case must not rewrite existing source state file")
     _assert("gateway default source-selection policy" in logs, "auto case must log gateway default policy")
     _assert("rollback only" in logs, "auto case must log rollback-only state-file handling")
+    _assert(
+        "does not support -semantic-cache-path" in logs,
+        "old gateway path must log the semantic-cache compatibility warning",
+    )
     _assert(
         "-instance-guid-source" not in argv,
         "old gateway lacking AD27 flag must not receive -instance-guid-source (compatibility gate)",
@@ -347,6 +357,10 @@ def _check_runtime_cases() -> None:
     _assert(
         argv[argv.index("-instance-guid-source") + 1] == "runtime_state",
         "new gateway must receive the resolver-emitted identity-source tag",
+    )
+    _assert(
+        "-semantic-cache-path" in argv and argv[argv.index("-semantic-cache-path") + 1] == "/data/semantic_cache.json",
+        "new gateway must persist semantic startup cache under /data/",
     )
 
     argv, logs, state_exists, state_content, _ = _run_wrapper_case(
