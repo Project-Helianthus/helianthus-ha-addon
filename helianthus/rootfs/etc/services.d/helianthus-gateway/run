@@ -341,6 +341,14 @@ elif bashio::var.true "${enable_static_seed_table}"; then
   bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
 fi
 
+semantic_cache_args=()
+if gateway_supports_flag "semantic-cache-path"; then
+  semantic_cache_args=(-semantic-cache-path "/data/semantic_cache.json")
+  bashio::log.info "Semantic cache path: /data/semantic_cache.json"
+else
+  bashio::log.warning "Pinned gateway binary does not support -semantic-cache-path; semantic startup cache will remain container-local. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that supports semantic cache persistence."
+fi
+
 # Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
 # version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
 # but a `/data/helianthus-gateway` override predating M2 would reject it during
@@ -407,4 +415,5 @@ exec "${gateway_bin}" \
   -passive-config-direct-apply="${passive_config_direct_apply}" \
   -external-write-policy "${external_write_policy}" \
   ${static_seed_args[@]+"${static_seed_args[@]}"} \
+  ${semantic_cache_args[@]+"${semantic_cache_args[@]}"} \
   ${proxy_listen_args[@]+"${proxy_listen_args[@]}"}

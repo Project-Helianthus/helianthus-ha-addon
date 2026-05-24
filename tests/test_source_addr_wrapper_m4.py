@@ -27,11 +27,13 @@ def test_source_addr_auto_does_not_reuse_raw_state_file() -> None:
 
     assert "-source-addr" in argv
     assert argv[argv.index("-source-addr") + 1] == "auto"
+    assert "-semantic-cache-path" not in argv
     assert "0xf7" not in argv
     assert state_exists
     assert state_content == "0xf7\n"
     assert "gateway default source-selection policy" in logs
     assert "rollback only" in logs
+    assert "does not support -semantic-cache-path" in logs
 
 
 def test_source_addr_exact_maps_to_explicit_validate_only() -> None:
@@ -45,6 +47,8 @@ def test_source_addr_exact_maps_to_explicit_validate_only() -> None:
     assert "-startup-source-override" in argv
     assert argv[argv.index("-startup-source-override") + 1] == "0x71"
     assert "-startup-source-override-validate=true" in argv
+    assert "-semantic-cache-path" in argv
+    assert argv[argv.index("-semantic-cache-path") + 1] == "/data/semantic_cache.json"
     assert "-source-addr" not in argv
     assert state_exists
     assert "rollback only" in logs
