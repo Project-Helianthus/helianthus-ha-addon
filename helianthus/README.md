@@ -64,7 +64,7 @@ Leave `proxy_profile=disabled` unless intentionally connecting the gateway to an
 ## Debugging tools
 
 This add-on image includes `helianthus_vrc_explorer` at `/usr/bin/helianthus_vrc_explorer`.
-CI builds resolve `helianthus-vrc-explorer` `main` to a concrete commit SHA at build time and install that pinned revision in the image.
+CI builds install the pinned `helianthus-vrc-explorer` release tag declared in the image build args.
 
 It runs with:
 

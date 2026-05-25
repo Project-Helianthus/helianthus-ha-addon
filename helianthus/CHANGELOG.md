@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.32 (2026-05-25)
+
+### Adaptermux release alignment
+
+Bumps the bundled `helianthus-gateway` to `v0.6.32` and pins
+`helianthus-vrc-explorer` to `v0.5.1`.
+
+This release packages the new adaptermux line after the proxy fairness work:
+embedded proxy arbitration now preserves FIFO fairness across gateway and
+external-client contenders, keeps the first-byte arbitration revalidation path
+active, and includes the latest T/PX matrix cleanup used to mark the UDP proxy
+visibility cases passing.
+
 ## 0.6.31 (2026-05-23)
 
 ### Adaptermux idle-boundary fairness

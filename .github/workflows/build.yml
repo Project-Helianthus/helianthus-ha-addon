@@ -50,21 +50,19 @@ jobs:
           set -euo pipefail
           echo "version=$(jq -r '.version' helianthus/config.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve helianthus-vrc-explorer ref
-        id: vrc
+      - name: Verify helianthus-vrc-explorer release tag
         run: |
           set -euo pipefail
           remote_url="https://github.com/Project-Helianthus/helianthus-vrc-explorer.git"
           if [ -n "${{ secrets.REPO_READ_TOKEN }}" ]; then
             remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/Project-Helianthus/helianthus-vrc-explorer.git"
           fi
-          ref="$(git ls-remote "${remote_url}" refs/heads/main | awk '{print $1}')"
+          ref="$(git ls-remote "${remote_url}" refs/tags/v0.5.1 | awk '{print $1}')"
           if [ -z "${ref}" ]; then
-            echo "failed to resolve helianthus-vrc-explorer main ref" >&2
+            echo "failed to resolve helianthus-vrc-explorer v0.5.1 tag" >&2
             exit 1
           fi
-          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
-          echo "Resolved helianthus-vrc-explorer main to ${ref}"
+          echo "Resolved helianthus-vrc-explorer v0.5.1 to ${ref}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -93,8 +91,8 @@ jobs:
             org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
             org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
           build-args: |
-            EBUSGATEWAY_VERSION=b1e228fe172b50fa8ae9c4a2683d33c0280b5f7f
-            VRCEXPLORER_VERSION=${{ steps.vrc.outputs.ref }}
+            EBUSGATEWAY_VERSION=v0.6.32
+            VRCEXPLORER_VERSION=v0.5.1
             BUILD_FROM=${{ matrix.base }}
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}

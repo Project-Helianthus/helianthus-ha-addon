@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.6
 
 ARG BUILD_FROM=ghcr.io/home-assistant/base:3.20
-ARG VRCEXPLORER_VERSION=main
+ARG VRCEXPLORER_VERSION=v0.5.1
 
 FROM --platform=$TARGETPLATFORM golang:1.26-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG EBUSGATEWAY_VERSION=b1e228fe172b50fa8ae9c4a2683d33c0280b5f7f
+ARG EBUSGATEWAY_VERSION=v0.6.32
 
 RUN apk add --no-cache git ca-certificates
 
@@ -21,7 +21,7 @@ RUN --mount=type=secret,id=github_token \
  && GOBIN=/out go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
-ARG VRCEXPLORER_VERSION=main
+ARG VRCEXPLORER_VERSION=v0.5.1
 
 RUN apk add --no-cache git ca-certificates
 
@@ -34,7 +34,7 @@ RUN --mount=type=secret,id=github_token \
     "git+https://github.com/Project-Helianthus/helianthus-vrc-explorer@${VRCEXPLORER_VERSION}"
 
 FROM ${BUILD_FROM}
-ARG VRCEXPLORER_VERSION=main
+ARG VRCEXPLORER_VERSION=v0.5.1
 
 RUN apk add --no-cache python3 ca-certificates
 
