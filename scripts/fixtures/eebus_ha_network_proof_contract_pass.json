@@ -1,0 +1,119 @@
+{
+  "contract": "helianthus.eebus.ha-network-proof.v0",
+  "issue": "MSP-03C",
+  "repo": "Project-Helianthus/helianthus-ha-addon",
+  "generated_at": "2026-07-08T00:00:00Z",
+  "mode": "contract_fixture",
+  "result": "PASS",
+  "required_cases": [
+    "EEBUS-G05",
+    "EEBUS-G06",
+    "EEBUS-G07",
+    "EEBUS-G08",
+    "EEBUS-G09"
+  ],
+  "topology": {
+    "ha_addon": {
+      "host_network": true,
+      "host_dbus": false,
+      "same_container_or_bridge_only": false,
+      "network_namespace_ref": "ha-supervisor-host-network-redacted"
+    },
+    "lan_peer": {
+      "scope": "external_lan",
+      "same_host": false,
+      "address_ref": "lan-peer-redacted"
+    }
+  },
+  "security": {
+    "wildcard_bind_allowed": false,
+    "unexpected_bridge_exposure": false,
+    "ingress_reachable": false,
+    "web_ui_reachable": false,
+    "vendor_restricted": false,
+    "admin_surface": "none"
+  },
+  "credential_store": {
+    "path": "/data/eebus-proof",
+    "class": "disposable_proof",
+    "production_trust_written": false,
+    "persistent_across_restart": true,
+    "symlink_checked": true,
+    "path_traversal_checked": true,
+    "permissions": {
+      "directory": "0700",
+      "files": "0600"
+    },
+    "pre_restart_identity_ref": "sha256:0123456789ab",
+    "post_restart_identity_ref": "sha256:0123456789ab"
+  },
+  "cases": [
+    {
+      "id": "EEBUS-G05",
+      "status": "PASS",
+      "evidence": [
+        "listener bound to configured interface/subnet",
+        "LAN TCP reachability recorded from external peer",
+        "bridge and wildcard exposure checks recorded"
+      ],
+      "listener": {
+        "bind_policy": "configured_interface",
+        "wildcard_bind": false,
+        "unexpected_bridge_exposure": false,
+        "lan_tcp_reachable": true
+      }
+    },
+    {
+      "id": "EEBUS-G06",
+      "status": "PASS",
+      "evidence": [
+        "external LAN peer browsed and resolved the advertised service"
+      ],
+      "mdns": {
+        "lan_peer_resolved": true,
+        "peer_scope": "external_lan",
+        "service_type": "_ship._tcp"
+      }
+    },
+    {
+      "id": "EEBUS-G07",
+      "status": "PASS",
+      "evidence": [
+        "mDNS disabled case produced absent service",
+        "host DBus/Avahi unavailable state recorded as explicit degraded state",
+        "closed pairing window produced absent or TTL-expired advertisement"
+      ],
+      "negative": {
+        "mdns_disabled_absent": true,
+        "avahi_dbus_state": "degraded_explicit",
+        "pairing_closed_absent_or_ttl_expired": true
+      }
+    },
+    {
+      "id": "EEBUS-G08",
+      "status": "PASS",
+      "evidence": [
+        "manual endpoint reached peer with discovery disabled"
+      ],
+      "manual_endpoint": {
+        "configured": true,
+        "requires_discovery": false,
+        "reaches_peer_when_discovery_unavailable": true,
+        "source": "operator_config"
+      }
+    },
+    {
+      "id": "EEBUS-G09",
+      "status": "PASS",
+      "evidence": [
+        "disposable proof credential identity survived proof restart"
+      ],
+      "credential_persistence": {
+        "store_path": "/data/eebus-proof",
+        "disposable_only": true,
+        "survives_restart": true,
+        "production_trust_written": false
+      }
+    }
+  ]
+}

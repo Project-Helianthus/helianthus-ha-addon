@@ -12,6 +12,8 @@ The add-on also owns the stable Helianthus instance GUID used by the Home Assist
 - Add-on runtime startup wiring (`helianthus/rootfs/run.sh`).
 - Add-on image build definition (`helianthus/Dockerfile`).
 - Add-on smoke docs/check tooling (`SMOKE_RUNBOOK.md`, `scripts/smoke_addon_checklist.py`).
+- eeBUS HA runtime network proof tooling for raw-first feasibility
+  (`EEBUS_HA_NETWORK_PROOF.md`, `scripts/check_eebus_ha_network_proof.py`).
 
 ### What does not belong in this repository
 
@@ -129,10 +131,12 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | add-on config syntax | `python3 -m json.tool helianthus/config.json >/dev/null` |
 | terminology gate (CI parity) | `if git grep -nIwiE 'm[a]ster|s[l]ave'; then echo "Found legacy terminology."; exit 1; fi` |
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
+| eeBUS HA network proof contract | `python3 scripts/check_eebus_ha_network_proof.py --self-test && python3 scripts/check_eebus_ha_network_proof.py --artifact scripts/fixtures/eebus_ha_network_proof_contract_pass.json --mode contract` |
 | source address wrapper migration | `python3 scripts/check_source_addr_wrapper.py` |
 | gateway parity gate readiness | `python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | rollout guardrails | `python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
 | post-parity enablement tasks | `python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
+| Markdown private IPv4 gate | `python3 scripts/check_markdown_private_ips.py --self-test && python3 scripts/check_markdown_private_ips.py` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
 
 ## Link Map
@@ -141,6 +145,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 
 - Add-on folder docs: `helianthus/README.md`
 - Operator smoke runbook: `SMOKE_RUNBOOK.md`
+- eeBUS HA runtime networking proof: `EEBUS_HA_NETWORK_PROOF.md`
 - Architecture baseline: `ARCHITECTURE.md`
 - Repository conventions: `CONVENTIONS.md`
 - Agent workflow notes: `AGENT.md`

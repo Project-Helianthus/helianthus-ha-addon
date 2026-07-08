@@ -59,6 +59,13 @@ jobs:
           set -euo pipefail
           python3 scripts/validate_smoke_docs.py
 
+      - name: Validate eeBUS HA network proof contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_eebus_ha_network_proof.py --self-test
+          python3 scripts/check_eebus_ha_network_proof.py --artifact scripts/fixtures/eebus_ha_network_proof_contract_pass.json --mode contract
+
       - name: Validate source address wrapper migration
         shell: bash
         run: |
@@ -115,3 +122,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
+
+      - name: Enforce Markdown private IPv4 placeholders
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_markdown_private_ips.py --self-test
+          python3 scripts/check_markdown_private_ips.py

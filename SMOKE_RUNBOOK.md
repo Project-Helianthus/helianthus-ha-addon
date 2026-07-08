@@ -8,7 +8,7 @@ the embedded gateway adaptermux proxy topology, and produces deterministic pass/
 - Home Assistant Supervisor runs the `helianthus` add-on.
 - Add-on transport points to local/lan ebusd TCP endpoint.
 - Example topology values used below:
-  - ebusd endpoint: `192.168.100.2:9999`
+  - ebusd endpoint: `203.0.113.10:9999`
   - proxy profile: `disabled`
   - proxy endpoint: `(none)`
   - add-on HTTP API: `127.0.0.1:8080`
@@ -22,9 +22,9 @@ the embedded gateway adaptermux proxy topology, and produces deterministic pass/
 - Use `proxy_listen_addr` to expose the gateway-embedded adaptermux proxy for other clients.
 - Keep `proxy_profile=disabled`; the add-on no longer starts or wires a standalone adapter-proxy.
 - Example values:
-  - adapter direct address: `enh://192.168.100.2:9999`
+  - adapter direct address: `enh://203.0.113.10:9999`
   - proxy listener: `0.0.0.0:19001`
-  - effective transport marker: `Transport: adapter-direct (tcp adapter-direct://192.168.100.2:9999)`
+  - effective transport marker: `Transport: adapter-direct (tcp adapter-direct://203.0.113.10:9999)`
 
 ## Install and start add-on
 
@@ -45,7 +45,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 {
   "transport": "ebusd-tcp",
   "network": "tcp",
-  "address": "192.168.100.2:9999",
+  "address": "203.0.113.10:9999",
   "proxy_profile": "disabled",
   "proxy_endpoint": "",
   "host": "127.0.0.1",
@@ -84,7 +84,7 @@ python3 scripts/smoke_addon_checklist.py \
   --log-file /tmp/helianthus-addon.log \
   --transport ebusd-tcp \
   --network tcp \
-  --address 192.168.100.2:9999 \
+  --address 203.0.113.10:9999 \
   --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
@@ -100,7 +100,7 @@ python3 scripts/smoke_addon_checklist.py \
   --log-file /tmp/helianthus-addon.log \
   --transport ebusd-tcp \
   --network tcp \
-  --address 192.168.100.2:9999 \
+  --address 203.0.113.10:9999 \
   --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
@@ -117,7 +117,7 @@ python3 scripts/smoke_addon_checklist.py \
   --log-file /tmp/helianthus-addon.log \
   --transport adapter-direct \
   --network tcp \
-  --address adapter-direct://192.168.100.2:9999 \
+  --address adapter-direct://203.0.113.10:9999 \
   --proxy-profile disabled \
   --host 127.0.0.1 \
   --http-port 8080 \
