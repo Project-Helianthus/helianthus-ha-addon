@@ -37,6 +37,10 @@ fi
 echo "==> validate smoke runbook structure"
 python3 scripts/validate_smoke_docs.py
 
+echo "==> eeBUS HA network proof contract"
+python3 scripts/check_eebus_ha_network_proof.py --self-test
+python3 scripts/check_eebus_ha_network_proof.py --artifact scripts/fixtures/eebus_ha_network_proof_contract_pass.json --mode contract
+
 echo "==> source address wrapper migration"
 python3 scripts/check_source_addr_wrapper.py
 
@@ -50,48 +54,5 @@ echo "==> post-parity enablement tasks"
 python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
 
 echo "==> private IPv4 address gate (docs must use placeholders)"
-python3 - <<'PY'
-from __future__ import annotations
-
-import ipaddress
-import pathlib
-import re
-import subprocess
-import sys
-
-md_files = subprocess.check_output(["git", "ls-files", "*.md"], text=True).splitlines()
-ipv4_re = re.compile(r"\\b(?:(?:\\d{1,3})\\.){3}(?:\\d{1,3})\\b")
-
-PRIVATE_NETS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local
-]
-
-def is_private_ipv4(ip: str) -> bool:
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-    if addr.version != 4:
-        return False
-    return any(addr in net for net in PRIVATE_NETS)
-
-failed = False
-
-for file_path in md_files:
-    text = pathlib.Path(file_path).read_text(encoding="utf-8")
-    for match in ipv4_re.finditer(text):
-        ip = match.group(0)
-        if not is_private_ipv4(ip):
-            continue
-        line = text.count("\n", 0, match.start()) + 1
-        print(f"{file_path}:{line}: private IPv4 address found (use a placeholder)", file=sys.stderr)
-        failed = True
-
-if failed:
-    sys.exit(1)
-print("Private IPv4 gate passed.")
-PY
+python3 scripts/check_markdown_private_ips.py --self-test
+python3 scripts/check_markdown_private_ips.py
