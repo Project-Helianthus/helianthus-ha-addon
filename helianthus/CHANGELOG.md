@@ -13,7 +13,9 @@ as an option.
 During an in-place upgrade, if Supervisor still serves the cached pre-eeBUS
 schema, the wrapper recovers only missing eeBUS fields from the protected
 `/data/options.json`. Recovered values pass through the same fail-closed
-interface, subnet, port, allowlist, and gateway-capability validation.
+JSON-type, interface, subnet, port, allowlist, and gateway-capability
+validation. Boolean gateway flags use Go-compatible `-flag=value` encoding so
+later runtime and identity arguments remain in the parsed option set.
 
 The bundled gateway is pinned to
 `ccfdb9d449799eb0f1023ffe8099107e795c7e7a`, which contains the stable local

@@ -118,6 +118,17 @@ import sys
 if "--help" in sys.argv:
     sys.stderr.write({help_text!r})
     raise SystemExit(0)
+if "-eebus-discovery-enabled" in sys.argv:
+    sys.stderr.write("bare Go boolean flag would stop parsing at its following value\\n")
+    raise SystemExit(64)
+for argument in sys.argv[1:]:
+    if argument.startswith("-eebus-discovery-enabled="):
+        if argument.split("=", 1)[1] not in ("true", "false"):
+            sys.stderr.write("invalid Go boolean value\\n")
+            raise SystemExit(64)
+if any(argument.startswith("-eebus-") for argument in sys.argv[1:]) and "-instance-guid" not in sys.argv:
+    sys.stderr.write("later gateway flags were not consumed\\n")
+    raise SystemExit(64)
 Path(os.environ["TEST_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
 '''
     _write_executable(path, script)
@@ -149,7 +160,10 @@ def _run_case(
     listen_port: str = "4712",
     discovery: bool = True,
     allowlist: str = VALID_REMOTE_SKI,
+    raw_enabled: str | None = None,
     stale_schema: bool = False,
+    stale_fields: tuple[str, ...] = (),
+    options_override: dict[str, object] | None = None,
     omit_flag: str | None = None,
     expect_success: bool = True,
 ) -> tuple[list[str], str, str]:
@@ -164,19 +178,17 @@ def _run_case(
         machine_id_file = tmp / "machine-id"
         options_file = tmp / "options.json"
         interface_id_file.write_text("02:00:00:00:00:01\n", encoding="utf-8")
-        options_file.write_text(
-            json.dumps(
-                {
-                    "eebus_enabled": enabled,
-                    "eebus_listen_port": int(listen_port) if listen_port.isdigit() else listen_port,
-                    "eebus_interface": interface,
-                    "eebus_subnets": subnets,
-                    "eebus_discovery_enabled": discovery,
-                    "eebus_remote_ski_allowlist": allowlist,
-                }
-            ),
-            encoding="utf-8",
-        )
+        options = {
+            "eebus_enabled": enabled,
+            "eebus_listen_port": int(listen_port) if listen_port.isdigit() else listen_port,
+            "eebus_interface": interface,
+            "eebus_subnets": subnets,
+            "eebus_discovery_enabled": discovery,
+            "eebus_remote_ski_allowlist": allowlist,
+        }
+        if options_override:
+            options.update(options_override)
+        options_file.write_text(json.dumps(options), encoding="utf-8")
         runtime_state_file.write_text(
             json.dumps(
                 {
@@ -204,7 +216,7 @@ def _run_case(
                 "HELIANTHUS_RUNTIME_STATE_PATH": str(runtime_state_file),
                 "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp / "instance_guid"),
                 "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp / "migration-required"),
-                "TEST_EEBUS_ENABLED": "true" if enabled else "false",
+                "TEST_EEBUS_ENABLED": raw_enabled if raw_enabled is not None else ("true" if enabled else "false"),
                 "TEST_EEBUS_LISTEN_PORT": listen_port,
                 "TEST_EEBUS_INTERFACE": interface,
                 "TEST_EEBUS_SUBNETS": subnets,
@@ -215,16 +227,20 @@ def _run_case(
                 "TEST_EEBUS_OPTIONS_PATH": str(options_file),
             }
         )
+        stale_env_keys = {
+            "eebus_enabled": "TEST_EEBUS_ENABLED",
+            "eebus_listen_port": "TEST_EEBUS_LISTEN_PORT",
+            "eebus_interface": "TEST_EEBUS_INTERFACE",
+            "eebus_subnets": "TEST_EEBUS_SUBNETS",
+            "eebus_discovery_enabled": "TEST_EEBUS_DISCOVERY_ENABLED",
+            "eebus_remote_ski_allowlist": "TEST_EEBUS_REMOTE_SKI_ALLOWLIST",
+        }
         if stale_schema:
-            for key in (
-                "TEST_EEBUS_ENABLED",
-                "TEST_EEBUS_LISTEN_PORT",
-                "TEST_EEBUS_INTERFACE",
-                "TEST_EEBUS_SUBNETS",
-                "TEST_EEBUS_DISCOVERY_ENABLED",
-                "TEST_EEBUS_REMOTE_SKI_ALLOWLIST",
-            ):
+            for key in stale_env_keys.values():
                 env[key] = ""
+        else:
+            for key in stale_fields:
+                env[stale_env_keys[key]] = ""
         result = subprocess.run(
             ["bash", str(wrapper)],
             cwd=REPO_ROOT,
@@ -268,7 +284,7 @@ def _check_runtime_cases() -> None:
     _assert(_value(argv, "-eebus-interfaces") == "end0", "interface changed")
     _assert(_value(argv, "-eebus-subnets") == "192.0.2.0/24", "subnets changed")
     _assert(_value(argv, "-eebus-state-root") == "/data/eebus", "state root is not fixed")
-    _assert(_value(argv, "-eebus-discovery-enabled") == "true", "discovery changed")
+    _assert("-eebus-discovery-enabled=true" in argv, "discovery changed")
     _assert(_value(argv, "-eebus-remote-ski-allowlist") == VALID_REMOTE_SKI, "allowlist changed")
     _assert(_value(argv, "-eebus-pairing-window-mode") == "closed", "pairing policy widened")
     expected_machine_id = "8a4c331847003c7bacbfa7f2f383cc8b49126d9b1ad071cf97a4ab39c6d12f7c"
@@ -292,6 +308,39 @@ def _check_runtime_cases() -> None:
     _assert(stale_argv == [], "invalid cached-schema interface reached gateway")
     _assert("eeBUS" in stale_stderr, "invalid cached-schema fallback did not fail visibly")
 
+    mixed_argv, _, _ = _run_case(
+        enabled=True,
+        stale_fields=("eebus_remote_ski_allowlist",),
+    )
+    _assert(mixed_argv == argv, "mixed live/fallback eeBUS fields changed arguments")
+
+    null_argv, _, _ = _run_case(
+        enabled=True,
+        stale_schema=True,
+        options_override={"eebus_remote_ski_allowlist": None},
+    )
+    _assert(
+        _value(null_argv, "-eebus-remote-ski-allowlist") == "",
+        "JSON null did not retain absent/default semantics",
+    )
+
+    false_argv, _, _ = _run_case(enabled=True, discovery=False)
+    _assert("-eebus-discovery-enabled=false" in false_argv, "Go boolean serialization lost false")
+    _assert("-instance-guid" in false_argv, "flag parsing did not reach later gateway arguments")
+
+    for description, kwargs in (
+        ("normal boolean", {"raw_enabled": "on"}),
+        ("fallback boolean type", {"stale_schema": True, "options_override": {"eebus_enabled": "on"}}),
+        ("normal literal null allowlist", {"allowlist": "null"}),
+        (
+            "fallback literal null allowlist",
+            {"stale_schema": True, "options_override": {"eebus_remote_ski_allowlist": "null"}},
+        ),
+    ):
+        invalid_argv, invalid_stderr, _ = _run_case(enabled=True, expect_success=False, **kwargs)
+        _assert(invalid_argv == [], f"invalid {description} reached gateway")
+        _assert("eeBUS" in invalid_stderr, f"invalid {description} error is not operator-visible")
+
     for field, overrides in (
         ("interface", {"interface": ""}),
         ("subnets", {"subnets": ""}),
@@ -303,9 +352,10 @@ def _check_runtime_cases() -> None:
         _assert(argv == [], f"invalid {field} reached gateway")
         _assert("eeBUS" in stderr, f"invalid {field} error is not operator-visible")
 
-    argv, stderr, _ = _run_case(enabled=True, omit_flag="eebus-state-root", expect_success=False)
-    _assert(argv == [], "unsupported gateway reached execution")
-    _assert("does not support the complete eeBUS runtime flag set" in stderr, "unsupported gateway error is unclear")
+    for missing_flag in REQUIRED_FLAGS:
+        argv, stderr, _ = _run_case(enabled=True, omit_flag=missing_flag, expect_success=False)
+        _assert(argv == [], f"gateway missing {missing_flag} reached execution")
+        _assert("does not support the complete eeBUS runtime flag set" in stderr, "unsupported gateway error is unclear")
 
 
 def main() -> int:
