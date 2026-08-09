@@ -254,8 +254,9 @@ def _run_case(
         else:
             _assert(result.returncode != 0, "wrapper unexpectedly succeeded")
         argv = argv_file.read_text(encoding="utf-8").splitlines() if argv_file.exists() else []
+        log = log_file.read_text(encoding="utf-8") if log_file.exists() else ""
         machine_id = machine_id_file.read_text(encoding="utf-8").strip() if machine_id_file.exists() else ""
-        return argv, result.stderr, machine_id
+        return argv, result.stderr + log, machine_id
 
 
 def _value(argv: list[str], flag: str) -> str:
@@ -274,9 +275,13 @@ def _check_schema() -> None:
 
 
 def _check_runtime_cases() -> None:
-    argv, _, machine_id = _run_case(enabled=False)
+    argv, diagnostics, machine_id = _run_case(enabled=False)
     _assert(not any(arg.startswith("-eebus-") for arg in argv), "disabled config emitted eeBUS flags")
     _assert(machine_id == "", "disabled config changed the container machine id")
+    _assert(
+        "recovered missing fields" not in diagnostics,
+        "valid empty options emitted a stale-schema fallback warning",
+    )
 
     argv, _, machine_id = _run_case(enabled=True)
     _assert("-eebus-enabled=true" in argv, "enabled config omitted activation flag")
@@ -340,6 +345,20 @@ def _check_runtime_cases() -> None:
         invalid_argv, invalid_stderr, _ = _run_case(enabled=True, expect_success=False, **kwargs)
         _assert(invalid_argv == [], f"invalid {description} reached gateway")
         _assert("eeBUS" in invalid_stderr, f"invalid {description} error is not operator-visible")
+
+    for field, value in (
+        ("eebus_interface", "end\x000"),
+        ("eebus_subnets", "192.0.2.0/2\x004"),
+        ("eebus_remote_ski_allowlist", ("a" * 20) + "\x00" + ("a" * 20)),
+    ):
+        nul_argv, nul_stderr, _ = _run_case(
+            enabled=True,
+            stale_schema=True,
+            options_override={field: value},
+            expect_success=False,
+        )
+        _assert(nul_argv == [], f"NUL-bearing fallback {field} reached gateway")
+        _assert("invalid protected JSON value or type" in nul_stderr, f"NUL-bearing {field} error is unclear")
 
     for field, overrides in (
         ("interface", {"interface": ""}),

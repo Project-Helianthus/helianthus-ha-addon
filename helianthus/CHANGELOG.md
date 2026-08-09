@@ -15,7 +15,8 @@ schema, the wrapper recovers only missing eeBUS fields from the protected
 `/data/options.json`. Recovered values pass through the same fail-closed
 JSON-type, interface, subnet, port, allowlist, and gateway-capability
 validation. Boolean gateway flags use Go-compatible `-flag=value` encoding so
-later runtime and identity arguments remain in the parsed option set.
+later runtime and identity arguments remain in the parsed option set. String
+fallbacks reject NUL before shell capture, preventing value transformation.
 
 The bundled gateway is pinned to
 `ccfdb9d449799eb0f1023ffe8099107e795c7e7a`, which contains the stable local

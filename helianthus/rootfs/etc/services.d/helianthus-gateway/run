@@ -84,7 +84,8 @@ eebus_option_fallback() {
         "${eebus_options_path}" >/dev/null 2>&1 || return 2
       ;;
     string)
-      jq -e --arg key "${key}" '.[ $key ] | type == "string"' \
+      jq -e --arg key "${key}" \
+        '.[ $key ] | type == "string" and (index("\u0000") == null)' \
         "${eebus_options_path}" >/dev/null 2>&1 || return 2
       ;;
     *)
@@ -114,13 +115,15 @@ eebus_resolve_missing_option() {
   if resolved=$(eebus_option_fallback "${key}" "${expected_type}"); then
     printf -v "${variable}" '%s' "${resolved}"
     printf -v "${variable}_from_options_file" '%s' true
-    eebus_fallback_used=true
+    if [ "${resolved}" != "${current}" ] || [ "${current}" = "null" ]; then
+      eebus_fallback_used=true
+    fi
     return 0
   else
     rc=$?
   fi
   if [ "${rc}" -eq 2 ]; then
-    bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON type"
+    bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
   fi
 }
 
