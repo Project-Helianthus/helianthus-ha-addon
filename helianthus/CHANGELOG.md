@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.33 (2026-08-09)
+
+### Persistent eeBUS runtime wiring
+
+Adds disabled-by-default Home Assistant options for the raw eeBUS sibling
+runtime and maps them to the gateway only after complete flag-capability and
+network-scope validation. The protected state root remains fixed at
+`/data/eebus`, pairing starts closed, and no key or trust-store path is exposed
+as an option.
+
+The bundled gateway is pinned to
+`ccfdb9d449799eb0f1023ffe8099107e795c7e7a`, which contains the stable local
+`eebus.v1.*` raw operator MCP and public-redacted boundary. This release adds no
+GraphQL field, Home Assistant entity, semantic promotion, v2 namespace, or
+compatibility alias.
+
 ## 0.6.32 (2026-05-25)
 
 ### Adaptermux release alignment

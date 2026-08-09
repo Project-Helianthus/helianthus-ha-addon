@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -127,6 +128,12 @@ def _write_test_wrapper(path: Path) -> None:
     text = text.replace("/usr/local/bin/helianthus-gateway", "${TEST_GATEWAY_BIN}")
     text = text.replace("/data/helianthus-gateway", "${TEST_GATEWAY_OVERRIDE_BIN}")
     text = text.replace("/data/source_addr.last", "${TEST_LEGACY_SOURCE_ADDR_STATE_FILE}")
+    text = text.replace(
+        'interface_id_path="/sys/class/net/${eebus_interface}/address"',
+        'interface_id_path="${TEST_EEBUS_INTERFACE_ID_PATH}"',
+    )
+    text = text.replace("> /etc/machine-id", '> "${TEST_EEBUS_MACHINE_ID_PATH}"')
+    text = text.replace("chmod 0444 /etc/machine-id", 'chmod 0444 "${TEST_EEBUS_MACHINE_ID_PATH}"')
     path.write_text(BASHIO_PRELUDE + "\n" + text, encoding="utf-8")
 
 
@@ -140,7 +147,7 @@ def _run_case(
     allowlist: str = VALID_REMOTE_SKI,
     omit_flag: str | None = None,
     expect_success: bool = True,
-) -> tuple[list[str], str]:
+) -> tuple[list[str], str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         wrapper = tmp / "run-under-test.sh"
@@ -148,6 +155,9 @@ def _run_case(
         argv_file = tmp / "argv.txt"
         log_file = tmp / "wrapper.log"
         runtime_state_file = tmp / "runtime_state.json"
+        interface_id_file = tmp / "interface-address"
+        machine_id_file = tmp / "machine-id"
+        interface_id_file.write_text("02:00:00:00:00:01\n", encoding="utf-8")
         runtime_state_file.write_text(
             json.dumps(
                 {
@@ -181,6 +191,8 @@ def _run_case(
                 "TEST_EEBUS_SUBNETS": subnets,
                 "TEST_EEBUS_DISCOVERY_ENABLED": "true" if discovery else "false",
                 "TEST_EEBUS_REMOTE_SKI_ALLOWLIST": allowlist,
+                "TEST_EEBUS_INTERFACE_ID_PATH": str(interface_id_file),
+                "TEST_EEBUS_MACHINE_ID_PATH": str(machine_id_file),
             }
         )
         result = subprocess.run(
@@ -196,7 +208,8 @@ def _run_case(
         else:
             _assert(result.returncode != 0, "wrapper unexpectedly succeeded")
         argv = argv_file.read_text(encoding="utf-8").splitlines() if argv_file.exists() else []
-        return argv, result.stderr
+        machine_id = machine_id_file.read_text(encoding="utf-8").strip() if machine_id_file.exists() else ""
+        return argv, result.stderr, machine_id
 
 
 def _value(argv: list[str], flag: str) -> str:
@@ -215,10 +228,11 @@ def _check_schema() -> None:
 
 
 def _check_runtime_cases() -> None:
-    argv, _ = _run_case(enabled=False)
+    argv, _, machine_id = _run_case(enabled=False)
     _assert(not any(arg.startswith("-eebus-") for arg in argv), "disabled config emitted eeBUS flags")
+    _assert(machine_id == "", "disabled config changed the container machine id")
 
-    argv, _ = _run_case(enabled=True)
+    argv, _, machine_id = _run_case(enabled=True)
     _assert("-eebus-enabled=true" in argv, "enabled config omitted activation flag")
     _assert(_value(argv, "-eebus-listen-port") == "4712", "listen port changed")
     _assert(_value(argv, "-eebus-interfaces") == "end0", "interface changed")
@@ -227,18 +241,21 @@ def _check_runtime_cases() -> None:
     _assert(_value(argv, "-eebus-discovery-enabled") == "true", "discovery changed")
     _assert(_value(argv, "-eebus-remote-ski-allowlist") == VALID_REMOTE_SKI, "allowlist changed")
     _assert(_value(argv, "-eebus-pairing-window-mode") == "closed", "pairing policy widened")
+    expected_machine_id = hashlib.sha256(b"helianthus-eebusreg-ha-v1:020000000001").hexdigest()
+    _assert(machine_id == expected_machine_id, "host-bound machine id derivation changed")
 
     for field, overrides in (
         ("interface", {"interface": ""}),
         ("subnets", {"subnets": ""}),
         ("listen port", {"listen_port": "0"}),
         ("multiple interfaces", {"interface": "end0,end1"}),
+        ("unsafe interface", {"interface": "../end0"}),
     ):
-        argv, stderr = _run_case(enabled=True, expect_success=False, **overrides)
+        argv, stderr, _ = _run_case(enabled=True, expect_success=False, **overrides)
         _assert(argv == [], f"invalid {field} reached gateway")
         _assert("eeBUS" in stderr, f"invalid {field} error is not operator-visible")
 
-    argv, stderr = _run_case(enabled=True, omit_flag="eebus-state-root", expect_success=False)
+    argv, stderr, _ = _run_case(enabled=True, omit_flag="eebus-state-root", expect_success=False)
     _assert(argv == [], "unsupported gateway reached execution")
     _assert("does not support the complete eeBUS runtime flag set" in stderr, "unsupported gateway error is unclear")
 
