@@ -335,6 +335,9 @@ def _check_runtime_cases() -> None:
 
     for description, kwargs in (
         ("normal boolean", {"raw_enabled": "on"}),
+        ("normal enablement JSON type", {"options_override": {"eebus_enabled": "true"}}),
+        ("normal discovery JSON type", {"options_override": {"eebus_discovery_enabled": "false"}}),
+        ("normal listen-port JSON type", {"options_override": {"eebus_listen_port": "4712"}}),
         ("fallback boolean type", {"stale_schema": True, "options_override": {"eebus_enabled": "on"}}),
         ("normal literal null allowlist", {"allowlist": "null"}),
         (
@@ -346,19 +349,21 @@ def _check_runtime_cases() -> None:
         _assert(invalid_argv == [], f"invalid {description} reached gateway")
         _assert("eeBUS" in invalid_stderr, f"invalid {description} error is not operator-visible")
 
-    for field, value in (
-        ("eebus_interface", "end\x000"),
-        ("eebus_subnets", "192.0.2.0/2\x004"),
-        ("eebus_remote_ski_allowlist", ("a" * 20) + "\x00" + ("a" * 20)),
-    ):
-        nul_argv, nul_stderr, _ = _run_case(
-            enabled=True,
-            stale_schema=True,
-            options_override={field: value},
-            expect_success=False,
-        )
-        _assert(nul_argv == [], f"NUL-bearing fallback {field} reached gateway")
-        _assert("invalid protected JSON value or type" in nul_stderr, f"NUL-bearing {field} error is unclear")
+    for stale_schema in (False, True):
+        path = "fallback" if stale_schema else "normal"
+        for field, value in (
+            ("eebus_interface", "end\x000"),
+            ("eebus_subnets", "192.0.2.0/2\x004"),
+            ("eebus_remote_ski_allowlist", ("a" * 20) + "\x00" + ("a" * 20)),
+        ):
+            nul_argv, nul_stderr, _ = _run_case(
+                enabled=True,
+                stale_schema=stale_schema,
+                options_override={field: value},
+                expect_success=False,
+            )
+            _assert(nul_argv == [], f"NUL-bearing {path} {field} reached gateway")
+            _assert("invalid protected JSON value or type" in nul_stderr, f"NUL-bearing {field} error is unclear")
 
     for field, overrides in (
         ("interface", {"interface": ""}),

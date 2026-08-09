@@ -48,6 +48,51 @@ enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null
 # (off|shadow|enforce). Exported as HELIANTHUS_V8_CLASSIFIER_MODE env
 # below so cmd/gateway/main.go's startup wiring (PR #651) picks it up.
 v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
+
+# Validate protected eeBUS values before bashio captures them. Bash command
+# substitution cannot preserve NUL, and textual bashio output cannot retain
+# JSON scalar types, so validation after capture would be too late.
+eebus_options_path="/data/options.json"
+eebus_validate_protected_option() {
+  local key expected_type
+  key="$1"
+  expected_type="$2"
+  if ! jq -e --arg key "${key}" 'has($key) and .[$key] != null' \
+    "${eebus_options_path}" >/dev/null 2>&1; then
+    return 0
+  fi
+  case "${expected_type}" in
+    boolean)
+      jq -e --arg key "${key}" '.[ $key ] | type == "boolean"' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+    integer)
+      jq -e --arg key "${key}" '.[ $key ] | type == "number" and floor == .' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+    string)
+      jq -e --arg key "${key}" \
+        '.[ $key ] | type == "string" and (index("\u0000") == null)' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+  esac
+}
+
+if [ -f "${eebus_options_path}" ]; then
+  if ! command -v jq >/dev/null 2>&1 || ! jq -e 'type == "object"' "${eebus_options_path}" >/dev/null 2>&1; then
+    bashio::exit.nok "eeBUS protected options must be a valid JSON object"
+  fi
+  eebus_validate_protected_option eebus_enabled boolean
+  eebus_validate_protected_option eebus_listen_port integer
+  eebus_validate_protected_option eebus_interface string
+  eebus_validate_protected_option eebus_subnets string
+  eebus_validate_protected_option eebus_discovery_enabled boolean
+  eebus_validate_protected_option eebus_remote_ski_allowlist string
+fi
+
 eebus_enabled=$(bashio::config 'eebus_enabled' 2>/dev/null || true)
 eebus_listen_port=$(bashio::config 'eebus_listen_port' 2>/dev/null || true)
 eebus_interface=$(bashio::config 'eebus_interface' 2>/dev/null || true)
@@ -59,7 +104,6 @@ eebus_remote_ski_allowlist=$(bashio::config 'eebus_remote_ski_allowlist' 2>/dev/
 # though /data/options.json already contains the new eeBUS keys. Recover only
 # missing eeBUS values from the protected options file; all recovered values
 # still pass through the same validation below.
-eebus_options_path="/data/options.json"
 eebus_option_fallback() {
   local key expected_type
   key="$1"
