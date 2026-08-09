@@ -49,6 +49,138 @@ enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null
 # below so cmd/gateway/main.go's startup wiring (PR #651) picks it up.
 v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 
+# Validate protected eeBUS values before bashio captures them. Bash command
+# substitution cannot preserve NUL, and textual bashio output cannot retain
+# JSON scalar types, so validation after capture would be too late.
+eebus_options_path="/data/options.json"
+eebus_validate_protected_option() {
+  local key expected_type
+  key="$1"
+  expected_type="$2"
+  if ! jq -e --arg key "${key}" 'has($key) and .[$key] != null' \
+    "${eebus_options_path}" >/dev/null 2>&1; then
+    return 0
+  fi
+  case "${expected_type}" in
+    boolean)
+      jq -e --arg key "${key}" '.[ $key ] | type == "boolean"' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+    integer)
+      jq -e --arg key "${key}" '.[ $key ] | type == "number" and floor == .' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+    string)
+      jq -e --arg key "${key}" \
+        '.[ $key ] | type == "string" and (index("\u0000") == null)' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+      ;;
+  esac
+}
+
+if [ -f "${eebus_options_path}" ]; then
+  if ! command -v jq >/dev/null 2>&1 || ! jq -e 'type == "object"' "${eebus_options_path}" >/dev/null 2>&1; then
+    bashio::exit.nok "eeBUS protected options must be a valid JSON object"
+  fi
+  eebus_validate_protected_option eebus_enabled boolean
+  eebus_validate_protected_option eebus_listen_port integer
+  eebus_validate_protected_option eebus_interface string
+  eebus_validate_protected_option eebus_subnets string
+  eebus_validate_protected_option eebus_discovery_enabled boolean
+  eebus_validate_protected_option eebus_remote_ski_allowlist string
+fi
+
+eebus_enabled=$(bashio::config 'eebus_enabled' 2>/dev/null || true)
+eebus_listen_port=$(bashio::config 'eebus_listen_port' 2>/dev/null || true)
+eebus_interface=$(bashio::config 'eebus_interface' 2>/dev/null || true)
+eebus_subnets=$(bashio::config 'eebus_subnets' 2>/dev/null || true)
+eebus_discovery_enabled=$(bashio::config 'eebus_discovery_enabled' 2>/dev/null || true)
+eebus_remote_ski_allowlist=$(bashio::config 'eebus_remote_ski_allowlist' 2>/dev/null || true)
+
+# An in-place upgrade can briefly expose the previous Supervisor schema even
+# though /data/options.json already contains the new eeBUS keys. Recover only
+# missing eeBUS values from the protected options file; all recovered values
+# still pass through the same validation below.
+eebus_option_fallback() {
+  local key expected_type
+  key="$1"
+  expected_type="$2"
+  if [ ! -f "${eebus_options_path}" ] || ! command -v jq >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! jq -e 'type == "object"' "${eebus_options_path}" >/dev/null 2>&1; then
+    return 2
+  fi
+  if ! jq -e --arg key "${key}" 'has($key) and .[$key] != null' \
+    "${eebus_options_path}" >/dev/null 2>&1; then
+    return 1
+  fi
+  case "${expected_type}" in
+    boolean)
+      jq -e --arg key "${key}" '.[ $key ] | type == "boolean"' \
+        "${eebus_options_path}" >/dev/null 2>&1 || return 2
+      ;;
+    integer)
+      jq -e --arg key "${key}" '.[ $key ] | type == "number" and floor == .' \
+        "${eebus_options_path}" >/dev/null 2>&1 || return 2
+      ;;
+    string)
+      jq -e --arg key "${key}" \
+        '.[ $key ] | type == "string" and (index("\u0000") == null)' \
+        "${eebus_options_path}" >/dev/null 2>&1 || return 2
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+  jq -r --arg key "${key}" '.[ $key ]' "${eebus_options_path}"
+}
+
+eebus_fallback_used=false
+eebus_enabled_from_options_file=false
+eebus_listen_port_from_options_file=false
+eebus_interface_from_options_file=false
+eebus_subnets_from_options_file=false
+eebus_discovery_enabled_from_options_file=false
+eebus_remote_ski_allowlist_from_options_file=false
+
+eebus_resolve_missing_option() {
+  local variable key expected_type current resolved rc
+  variable="$1"
+  key="$2"
+  expected_type="$3"
+  current="${!variable}"
+  if [ -n "${current}" ] && [ "${current}" != "null" ]; then
+    return 0
+  fi
+  if resolved=$(eebus_option_fallback "${key}" "${expected_type}"); then
+    printf -v "${variable}" '%s' "${resolved}"
+    printf -v "${variable}_from_options_file" '%s' true
+    if [ "${resolved}" != "${current}" ] || [ "${current}" = "null" ]; then
+      eebus_fallback_used=true
+    fi
+    return 0
+  else
+    rc=$?
+  fi
+  if [ "${rc}" -eq 2 ]; then
+    bashio::exit.nok "eeBUS option ${key} has an invalid protected JSON value or type"
+  fi
+}
+
+eebus_resolve_missing_option eebus_enabled eebus_enabled boolean
+eebus_resolve_missing_option eebus_listen_port eebus_listen_port integer
+eebus_resolve_missing_option eebus_interface eebus_interface string
+eebus_resolve_missing_option eebus_subnets eebus_subnets string
+eebus_resolve_missing_option eebus_discovery_enabled eebus_discovery_enabled boolean
+eebus_resolve_missing_option eebus_remote_ski_allowlist eebus_remote_ski_allowlist string
+if bashio::var.true "${eebus_fallback_used}"; then
+  bashio::log.warning "Supervisor schema omitted configured eeBUS values; recovered missing fields from protected /data/options.json"
+fi
+
 # Apply defaults when Supervisor has not yet merged new config schema keys.
 if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ]; then
   observe_first_enabled=true
@@ -86,6 +218,32 @@ fi
 if [ -z "${v8_classifier_mode}" ] || [ "${v8_classifier_mode}" = "null" ]; then
   v8_classifier_mode="enforce"
 fi
+if [ -z "${eebus_enabled}" ] || { [ "${eebus_enabled}" = "null" ] && [ "${eebus_enabled_from_options_file}" != true ]; }; then
+  eebus_enabled=false
+fi
+if [ -z "${eebus_listen_port}" ] || { [ "${eebus_listen_port}" = "null" ] && [ "${eebus_listen_port_from_options_file}" != true ]; }; then
+  eebus_listen_port=4712
+fi
+if [ -z "${eebus_interface}" ] || { [ "${eebus_interface}" = "null" ] && [ "${eebus_interface_from_options_file}" != true ]; }; then
+  eebus_interface=""
+fi
+if [ -z "${eebus_subnets}" ] || { [ "${eebus_subnets}" = "null" ] && [ "${eebus_subnets_from_options_file}" != true ]; }; then
+  eebus_subnets=""
+fi
+if [ -z "${eebus_discovery_enabled}" ] || { [ "${eebus_discovery_enabled}" = "null" ] && [ "${eebus_discovery_enabled_from_options_file}" != true ]; }; then
+  eebus_discovery_enabled=true
+fi
+if [ -z "${eebus_remote_ski_allowlist}" ] || { [ "${eebus_remote_ski_allowlist}" = "null" ] && [ "${eebus_remote_ski_allowlist_from_options_file}" != true ]; }; then
+  eebus_remote_ski_allowlist=""
+fi
+case "${eebus_enabled}" in
+  true | false) ;;
+  *) bashio::exit.nok "eeBUS requires eebus_enabled to be boolean true or false" ;;
+esac
+case "${eebus_discovery_enabled}" in
+  true | false) ;;
+  *) bashio::exit.nok "eeBUS requires eebus_discovery_enabled to be boolean true or false" ;;
+esac
 # Export so the gateway binary's startup wiring (cmd/gateway/main.go
 # os.Getenv(v8classifier.EnvVarName)) reads it. ParseMode validates
 # the value; unrecognized values cause log.Fatalf at startup so
@@ -349,6 +507,84 @@ else
   bashio::log.warning "Pinned gateway binary does not support -semantic-cache-path; semantic startup cache will remain container-local. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that supports semantic cache persistence."
 fi
 
+eebus_args=()
+if bashio::var.true "${eebus_enabled}"; then
+  eebus_interface=$(printf '%s' "${eebus_interface}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  eebus_subnets=$(printf '%s' "${eebus_subnets}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  eebus_remote_ski_allowlist=$(printf '%s' "${eebus_remote_ski_allowlist}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+
+  if ! [[ "${eebus_listen_port}" =~ ^[0-9]+$ ]] || [ "$((10#${eebus_listen_port}))" -lt 1 ] || [ "$((10#${eebus_listen_port}))" -gt 65535 ]; then
+    bashio::exit.nok "eeBUS requires eebus_listen_port in the range 1..65535"
+  fi
+  if [ -z "${eebus_interface}" ]; then
+    bashio::exit.nok "eeBUS requires one explicit eebus_interface"
+  fi
+  if [[ "${eebus_interface}" == *,* ]] || ! [[ "${eebus_interface}" =~ ^[A-Za-z0-9_.:-]+$ ]]; then
+    bashio::exit.nok "eeBUS requires exactly one eebus_interface"
+  fi
+  if [ -z "${eebus_subnets}" ]; then
+    bashio::exit.nok "eeBUS requires a non-empty eebus_subnets prefix list"
+  fi
+  if [ -n "${eebus_remote_ski_allowlist}" ]; then
+    IFS=',' read -r -a eebus_remote_ski_entries <<< "${eebus_remote_ski_allowlist}"
+    for eebus_remote_ski in "${eebus_remote_ski_entries[@]}"; do
+      eebus_remote_ski=$(printf '%s' "${eebus_remote_ski}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+      if ! [[ "${eebus_remote_ski}" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+        bashio::exit.nok "eeBUS requires every allowlist entry to be a 40-hex SKI"
+      fi
+    done
+  fi
+
+  missing_eebus_flags=()
+  for required_flag in \
+    eebus-enabled \
+    eebus-listen-port \
+    eebus-interfaces \
+    eebus-subnets \
+    eebus-state-root \
+    eebus-discovery-enabled \
+    eebus-remote-ski-allowlist \
+    eebus-pairing-window-mode; do
+    if ! gateway_supports_flag "${required_flag}"; then
+      missing_eebus_flags+=("${required_flag}")
+    fi
+  done
+  if [ "${#missing_eebus_flags[@]}" -ne 0 ]; then
+    bashio::exit.nok "gateway does not support the complete eeBUS runtime flag set"
+  fi
+
+  interface_id_path="/sys/class/net/${eebus_interface}/address"
+  if [ ! -r "${interface_id_path}" ]; then
+    bashio::exit.nok "eeBUS cannot read the configured interface identity"
+  fi
+  interface_id=$(tr -d ':\r\n' < "${interface_id_path}" | tr '[:upper:]' '[:lower:]')
+  if ! [[ "${interface_id}" =~ ^[0-9a-f]{12}$ ]]; then
+    bashio::exit.nok "eeBUS configured interface identity is invalid"
+  fi
+  machine_id=$(printf 'helianthus-eebusreg-ha-v1:%s' "${interface_id}" | sha256sum | awk '{print $1}')
+  printf '%s\n' "${machine_id}" > /etc/machine-id
+  chmod 0444 /etc/machine-id
+
+  if bashio::var.true "${eebus_discovery_enabled}"; then
+    eebus_discovery_value=true
+  else
+    eebus_discovery_value=false
+  fi
+  eebus_args=(
+    -eebus-enabled=true
+    -eebus-listen-port "${eebus_listen_port}"
+    -eebus-interfaces "${eebus_interface}"
+    -eebus-subnets "${eebus_subnets}"
+    -eebus-state-root "/data/eebus"
+    -eebus-discovery-enabled="${eebus_discovery_value}"
+    -eebus-remote-ski-allowlist "${eebus_remote_ski_allowlist}"
+    -eebus-pairing-window-mode "closed"
+  )
+  bashio::log.info "eeBUS runtime: enabled on ${eebus_interface}:${eebus_listen_port}, pairing closed"
+else
+  bashio::log.info "eeBUS runtime: disabled"
+fi
+
 # Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
 # version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
 # but a `/data/helianthus-gateway` override predating M2 would reject it during
@@ -396,6 +632,7 @@ exec "${gateway_bin}" \
   -transport "${effective_transport}" \
   -network "${effective_network}" \
   -address "${effective_address}" \
+  ${eebus_args[@]+"${eebus_args[@]}"} \
   "${source_addr_args[@]}" \
   -scan-request-timeout "${scan_request_timeout}" \
   -http-addr "${http_addr}" \

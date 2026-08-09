@@ -1,8 +1,8 @@
 {
   "name": "Helianthus",
-  "version": "0.6.32",
+  "version": "0.6.33",
   "slug": "helianthus",
-  "description": "Helianthus eBUS gateway (GraphQL + MCP)",
+  "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [
     "aarch64",
     "amd64"
@@ -47,7 +47,13 @@
     "passive_config_direct_apply": false,
     "external_write_policy": "record_only",
     "enable_static_seed_table": false,
-    "v8_classifier_mode": "enforce"
+    "v8_classifier_mode": "enforce",
+    "eebus_enabled": false,
+    "eebus_listen_port": 4712,
+    "eebus_interface": "",
+    "eebus_subnets": "",
+    "eebus_discovery_enabled": true,
+    "eebus_remote_ski_allowlist": ""
   },
   "schema": {
     "adapter_direct_enabled": "bool",
@@ -78,6 +84,12 @@
     "passive_config_direct_apply": "bool",
     "external_write_policy": "list(record_only|invalidate_only|record_and_invalidate)",
     "enable_static_seed_table": "bool",
-    "v8_classifier_mode": "list(off|shadow|enforce)"
+    "v8_classifier_mode": "list(off|shadow|enforce)",
+    "eebus_enabled": "bool",
+    "eebus_listen_port": "int",
+    "eebus_interface": "str",
+    "eebus_subnets": "str",
+    "eebus_discovery_enabled": "bool",
+    "eebus_remote_ski_allowlist": "str"
   }
 }
