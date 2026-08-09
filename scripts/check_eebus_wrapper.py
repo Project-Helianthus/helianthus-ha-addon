@@ -241,7 +241,12 @@ def _check_runtime_cases() -> None:
     _assert(_value(argv, "-eebus-discovery-enabled") == "true", "discovery changed")
     _assert(_value(argv, "-eebus-remote-ski-allowlist") == VALID_REMOTE_SKI, "allowlist changed")
     _assert(_value(argv, "-eebus-pairing-window-mode") == "closed", "pairing policy widened")
-    expected_machine_id = hashlib.sha256(b"helianthus-eebusreg-ha-v1:020000000001").hexdigest()
+    expected_machine_id = "8a4c331847003c7bacbfa7f2f383cc8b49126d9b1ad071cf97a4ab39c6d12f7c"
+    _assert(
+        hashlib.sha256(b"helianthus-eebusreg-ha-v1:020000000001").hexdigest()
+        == expected_machine_id,
+        "synthetic host-bound machine id vector is internally inconsistent",
+    )
     _assert(machine_id == expected_machine_id, "host-bound machine id derivation changed")
 
     for field, overrides in (
