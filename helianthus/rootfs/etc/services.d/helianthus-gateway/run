@@ -55,6 +55,51 @@ eebus_subnets=$(bashio::config 'eebus_subnets' 2>/dev/null || true)
 eebus_discovery_enabled=$(bashio::config 'eebus_discovery_enabled' 2>/dev/null || true)
 eebus_remote_ski_allowlist=$(bashio::config 'eebus_remote_ski_allowlist' 2>/dev/null || true)
 
+# An in-place upgrade can briefly expose the previous Supervisor schema even
+# though /data/options.json already contains the new eeBUS keys. Recover only
+# missing eeBUS values from the protected options file; all recovered values
+# still pass through the same validation below.
+eebus_options_path="/data/options.json"
+eebus_option_fallback() {
+  local key
+  key="$1"
+  if [ ! -f "${eebus_options_path}" ] || ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+  jq -r --arg key "${key}" \
+    'if type == "object" and has($key) and .[$key] != null then .[$key] else empty end' \
+    "${eebus_options_path}" 2>/dev/null || true
+}
+
+eebus_fallback_used=false
+if [ -z "${eebus_enabled}" ] || [ "${eebus_enabled}" = "null" ]; then
+  eebus_enabled=$(eebus_option_fallback "eebus_enabled")
+  [ -n "${eebus_enabled}" ] && eebus_fallback_used=true
+fi
+if [ -z "${eebus_listen_port}" ] || [ "${eebus_listen_port}" = "null" ]; then
+  eebus_listen_port=$(eebus_option_fallback "eebus_listen_port")
+  [ -n "${eebus_listen_port}" ] && eebus_fallback_used=true
+fi
+if [ -z "${eebus_interface}" ] || [ "${eebus_interface}" = "null" ]; then
+  eebus_interface=$(eebus_option_fallback "eebus_interface")
+  [ -n "${eebus_interface}" ] && eebus_fallback_used=true
+fi
+if [ -z "${eebus_subnets}" ] || [ "${eebus_subnets}" = "null" ]; then
+  eebus_subnets=$(eebus_option_fallback "eebus_subnets")
+  [ -n "${eebus_subnets}" ] && eebus_fallback_used=true
+fi
+if [ -z "${eebus_discovery_enabled}" ] || [ "${eebus_discovery_enabled}" = "null" ]; then
+  eebus_discovery_enabled=$(eebus_option_fallback "eebus_discovery_enabled")
+  [ -n "${eebus_discovery_enabled}" ] && eebus_fallback_used=true
+fi
+if [ -z "${eebus_remote_ski_allowlist}" ] || [ "${eebus_remote_ski_allowlist}" = "null" ]; then
+  eebus_remote_ski_allowlist=$(eebus_option_fallback "eebus_remote_ski_allowlist")
+  [ -n "${eebus_remote_ski_allowlist}" ] && eebus_fallback_used=true
+fi
+if bashio::var.true "${eebus_fallback_used}"; then
+  bashio::log.warning "Supervisor schema omitted configured eeBUS values; recovered missing fields from protected /data/options.json"
+fi
+
 # Apply defaults when Supervisor has not yet merged new config schema keys.
 if [ -z "${observe_first_enabled}" ] || [ "${observe_first_enabled}" = "null" ]; then
   observe_first_enabled=true

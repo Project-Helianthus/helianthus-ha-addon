@@ -72,12 +72,12 @@ bashio::config() {
     proxy_listen_addr) printf '%s\n' "0.0.0.0:19001" ;;
     external_write_policy) printf '%s\n' "record_only" ;;
     v8_classifier_mode) printf '%s\n' "enforce" ;;
-    eebus_enabled) printf '%s\n' "${TEST_EEBUS_ENABLED:-false}" ;;
-    eebus_listen_port) printf '%s\n' "${TEST_EEBUS_LISTEN_PORT:-4712}" ;;
-    eebus_interface) printf '%s\n' "${TEST_EEBUS_INTERFACE:-}" ;;
-    eebus_subnets) printf '%s\n' "${TEST_EEBUS_SUBNETS:-}" ;;
-    eebus_discovery_enabled) printf '%s\n' "${TEST_EEBUS_DISCOVERY_ENABLED:-true}" ;;
-    eebus_remote_ski_allowlist) printf '%s\n' "${TEST_EEBUS_REMOTE_SKI_ALLOWLIST:-}" ;;
+    eebus_enabled) printf '%s\n' "${TEST_EEBUS_ENABLED-false}" ;;
+    eebus_listen_port) printf '%s\n' "${TEST_EEBUS_LISTEN_PORT-4712}" ;;
+    eebus_interface) printf '%s\n' "${TEST_EEBUS_INTERFACE-}" ;;
+    eebus_subnets) printf '%s\n' "${TEST_EEBUS_SUBNETS-}" ;;
+    eebus_discovery_enabled) printf '%s\n' "${TEST_EEBUS_DISCOVERY_ENABLED-true}" ;;
+    eebus_remote_ski_allowlist) printf '%s\n' "${TEST_EEBUS_REMOTE_SKI_ALLOWLIST-}" ;;
     *) printf '\n' ;;
   esac
 }
@@ -129,6 +129,10 @@ def _write_test_wrapper(path: Path) -> None:
     text = text.replace("/data/helianthus-gateway", "${TEST_GATEWAY_OVERRIDE_BIN}")
     text = text.replace("/data/source_addr.last", "${TEST_LEGACY_SOURCE_ADDR_STATE_FILE}")
     text = text.replace(
+        'eebus_options_path="/data/options.json"',
+        'eebus_options_path="${TEST_EEBUS_OPTIONS_PATH}"',
+    )
+    text = text.replace(
         'interface_id_path="/sys/class/net/${eebus_interface}/address"',
         'interface_id_path="${TEST_EEBUS_INTERFACE_ID_PATH}"',
     )
@@ -145,6 +149,7 @@ def _run_case(
     listen_port: str = "4712",
     discovery: bool = True,
     allowlist: str = VALID_REMOTE_SKI,
+    stale_schema: bool = False,
     omit_flag: str | None = None,
     expect_success: bool = True,
 ) -> tuple[list[str], str, str]:
@@ -157,7 +162,21 @@ def _run_case(
         runtime_state_file = tmp / "runtime_state.json"
         interface_id_file = tmp / "interface-address"
         machine_id_file = tmp / "machine-id"
+        options_file = tmp / "options.json"
         interface_id_file.write_text("02:00:00:00:00:01\n", encoding="utf-8")
+        options_file.write_text(
+            json.dumps(
+                {
+                    "eebus_enabled": enabled,
+                    "eebus_listen_port": int(listen_port) if listen_port.isdigit() else listen_port,
+                    "eebus_interface": interface,
+                    "eebus_subnets": subnets,
+                    "eebus_discovery_enabled": discovery,
+                    "eebus_remote_ski_allowlist": allowlist,
+                }
+            ),
+            encoding="utf-8",
+        )
         runtime_state_file.write_text(
             json.dumps(
                 {
@@ -193,8 +212,19 @@ def _run_case(
                 "TEST_EEBUS_REMOTE_SKI_ALLOWLIST": allowlist,
                 "TEST_EEBUS_INTERFACE_ID_PATH": str(interface_id_file),
                 "TEST_EEBUS_MACHINE_ID_PATH": str(machine_id_file),
+                "TEST_EEBUS_OPTIONS_PATH": str(options_file),
             }
         )
+        if stale_schema:
+            for key in (
+                "TEST_EEBUS_ENABLED",
+                "TEST_EEBUS_LISTEN_PORT",
+                "TEST_EEBUS_INTERFACE",
+                "TEST_EEBUS_SUBNETS",
+                "TEST_EEBUS_DISCOVERY_ENABLED",
+                "TEST_EEBUS_REMOTE_SKI_ALLOWLIST",
+            ):
+                env[key] = ""
         result = subprocess.run(
             ["bash", str(wrapper)],
             cwd=REPO_ROOT,
@@ -248,6 +278,19 @@ def _check_runtime_cases() -> None:
         "synthetic host-bound machine id vector is internally inconsistent",
     )
     _assert(machine_id == expected_machine_id, "host-bound machine id derivation changed")
+
+    stale_argv, _, stale_machine_id = _run_case(enabled=True, stale_schema=True)
+    _assert(stale_argv == argv, "cached Supervisor schema changed recovered eeBUS arguments")
+    _assert(stale_machine_id == machine_id, "cached Supervisor schema changed host-bound identity")
+
+    stale_argv, stale_stderr, _ = _run_case(
+        enabled=True,
+        interface="../end0",
+        stale_schema=True,
+        expect_success=False,
+    )
+    _assert(stale_argv == [], "invalid cached-schema interface reached gateway")
+    _assert("eeBUS" in stale_stderr, "invalid cached-schema fallback did not fail visibly")
 
     for field, overrides in (
         ("interface", {"interface": ""}),

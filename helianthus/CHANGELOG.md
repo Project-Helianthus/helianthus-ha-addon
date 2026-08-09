@@ -10,6 +10,11 @@ network-scope validation. The protected state root remains fixed at
 `/data/eebus`, pairing starts closed, and no key or trust-store path is exposed
 as an option.
 
+During an in-place upgrade, if Supervisor still serves the cached pre-eeBUS
+schema, the wrapper recovers only missing eeBUS fields from the protected
+`/data/options.json`. Recovered values pass through the same fail-closed
+interface, subnet, port, allowlist, and gateway-capability validation.
+
 The bundled gateway is pinned to
 `ccfdb9d449799eb0f1023ffe8099107e795c7e7a`, which contains the stable local
 `eebus.v1.*` raw operator MCP and public-redacted boundary. This release adds no
