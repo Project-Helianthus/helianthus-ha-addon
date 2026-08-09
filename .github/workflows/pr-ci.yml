@@ -72,6 +72,12 @@ jobs:
           set -euo pipefail
           python3 scripts/check_source_addr_wrapper.py
 
+      - name: Validate persistent eeBUS wrapper wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_eebus_wrapper.py
+
       - name: Validate runtime-state wrapper migration
         shell: bash
         run: |
