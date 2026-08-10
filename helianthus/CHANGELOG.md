@@ -3,9 +3,10 @@
 ## 0.6.35 (2026-08-10)
 
 - Repin the gateway to the corrected reviewed eeBUS runtime chain: SHIP
-  terminal teardown no longer blocks a saturated writer, release provenance
-  matches the exact dependency closure, and snapshot descendant drops preserve
-  the documented authorization and idempotency precedence.
+  terminal teardown no longer blocks a saturated writer, the gateway module
+  provenance matches its exact reviewed dependency closure, and snapshot
+  descendant drops preserve the documented authorization and idempotency
+  precedence.
 
 ## 0.6.34 (2026-08-10)
 
