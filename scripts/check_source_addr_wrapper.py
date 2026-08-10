@@ -20,16 +20,7 @@ TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
-GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE = {
-    "cc0beb1323306bf0b9da7cb3a16ef11a69ec5c98",
-    "2fbef5ab5e8510b0442c6b61416804ee1b51a0d5",
-    "e068f46c713ea7dee86c87ffd6fb7397577c4a04",
-    "1bd068b08534be86d06e630b3d46674e23ab0bef",
-    "b1e228fe172b50fa8ae9c4a2683d33c0280b5f7f",
-    "v0.6.32",
-    "ccfdb9d449799eb0f1023ffe8099107e795c7e7a",
-    "1292560cc57d8eae1606894b9fc30e9b6f8fa02b",
-}
+REQUIRED_GATEWAY_VERSION = "0b95130a7020af73070fd313b34fc5edc5d05a52"
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -272,12 +263,12 @@ def _check_static_run_script() -> None:
         "exact source validation flags must be used by the wrapper",
     )
     _assert(
-        any(f"EBUSGATEWAY_VERSION={version}" in dockerfile_text for version in GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE),
-        "pinned gateway must advertise startup-source-override for exact source_addr",
+        f"EBUSGATEWAY_VERSION={REQUIRED_GATEWAY_VERSION}" in dockerfile_text,
+        "pinned gateway must match the required release gateway",
     )
     _assert(
-        any(f"EBUSGATEWAY_VERSION={version}" in build_workflow_text for version in GATEWAYS_WITH_STARTUP_SOURCE_OVERRIDE),
-        "published image workflow must use a gateway that advertises startup-source-override",
+        f"EBUSGATEWAY_VERSION={REQUIRED_GATEWAY_VERSION}" in build_workflow_text,
+        "published image workflow must match the required release gateway",
     )
     _assert(
         "upgrade helianthus-gateway or set source_addr=auto" in text,

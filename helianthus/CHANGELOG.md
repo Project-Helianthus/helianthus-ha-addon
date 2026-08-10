@@ -20,7 +20,7 @@ values reject NUL and every protected eeBUS field is JSON-type checked before
 shell capture, preventing normal and fallback value transformation.
 
 The bundled gateway is pinned to
-`1292560cc57d8eae1606894b9fc30e9b6f8fa02b`, which contains the stable local
+`0b95130a7020af73070fd313b34fc5edc5d05a52`, which contains the stable local
 `eebus.v1.*` raw operator MCP and public-redacted boundary. This release adds no
 GraphQL field, Home Assistant entity, semantic promotion, v2 namespace, or
 compatibility alias.
