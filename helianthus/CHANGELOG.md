@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.34 (2026-08-10)
+
+- Repin the gateway to the reviewed eeBUS runtime chain with joined SHIP timer teardown.
+
 ## 0.6.33 (2026-08-09)
 
 ### Persistent eeBUS runtime wiring
