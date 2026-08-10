@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.36 (2026-08-10)
+
+- Package the final reviewed eeBUS runtime chain after the SHIP handshake
+  state/error race fix and structural-test cleanup. The gateway remains on the
+  single local/operator `eebus.v1.*` raw surface, with public evidence
+  redacted and no GraphQL, Portal, Home Assistant semantic, or write-path
+  promotion.
+
 ## 0.6.35 (2026-08-10)
 
 - Repin the gateway to the corrected reviewed eeBUS runtime chain: SHIP
