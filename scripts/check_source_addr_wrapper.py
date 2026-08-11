@@ -271,6 +271,22 @@ def _check_static_run_script() -> None:
         "published image workflow must match the required release gateway",
     )
     _assert(
+        "go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}"
+        not in dockerfile_text,
+        "release gateway must not use module-mode go install because it changes reproducible build metadata",
+    )
+    for required_build_step in (
+        "git clone --no-checkout",
+        'git checkout --detach "${EBUSGATEWAY_VERSION}"',
+        'test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_VERSION}"',
+        "GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly",
+        "go build -trimpath -buildvcs=true",
+    ):
+        _assert(
+            required_build_step in dockerfile_text,
+            f"gateway image build is missing reproducibility step: {required_build_step}",
+        )
+    _assert(
         "upgrade helianthus-gateway or set source_addr=auto" in text,
         "exact source config must fail closed when validate-only startup input is unavailable",
     )

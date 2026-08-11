@@ -6,6 +6,8 @@
   runtime and deterministic offline promotion-dossier assembler. Candidate
   leaves remain `LOCKED_NOT_EXPOSED`; this release adds no GraphQL, Portal,
   Home Assistant semantic, public MCP, or write-path exposure.
+- Build the pinned gateway from its exact clean Git checkout with the same
+  reproducible build boundary used by the LIVE_CAPTURE verifier.
 
 ## 0.6.36 (2026-08-10)
 

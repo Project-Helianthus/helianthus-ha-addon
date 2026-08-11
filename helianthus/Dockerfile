@@ -14,11 +14,20 @@ ENV CGO_ENABLED=0
 ENV GOPRIVATE=github.com/Project-Helianthus/*
 
 RUN --mount=type=secret,id=github_token \
+    set -eu; \
     if [ -f /run/secrets/github_token ]; then \
-      git config --global url."https://$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
-    fi \
- && if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi \
- && GOBIN=/out go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}
+      export GIT_CONFIG_COUNT=1; \
+      export GIT_CONFIG_KEY_0="url.https://$(cat /run/secrets/github_token)@github.com/.insteadOf"; \
+      export GIT_CONFIG_VALUE_0="https://github.com/"; \
+    fi; \
+    git clone --no-checkout https://github.com/Project-Helianthus/helianthus-ebusgateway /src; \
+    cd /src; \
+    git checkout --detach "${EBUSGATEWAY_VERSION}"; \
+    test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_VERSION}"; \
+    test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
+    if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+      go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
 ARG VRCEXPLORER_VERSION=v0.5.1
