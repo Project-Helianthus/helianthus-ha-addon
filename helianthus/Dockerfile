@@ -15,9 +15,11 @@ ENV GOPRIVATE=github.com/Project-Helianthus/*
 
 RUN --mount=type=secret,id=github_token \
     set -eu; \
+    github_token_value=""; \
     if [ -f /run/secrets/github_token ]; then \
+      github_token_value="$(cat /run/secrets/github_token)"; \
       export GIT_CONFIG_COUNT=1; \
-      export GIT_CONFIG_KEY_0="url.https://$(cat /run/secrets/github_token)@github.com/.insteadOf"; \
+      export GIT_CONFIG_KEY_0="url.https://x-access-token:${github_token_value}@github.com/.insteadOf"; \
       export GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
     git clone --no-checkout https://github.com/Project-Helianthus/helianthus-ebusgateway /src; \
@@ -27,7 +29,10 @@ RUN --mount=type=secret,id=github_token \
     test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
     if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
-      go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway
+      go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway; \
+    if [ -n "${github_token_value}" ]; then \
+      ! grep -R -F -l -- "${github_token_value}" /root /src /out /tmp 2>/dev/null; \
+    fi
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
 ARG VRCEXPLORER_VERSION=v0.5.1
@@ -35,12 +40,20 @@ ARG VRCEXPLORER_VERSION=v0.5.1
 RUN apk add --no-cache git ca-certificates
 
 RUN --mount=type=secret,id=github_token \
+    set -eu; \
+    github_token_value=""; \
     if [ -f /run/secrets/github_token ]; then \
-      git config --global url."https://$(cat /run/secrets/github_token)@github.com/".insteadOf "https://github.com/"; \
-    fi \
- && python -m pip install --no-cache-dir --upgrade pip \
- && python -m pip install --no-cache-dir --target /out/python \
-    "git+https://github.com/Project-Helianthus/helianthus-vrc-explorer@${VRCEXPLORER_VERSION}"
+      github_token_value="$(cat /run/secrets/github_token)"; \
+      export GIT_CONFIG_COUNT=1; \
+      export GIT_CONFIG_KEY_0="url.https://x-access-token:${github_token_value}@github.com/.insteadOf"; \
+      export GIT_CONFIG_VALUE_0="https://github.com/"; \
+    fi; \
+    python -m pip install --no-cache-dir --upgrade pip; \
+    python -m pip install --no-cache-dir --target /out/python \
+      "git+https://github.com/Project-Helianthus/helianthus-vrc-explorer@${VRCEXPLORER_VERSION}"; \
+    if [ -n "${github_token_value}" ]; then \
+      ! grep -R -F -l -- "${github_token_value}" /root /out /tmp 2>/dev/null; \
+    fi
 
 FROM ${BUILD_FROM}
 ARG VRCEXPLORER_VERSION=v0.5.1

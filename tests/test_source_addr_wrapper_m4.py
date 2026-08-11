@@ -6,6 +6,7 @@ import importlib.util
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_source_addr_wrapper.py"
+DOCKERFILE = Path(__file__).resolve().parents[1] / "helianthus" / "Dockerfile"
 
 
 def _wrapper_module():
@@ -15,6 +16,17 @@ def _wrapper_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def test_build_credentials_are_process_scoped_and_fail_closed_on_persistence() -> None:
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "git config --global" not in dockerfile
+    assert dockerfile.count("export GIT_CONFIG_COUNT=1;") == 2
+    assert dockerfile.count(
+        "url.https://x-access-token:${github_token_value}@github.com/.insteadOf"
+    ) == 2
+    assert dockerfile.count('! grep -R -F -l -- "${github_token_value}"') == 2
 
 
 def test_source_addr_auto_does_not_reuse_raw_state_file() -> None:

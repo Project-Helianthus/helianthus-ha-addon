@@ -279,6 +279,19 @@ def _check_static_run_script() -> None:
         not in dockerfile_text,
         "release gateway must not use module-mode go install because it changes reproducible build metadata",
     )
+    _assert(
+        "git config --global" not in dockerfile_text,
+        "image builders must not persist Git credentials in an intermediate layer",
+    )
+    _assert(
+        dockerfile_text.count("export GIT_CONFIG_COUNT=1;") == 2
+        and dockerfile_text.count("url.https://x-access-token:${github_token_value}@github.com/.insteadOf") == 2,
+        "both private-repository stages must use process-scoped Git credentials",
+    )
+    _assert(
+        dockerfile_text.count('! grep -R -F -l -- "${github_token_value}"') == 2,
+        "both private-repository stages must fail the build if the mounted token reaches layer contents",
+    )
     for required_build_step in (
         "git clone --no-checkout",
         'git checkout --detach "${EBUSGATEWAY_VERSION}"',
