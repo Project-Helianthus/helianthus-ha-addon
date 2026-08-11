@@ -20,7 +20,7 @@ TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
-REQUIRED_GATEWAY_VERSION = "2588af39d8d3a1ba2756cb889b5f2f2f17660c8b"
+REQUIRED_GATEWAY_VERSION = "39340f4f5aa79499957a42cfd977b2fe1218f823"
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -270,6 +270,48 @@ def _check_static_run_script() -> None:
         f"EBUSGATEWAY_VERSION={REQUIRED_GATEWAY_VERSION}" in build_workflow_text,
         "published image workflow must match the required release gateway",
     )
+    _assert(
+        "golang:1.26.2-alpine AS builder" in dockerfile_text,
+        "gateway image build must pin the exact Go toolchain used by LIVE_CAPTURE replay",
+    )
+    _assert(
+        "go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}"
+        not in dockerfile_text,
+        "release gateway must not use module-mode go install because it changes reproducible build metadata",
+    )
+    _assert(
+        "git config --global" not in dockerfile_text,
+        "image builders must not persist Git credentials in an intermediate layer",
+    )
+    _assert(
+        dockerfile_text.count("export GIT_CONFIG_COUNT=1;") == 2
+        and dockerfile_text.count("url.https://x-access-token:${github_token_value}@github.com/.insteadOf") == 2,
+        "both private-repository stages must use process-scoped Git credentials",
+    )
+    _assert(
+        dockerfile_text.count("COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret") == 2
+        and dockerfile_text.count('sh /usr/local/bin/verify-no-secret "${github_token_value}"') == 2,
+        "both private-repository stages must run the fail-closed secret persistence verifier",
+    )
+    _assert(
+        '"${github_token_value}" /root /src /out /tmp /go' in dockerfile_text,
+        "gateway persistence scan must cover source, output, temporary, home, and Go cache roots",
+    )
+    _assert(
+        '"${github_token_value}" /root /out /tmp /usr/local' in dockerfile_text,
+        "Python persistence scan must cover output, temporary, home, and installation roots",
+    )
+    for required_build_step in (
+        "git clone --no-checkout",
+        'git checkout --detach "${EBUSGATEWAY_VERSION}"',
+        'test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_VERSION}"',
+        "GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly",
+        "go build -trimpath -buildvcs=true",
+    ):
+        _assert(
+            required_build_step in dockerfile_text,
+            f"gateway image build is missing reproducibility step: {required_build_step}",
+        )
     _assert(
         "upgrade helianthus-gateway or set source_addr=auto" in text,
         "exact source config must fail closed when validate-only startup input is unavailable",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.37 (2026-08-11)
+
+- Package the reviewed owner-only synchronized eBUS/eeBUS multi-leaf capture
+  runtime and deterministic offline promotion-dossier assembler. Candidate
+  leaves remain `LOCKED_NOT_EXPOSED`; this release adds no GraphQL, Portal,
+  Home Assistant semantic, public MCP, or write-path exposure.
+- Build the pinned gateway from its exact clean Git checkout with the same
+  reproducible build boundary used by the LIVE_CAPTURE verifier.
+
 ## 0.6.36 (2026-08-10)
 
 - Package the final reviewed eeBUS runtime chain after the SHIP handshake
