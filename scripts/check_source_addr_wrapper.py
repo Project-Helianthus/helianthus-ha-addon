@@ -289,8 +289,17 @@ def _check_static_run_script() -> None:
         "both private-repository stages must use process-scoped Git credentials",
     )
     _assert(
-        dockerfile_text.count('! grep -R -F -l -- "${github_token_value}"') == 2,
-        "both private-repository stages must fail the build if the mounted token reaches layer contents",
+        dockerfile_text.count("COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret") == 2
+        and dockerfile_text.count('sh /usr/local/bin/verify-no-secret "${github_token_value}"') == 2,
+        "both private-repository stages must run the fail-closed secret persistence verifier",
+    )
+    _assert(
+        '"${github_token_value}" /root /src /out /tmp /go' in dockerfile_text,
+        "gateway persistence scan must cover source, output, temporary, home, and Go cache roots",
+    )
+    _assert(
+        '"${github_token_value}" /root /out /tmp /usr/local' in dockerfile_text,
+        "Python persistence scan must cover output, temporary, home, and installation roots",
     )
     for required_build_step in (
         "git clone --no-checkout",

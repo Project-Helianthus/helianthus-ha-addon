@@ -9,6 +9,7 @@ ARG TARGETVARIANT
 ARG EBUSGATEWAY_VERSION=39340f4f5aa79499957a42cfd977b2fe1218f823
 
 RUN apk add --no-cache git ca-certificates
+COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
 
 ENV CGO_ENABLED=0
 ENV GOPRIVATE=github.com/Project-Helianthus/*
@@ -29,15 +30,17 @@ RUN --mount=type=secret,id=github_token \
     test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
     if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+      GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
       go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway; \
     if [ -n "${github_token_value}" ]; then \
-      ! grep -R -F -l -- "${github_token_value}" /root /src /out /tmp 2>/dev/null; \
+      sh /usr/local/bin/verify-no-secret "${github_token_value}" /root /src /out /tmp /go; \
     fi
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
 ARG VRCEXPLORER_VERSION=v0.5.1
 
 RUN apk add --no-cache git ca-certificates
+COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
 
 RUN --mount=type=secret,id=github_token \
     set -eu; \
@@ -52,7 +55,7 @@ RUN --mount=type=secret,id=github_token \
     python -m pip install --no-cache-dir --target /out/python \
       "git+https://github.com/Project-Helianthus/helianthus-vrc-explorer@${VRCEXPLORER_VERSION}"; \
     if [ -n "${github_token_value}" ]; then \
-      ! grep -R -F -l -- "${github_token_value}" /root /out /tmp 2>/dev/null; \
+      sh /usr/local/bin/verify-no-secret "${github_token_value}" /root /out /tmp /usr/local; \
     fi
 
 FROM ${BUILD_FROM}
