@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.38 (2026-08-12)
+
+- Package the reviewed owner-only M8 source-capture lane used to bind fresh
+  eBUS and eeBUS PRE/POST evidence to one process, window, and source manifest.
+- Keep the frozen 2 eBUS + 9 eeBUS evidence inventory visible while rejecting
+  eeBUS snapshot capture and drop calls before validation or store access in
+  the read-only evidence scope.
+- Candidate leaves remain `LOCKED_NOT_EXPOSED`; this release adds no GraphQL,
+  Portal, Home Assistant semantic, public MCP, or write-path exposure.
+
 ## 0.6.37 (2026-08-11)
 
 - Package the reviewed owner-only synchronized eBUS/eeBUS multi-leaf capture
