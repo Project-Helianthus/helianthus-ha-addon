@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.40 (2026-08-13)
+
+- Canonicalize empty eeBUS source-profile function lists as JSON arrays so
+  owner-held promotion evidence matches the public validation contract.
+
 ## 0.6.39 (2026-08-12)
 
 - Package the reviewed 22-record capture contract: four historical terminal
