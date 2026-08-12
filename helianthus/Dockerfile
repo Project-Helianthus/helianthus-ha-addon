@@ -6,7 +6,7 @@ ARG VRCEXPLORER_VERSION=v0.5.1
 FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG EBUSGATEWAY_VERSION=a73ed0dc788f9ac42eab09eeaa4d2a85efd6d0bd
+ARG EBUSGATEWAY_VERSION=f45ccecc27166596e3521d2ccc9683d17d6f5070
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
