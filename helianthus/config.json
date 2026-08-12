@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.38",
+  "version": "0.6.39",
   "slug": "helianthus",
   "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [

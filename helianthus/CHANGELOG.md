@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.39 (2026-08-12)
+
+- Package the reviewed 22-record capture contract: four historical terminal
+  records stay outside the denominator and all 18 real VR940 candidates can
+  produce restart-bound promotion dossiers.
+- Add exact B555 fallback provenance for the DHW target-temperature leaf and
+  exact PRE/POST stability validation for eeBUS-native capability and metadata
+  leaves.
+- All promoted leaves remain `LOCKED_NOT_EXPOSED`; this release adds no M9,
+  GraphQL, Portal, Home Assistant semantic, public MCP, or write exposure.
+
 ## 0.6.38 (2026-08-12)
 
 - Package the reviewed owner-only M8 source-capture lane used to bind fresh
