@@ -901,7 +901,6 @@ if ! bashio::var.true "${modbus_tcp_enabled}"; then
     exit 143
   fi
   modbus_write_health DISABLED 0 current EXPLICIT_DISABLE
-  trap - TERM INT
   if bashio::var.true "${modbus_stop_requested}"; then
     modbus_write_health STOPPED 0 current SIGNAL
     exit 143

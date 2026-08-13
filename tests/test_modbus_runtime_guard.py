@@ -422,6 +422,7 @@ def run_wrapper(
     hang_redactor_after_drain: bool = False,
     redactor_exit_after_ready: float | None = None,
     startup_delay_before_disabled_launch: float = 0,
+    startup_delay_after_disabled_health: float = 0,
     startup_delay_before_gateway_launch: float = 0,
     record_health_calls: bool = False,
 ) -> subprocess.CompletedProcess[str]:
@@ -447,6 +448,14 @@ def run_wrapper(
             'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
             f"sleep {startup_delay_before_disabled_launch!r} || true\n"
             'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
+            1,
+        )
+    if startup_delay_after_disabled_health:
+        run = run.replace(
+            "  modbus_write_health DISABLED 0 current EXPLICIT_DISABLE\n",
+            "  modbus_write_health DISABLED 0 current EXPLICIT_DISABLE\n"
+            '  : > "${TEST_DISABLED_HEALTH_BOUNDARY_FILE}"\n'
+            f"  sleep {startup_delay_after_disabled_health!r} || true\n",
             1,
         )
     if startup_delay_before_gateway_launch:
@@ -539,6 +548,9 @@ except SystemExit as error:
             "TEST_FALLBACK_ARGV_FILE": str(tmp_path / "fallback-argv"),
             "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
             "TEST_SIGNAL_BOUNDARY_FILE": str(tmp_path / "signal-boundary"),
+            "TEST_DISABLED_HEALTH_BOUNDARY_FILE": str(
+                tmp_path / "disabled-health-boundary"
+            ),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
             "TEST_FALLBACK_EXIT": str(fallback_exit),
@@ -585,6 +597,8 @@ except SystemExit as error:
             ready = len(list(tmp_path.glob("redactor-draining-*"))) == 2
         elif signal_wait_for == "startup_delay":
             ready = True
+        elif signal_wait_for == "disabled_health_boundary":
+            ready = (tmp_path / "disabled-health-boundary").exists()
         elif signal_wait_for == "gateway_launch_boundary":
             ready = (tmp_path / "signal-boundary").exists()
         elif signal_wait_for == "retry_backoff":
@@ -666,6 +680,29 @@ def test_signal_before_disabled_launch_never_execs_gateway(
         signal_wrapper_after=0.2,
         signal_wrapper=wrapper_signal,
         signal_wait_for="startup_delay",
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "child-pid").exists()
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "STOPPED"
+    assert health["reason"] == "SIGNAL"
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_after_disabled_health_write_is_terminal(
+    tmp_path: Path, wrapper_signal: signal.Signals
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        {"modbus_tcp_enabled": False},
+        startup_delay_after_disabled_health=2,
+        signal_wrapper_after=0,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="disabled_health_boundary",
         wrapper_timeout=10,
     )
 
