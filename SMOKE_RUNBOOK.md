@@ -58,7 +58,10 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
   "broadcast": false,
   "read_timeout": "5s",
   "write_timeout": "5s",
-  "dial_timeout": "5s"
+  "dial_timeout": "5s",
+  "modbus_tcp_enabled": false,
+  "modbus_tcp_endpoint": "",
+  "modbus_tcp_dial_timeout": "5s"
 }
 ```
 <!-- smoke-config-json:end -->

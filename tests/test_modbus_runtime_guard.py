@@ -23,6 +23,44 @@ CURRENT_GATEWAY = "658a1380e3e3264eb02bec24dd909c1e093be271"
 FALLBACK_GATEWAY = "2af7e9e0c1342e7ea2961c859dd73021879cbffa"
 
 
+BASHIO_PRELUDE = r'''
+bashio::config() {
+  case "$1" in
+    transport) printf '%s\n' "enh" ;;
+    network) printf '%s\n' "tcp" ;;
+    address) printf '%s\n' "203.0.113.10:9999" ;;
+    proxy_profile) printf '%s\n' "disabled" ;;
+    host) printf '%s\n' "127.0.0.1" ;;
+    port|http_port) printf '%s\n' "8080" ;;
+    path|graphql_path) printf '%s\n' "/graphql" ;;
+    subscription_path) printf '%s\n' "/graphql/subscriptions" ;;
+    mcp_path) printf '%s\n' "/mcp" ;;
+    mdns|broadcast|observe_first_enabled|passive_state_direct_apply) printf '%s\n' "true" ;;
+    passive_config_direct_apply|enable_static_seed_table|adapter_direct_enabled|eebus_enabled) printf '%s\n' "false" ;;
+    eebus_discovery_enabled) printf '%s\n' "true" ;;
+    mdns_instance) printf '%s\n' "helianthus" ;;
+    source_addr) printf '%s\n' "auto" ;;
+    scan_request_timeout) printf '%s\n' "400ms" ;;
+    read_timeout|write_timeout|dial_timeout) printf '%s\n' "5s" ;;
+    proxy_listen_addr) printf '%s\n' "0.0.0.0:19001" ;;
+    external_write_policy) printf '%s\n' "record_only" ;;
+    v8_classifier_mode) printf '%s\n' "enforce" ;;
+    *) printf '\n' ;;
+  esac
+}
+bashio::var.true() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+bashio::log.info() { printf 'INFO: %s\n' "$*" >> "${TEST_LOG_FILE}"; }
+bashio::log.warning() { printf 'WARN: %s\n' "$*" >> "${TEST_LOG_FILE}"; }
+bashio::log.error() { printf 'ERROR: %s\n' "$*" >> "${TEST_LOG_FILE}"; }
+bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
+'''
+
+
 def load_guard():
     spec = importlib.util.spec_from_file_location("modbus_runtime_guard", GUARD_PATH)
     assert spec is not None and spec.loader is not None
@@ -83,14 +121,14 @@ def test_invalid_or_partial_bundle_fails_before_gateway_start(
         guard.load_config(write_options(tmp_path, payload))
 
 
-def test_disabled_state_is_inert_and_rejects_retained_endpoint(tmp_path: Path) -> None:
+def test_disabled_state_is_inert_even_with_retained_endpoint(tmp_path: Path) -> None:
     guard = load_guard()
     config = guard.load_config(
         write_options(
             tmp_path,
             {
                 "modbus_tcp_enabled": False,
-                "modbus_tcp_endpoint": "",
+                "modbus_tcp_endpoint": "tcp://operator:retained@192.0.2.40:502",
                 "modbus_tcp_dial_timeout": "5s",
             },
         )
@@ -98,19 +136,6 @@ def test_disabled_state_is_inert_and_rejects_retained_endpoint(tmp_path: Path) -
     assert config.enabled is False
     assert config.endpoint == ""
     assert config.endpoint_ref == ""
-
-    with pytest.raises(guard.ConfigError):
-        guard.load_config(
-            write_options(
-                tmp_path,
-                {
-                    "modbus_tcp_enabled": False,
-                    "modbus_tcp_endpoint": "tcp://192.0.2.40:502",
-                    "modbus_tcp_dial_timeout": "5s",
-                },
-            )
-        )
-
 
 def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Path) -> None:
     endpoint = "tcp://operator:topsecret@192.0.2.40:502"
@@ -190,3 +215,160 @@ def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> N
     assert "helianthus-gateway-fallback" in run
     assert "-modbus-tcp-enabled" not in run.split("modbus_fallback_args", 1)[-1]
 
+
+def write_gateway_stub(path: Path, *, fallback: bool) -> None:
+    if fallback:
+        body = '''
+Path(os.environ["TEST_FALLBACK_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
+raise SystemExit(0)
+'''
+    else:
+        body = '''
+counter = Path(os.environ["TEST_CURRENT_COUNTER"])
+attempt = int(counter.read_text(encoding="utf-8")) + 1 if counter.exists() else 1
+counter.write_text(str(attempt), encoding="utf-8")
+with Path(os.environ["TEST_CURRENT_ARGV_FILE"]).open("a", encoding="utf-8") as handle:
+    handle.write("ATTEMPT\\n" + "\\n".join(sys.argv[1:]) + "\\n")
+time.sleep(float(os.environ.get("TEST_CURRENT_SLEEP", "0")))
+sys.stderr.write("dial " + os.environ["TEST_RAW_ENDPOINT"] + " failed\\n")
+raise SystemExit(int(os.environ.get("TEST_CURRENT_EXIT", "42")))
+'''
+    script = f'''#!/usr/bin/env python3
+import os
+import sys
+import time
+from pathlib import Path
+
+if "--help" in sys.argv:
+    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint string\\n  -modbus-tcp-dial-timeout duration\\n  -instance-guid-source string\\n  -semantic-cache-path string\\n")
+    raise SystemExit(0)
+{body}
+'''
+    path.write_text(script, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def run_wrapper(
+    tmp_path: Path,
+    payload: dict[str, object],
+    *,
+    current_exit: int = 42,
+    current_sleep: float = 0,
+) -> subprocess.CompletedProcess[str]:
+    current = tmp_path / "gateway-current"
+    fallback = tmp_path / "gateway-fallback"
+    wrapper = tmp_path / "run"
+    options = write_options(tmp_path, payload)
+    write_gateway_stub(current, fallback=False)
+    write_gateway_stub(fallback, fallback=True)
+
+    run = RUN_PATH.read_text(encoding="utf-8")
+    run = run.replace("/usr/local/bin/helianthus-gateway-fallback", "${TEST_FALLBACK_GATEWAY_BIN}")
+    run = run.replace("/usr/local/bin/helianthus-gateway", "${TEST_CURRENT_GATEWAY_BIN}")
+    run = run.replace("/data/helianthus-gateway", "${TEST_OVERRIDE_GATEWAY_BIN}")
+    run = run.replace("/data/source_addr.last", "${TEST_SOURCE_STATE_FILE}")
+    wrapper.write_text(BASHIO_PRELUDE + "\n" + run, encoding="utf-8")
+
+    runtime_state = tmp_path / "runtime_state.json"
+    runtime_state.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "meta": {
+                    "instance_guid": "12345678-1234-4234-9234-123456789abc",
+                    "written_at": "2026-08-13T00:00:00Z",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "TEST_CURRENT_GATEWAY_BIN": str(current),
+            "TEST_FALLBACK_GATEWAY_BIN": str(fallback),
+            "TEST_OVERRIDE_GATEWAY_BIN": str(tmp_path / "missing-override"),
+            "TEST_SOURCE_STATE_FILE": str(tmp_path / "source-state"),
+            "TEST_LOG_FILE": str(tmp_path / "wrapper.log"),
+            "TEST_CURRENT_COUNTER": str(tmp_path / "current-count"),
+            "TEST_CURRENT_ARGV_FILE": str(tmp_path / "current-argv"),
+            "TEST_FALLBACK_ARGV_FILE": str(tmp_path / "fallback-argv"),
+            "TEST_RAW_ENDPOINT": str(payload.get("modbus_tcp_endpoint", "")),
+            "TEST_CURRENT_EXIT": str(current_exit),
+            "TEST_CURRENT_SLEEP": str(current_sleep),
+            "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(
+                ROOT
+                / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
+            ),
+            "HELIANTHUS_RUNTIME_STATE_PATH": str(runtime_state),
+            "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
+            "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
+            "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(GUARD_PATH),
+            "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
+            "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health.json"),
+        }
+    )
+    return subprocess.run(
+        ["bash", str(wrapper)],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_wrapper_retries_three_times_then_runs_previous_binary_without_modbus(
+    tmp_path: Path,
+) -> None:
+    endpoint = "tcp://192.0.2.40:502"
+    result = run_wrapper(tmp_path, enabled_options(modbus_tcp_endpoint=endpoint))
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
+    fallback_argv = (tmp_path / "fallback-argv").read_text(encoding="utf-8")
+    assert "modbus-tcp" not in fallback_argv
+    assert endpoint not in result.stdout + result.stderr
+    assert "192.0.2.40" not in result.stdout + result.stderr
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "FALLBACK_ACTIVE"
+    assert health["binary"] == "fallback"
+    assert health["attempt"] == 3
+
+
+def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        {
+            "modbus_tcp_enabled": False,
+            "modbus_tcp_endpoint": "tcp://operator:retained@192.0.2.40:502",
+            "modbus_tcp_dial_timeout": "5s",
+        },
+    )
+
+    assert result.returncode == 42
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "1"
+    assert not (tmp_path / "fallback-argv").exists()
+    current_argv = (tmp_path / "current-argv").read_text(encoding="utf-8")
+    assert "modbus-tcp" not in current_argv
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "DISABLED"
+    assert health["enabled"] is False
+
+
+def test_wrapper_reports_running_after_bounded_startup_window(tmp_path: Path) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        current_exit=0,
+        current_sleep=7,
+    )
+
+    assert result.returncode == 0
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "RUNNING"
+    assert health["reason"] == "STARTUP_WINDOW_PASSED"
+    assert health["attempt"] == 1
+    assert not (tmp_path / "fallback-argv").exists()

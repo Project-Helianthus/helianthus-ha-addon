@@ -49,6 +49,51 @@ enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null
 # below so cmd/gateway/main.go's startup wiring (PR #651) picks it up.
 v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 
+# Validate the Modbus bundle directly from the protected Supervisor options
+# document before the gateway process is constructed. The helper emits only
+# shell-quoted, type-checked values and reports failures without echoing the
+# endpoint or any rejected credential material.
+modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
+modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
+modbus_health_file="${HELIANTHUS_MODBUS_HEALTH_FILE:-/data/modbus-runtime-health.json}"
+MODBUS_TCP_ENABLED=""
+MODBUS_TCP_ENDPOINT=""
+MODBUS_TCP_DIAL_TIMEOUT=""
+MODBUS_STARTUP_WINDOW_SECONDS=""
+MODBUS_ENDPOINT_REF=""
+if modbus_eval=$(python3 "${modbus_guard}" validate --options "${modbus_options_path}"); then
+  eval "${modbus_eval}"
+else
+  bashio::exit.nok "Modbus TCP options failed atomic validation; endpoint remains redacted"
+fi
+case "${MODBUS_TCP_ENABLED}" in
+  true | false) ;;
+  *) bashio::exit.nok "Modbus TCP validator returned an incomplete result" ;;
+esac
+modbus_tcp_enabled="${MODBUS_TCP_ENABLED}"
+modbus_tcp_endpoint="${MODBUS_TCP_ENDPOINT}"
+modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
+modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"
+modbus_endpoint_ref="${MODBUS_ENDPOINT_REF}"
+MODBUS_RECOVERY_MAX_ATTEMPTS=3
+
+modbus_write_health() {
+  local state attempt binary reason
+  state="$1"
+  attempt="$2"
+  binary="$3"
+  reason="$4"
+  python3 "${modbus_guard}" health \
+    --options "${modbus_options_path}" \
+    --health "${modbus_health_file}" \
+    --state "${state}" \
+    --attempt "${attempt}" \
+    --max-attempts "${MODBUS_RECOVERY_MAX_ATTEMPTS}" \
+    --binary "${binary}" \
+    --reason "${reason}" || \
+    bashio::exit.nok "Modbus TCP health update failed"
+}
+
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain
 # JSON scalar types, so validation after capture would be too late.
@@ -477,6 +522,7 @@ if [ -x "/data/helianthus-gateway" ]; then
   gateway_bin="/data/helianthus-gateway"
   bashio::log.info "Using gateway binary override from /data/helianthus-gateway"
 fi
+fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"
 
 gateway_supports_flag() {
   local flag output
@@ -585,6 +631,30 @@ else
   bashio::log.info "eeBUS runtime: disabled"
 fi
 
+modbus_args=()
+if bashio::var.true "${modbus_tcp_enabled}"; then
+  missing_modbus_flags=()
+  for required_flag in modbus-tcp-enabled modbus-tcp-endpoint modbus-tcp-dial-timeout; do
+    if ! gateway_supports_flag "${required_flag}"; then
+      missing_modbus_flags+=("${required_flag}")
+    fi
+  done
+  if [ "${#missing_modbus_flags[@]}" -ne 0 ]; then
+    bashio::exit.nok "gateway does not support the complete Modbus TCP runtime flag set"
+  fi
+  if [ ! -x "${fallback_gateway_bin}" ]; then
+    bashio::exit.nok "Modbus TCP recovery binary is unavailable"
+  fi
+  modbus_args=(
+    -modbus-tcp-enabled=true
+    -modbus-tcp-endpoint "${modbus_tcp_endpoint}"
+    -modbus-tcp-dial-timeout "${modbus_tcp_dial_timeout}"
+  )
+  bashio::log.info "Modbus TCP runtime: enabled endpoint_ref=${modbus_endpoint_ref} recovery_attempts=${MODBUS_RECOVERY_MAX_ATTEMPTS}"
+else
+  bashio::log.info "Modbus TCP runtime: disabled"
+fi
+
 # Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
 # version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
 # but a `/data/helianthus-gateway` override predating M2 would reject it during
@@ -628,29 +698,105 @@ else
   bashio::exit.nok "source_addr=${source_addr_intent} requires gateway startup source override validation support; upgrade helianthus-gateway or set source_addr=auto"
 fi
 
-exec "${gateway_bin}" \
-  -transport "${effective_transport}" \
-  -network "${effective_network}" \
-  -address "${effective_address}" \
-  ${eebus_args[@]+"${eebus_args[@]}"} \
-  "${source_addr_args[@]}" \
-  -scan-request-timeout "${scan_request_timeout}" \
-  -http-addr "${http_addr}" \
-  -graphql-path "${graphql_path}" \
-  -subscription-path "${subscription_path}" \
-  -mcp-path "${mcp_path}" \
-  -mdns="${mdns}" \
-  -mdns-instance "${mdns_instance}" \
-  -instance-guid "${instance_guid}" \
-  ${instance_guid_source_args[@]+"${instance_guid_source_args[@]}"} \
-  -broadcast="${broadcast}" \
-  -read-timeout "${read_timeout}" \
-  -write-timeout "${write_timeout}" \
-  -dial-timeout "${dial_timeout}" \
-  -observe-first-enabled="${observe_first_enabled}" \
-  -passive-state-direct-apply="${passive_state_direct_apply}" \
-  -passive-config-direct-apply="${passive_config_direct_apply}" \
-  -external-write-policy "${external_write_policy}" \
-  ${static_seed_args[@]+"${static_seed_args[@]}"} \
-  ${semantic_cache_args[@]+"${semantic_cache_args[@]}"} \
-  ${proxy_listen_args[@]+"${proxy_listen_args[@]}"}
+gateway_args=(
+  -transport "${effective_transport}"
+  -network "${effective_network}"
+  -address "${effective_address}"
+)
+if [ "${#eebus_args[@]}" -ne 0 ]; then gateway_args+=("${eebus_args[@]}"); fi
+gateway_args+=(
+  "${source_addr_args[@]}"
+  -scan-request-timeout "${scan_request_timeout}"
+  -http-addr "${http_addr}"
+  -graphql-path "${graphql_path}"
+  -subscription-path "${subscription_path}"
+  -mcp-path "${mcp_path}"
+  -mdns="${mdns}"
+  -mdns-instance "${mdns_instance}"
+  -instance-guid "${instance_guid}"
+)
+if [ "${#instance_guid_source_args[@]}" -ne 0 ]; then gateway_args+=("${instance_guid_source_args[@]}"); fi
+gateway_args+=(
+  -broadcast="${broadcast}"
+  -read-timeout "${read_timeout}"
+  -write-timeout "${write_timeout}"
+  -dial-timeout "${dial_timeout}"
+  -observe-first-enabled="${observe_first_enabled}"
+  -passive-state-direct-apply="${passive_state_direct_apply}"
+  -passive-config-direct-apply="${passive_config_direct_apply}"
+  -external-write-policy "${external_write_policy}"
+)
+if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[@]}"); fi
+if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
+if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
+
+if ! bashio::var.true "${modbus_tcp_enabled}"; then
+  modbus_write_health DISABLED 0 current EXPLICIT_DISABLE
+  exec "${gateway_bin}" "${gateway_args[@]}"
+fi
+
+modbus_current_args=("${gateway_args[@]}" "${modbus_args[@]}")
+modbus_fallback_args=("${gateway_args[@]}")
+
+export HELIANTHUS_MODBUS_REDACT_VALUE="${modbus_tcp_endpoint}"
+modbus_stop_requested=false
+modbus_child_pid=""
+modbus_passed_startup_window=false
+modbus_forward_signal() {
+  modbus_stop_requested=true
+  if [ -n "${modbus_child_pid}" ]; then
+    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  fi
+}
+
+modbus_run_current() {
+  local attempt_started elapsed rc
+  modbus_passed_startup_window=false
+  "${gateway_bin}" "${modbus_current_args[@]}" \
+    > >(python3 "${modbus_guard}" redact) \
+    2> >(python3 "${modbus_guard}" redact >&2) &
+  modbus_child_pid=$!
+  trap modbus_forward_signal TERM INT
+  attempt_started=$(date +%s)
+  while kill -0 "${modbus_child_pid}" 2>/dev/null; do
+    elapsed=$(( $(date +%s) - attempt_started ))
+    if [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
+      modbus_passed_startup_window=true
+      modbus_write_health RUNNING "${attempt}" current STARTUP_WINDOW_PASSED
+      break
+    fi
+    sleep 1
+  done
+  if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
+  modbus_child_pid=""
+  trap - TERM INT
+  return "${rc}"
+}
+
+attempt=1
+while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
+  modbus_write_health CONFIG_VALIDATED "${attempt}" current CONFIG_VALID
+  if modbus_run_current; then
+    exit 0
+  else
+    rc=$?
+  fi
+  if bashio::var.true "${modbus_stop_requested}"; then
+    exit "${rc}"
+  fi
+  if bashio::var.true "${modbus_passed_startup_window}"; then
+    modbus_write_health EXITED_AFTER_STARTUP_WINDOW "${attempt}" current RUNTIME_EXIT
+    exit "${rc}"
+  fi
+  if [ "${attempt}" -lt "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; then
+    modbus_write_health RECOVERY_RETRY "${attempt}" current STARTUP_EXIT
+    bashio::log.warning "Modbus TCP startup failed for endpoint_ref=${modbus_endpoint_ref}; bounded retry ${attempt}/${MODBUS_RECOVERY_MAX_ATTEMPTS}"
+    sleep "${attempt}"
+  fi
+  attempt=$((attempt + 1))
+done
+
+modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
+bashio::log.error "Modbus TCP startup retries exhausted for endpoint_ref=${modbus_endpoint_ref}; starting previous gateway binary with Modbus disabled"
+unset HELIANTHUS_MODBUS_REDACT_VALUE
+exec "${fallback_gateway_bin}" "${modbus_fallback_args[@]}"
