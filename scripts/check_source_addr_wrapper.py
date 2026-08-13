@@ -209,6 +209,7 @@ def _run_wrapper_case(
                 "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(tmp / "missing-options.json"),
                 "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
+                "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
             },
         )
 

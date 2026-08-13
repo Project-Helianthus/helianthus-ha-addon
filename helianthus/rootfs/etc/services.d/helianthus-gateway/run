@@ -56,12 +56,12 @@ v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
 modbus_health_file="${HELIANTHUS_MODBUS_HEALTH_FILE:-/data/modbus-runtime-health.json}"
+modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
 MODBUS_TCP_ENABLED=""
-MODBUS_TCP_ENDPOINT=""
 MODBUS_TCP_DIAL_TIMEOUT=""
 MODBUS_STARTUP_WINDOW_SECONDS=""
 MODBUS_ENDPOINT_REF=""
-if modbus_eval=$(python3 "${modbus_guard}" validate --options "${modbus_options_path}"); then
+if modbus_eval=$(python3 "${modbus_guard}" validate --options "${modbus_options_path}" --endpoint-file "${modbus_endpoint_file}"); then
   eval "${modbus_eval}"
 else
   bashio::exit.nok "Modbus TCP options failed atomic validation; endpoint remains redacted"
@@ -71,7 +71,6 @@ case "${MODBUS_TCP_ENABLED}" in
   *) bashio::exit.nok "Modbus TCP validator returned an incomplete result" ;;
 esac
 modbus_tcp_enabled="${MODBUS_TCP_ENABLED}"
-modbus_tcp_endpoint="${MODBUS_TCP_ENDPOINT}"
 modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
 modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"
 modbus_endpoint_ref="${MODBUS_ENDPOINT_REF}"
@@ -635,7 +634,7 @@ fi
 modbus_args=()
 if bashio::var.true "${modbus_tcp_enabled}"; then
   missing_modbus_flags=()
-  for required_flag in modbus-tcp-enabled modbus-tcp-endpoint modbus-tcp-dial-timeout; do
+  for required_flag in modbus-tcp-enabled modbus-tcp-endpoint-file modbus-tcp-dial-timeout; do
     if ! gateway_supports_flag "${required_flag}"; then
       missing_modbus_flags+=("${required_flag}")
     fi
@@ -648,7 +647,7 @@ if bashio::var.true "${modbus_tcp_enabled}"; then
   fi
   modbus_args=(
     -modbus-tcp-enabled=true
-    -modbus-tcp-endpoint "${modbus_tcp_endpoint}"
+    -modbus-tcp-endpoint-file "${modbus_endpoint_file}"
     -modbus-tcp-dial-timeout "${modbus_tcp_dial_timeout}"
   )
   bashio::log.info "Modbus TCP runtime: enabled endpoint_ref=${modbus_endpoint_ref} recovery_attempts=${MODBUS_RECOVERY_MAX_ATTEMPTS}"
@@ -739,7 +738,6 @@ fi
 modbus_current_args=("${gateway_args[@]}" "${modbus_args[@]}")
 modbus_fallback_args=("${gateway_args[@]}")
 
-export HELIANTHUS_MODBUS_REDACT_VALUE="${modbus_tcp_endpoint}"
 modbus_stop_requested=false
 modbus_child_pid=""
 modbus_passed_startup_window=false
@@ -749,15 +747,21 @@ modbus_forward_signal() {
     kill -TERM "${modbus_child_pid}" 2>/dev/null || true
   fi
 }
+trap modbus_forward_signal TERM INT
 
 modbus_run_current() {
   local attempt_started elapsed rc
   modbus_passed_startup_window=false
+  if bashio::var.true "${modbus_stop_requested}"; then
+    return 143
+  fi
   "${gateway_bin}" "${modbus_current_args[@]}" \
-    > >(python3 "${modbus_guard}" redact) \
-    2> >(python3 "${modbus_guard}" redact >&2) &
+    > >(python3 "${modbus_guard}" redact --endpoint-file "${modbus_endpoint_file}") \
+    2> >(python3 "${modbus_guard}" redact --endpoint-file "${modbus_endpoint_file}" >&2) &
   modbus_child_pid=$!
-  trap modbus_forward_signal TERM INT
+  if bashio::var.true "${modbus_stop_requested}"; then
+    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  fi
   attempt_started=$(date +%s)
   while kill -0 "${modbus_child_pid}" 2>/dev/null; do
     elapsed=$(( $(date +%s) - attempt_started ))
@@ -770,19 +774,15 @@ modbus_run_current() {
   done
   if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
   modbus_child_pid=""
-  trap - TERM INT
   return "${rc}"
 }
 
 attempt=1
 while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
   modbus_write_health CONFIG_VALIDATED "${attempt}" current CONFIG_VALID
-  if modbus_run_current; then
-    exit 0
-  else
-    rc=$?
-  fi
+  if modbus_run_current; then rc=0; else rc=$?; fi
   if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_write_health STOPPED "${attempt}" current SIGNAL
     exit "${rc}"
   fi
   if bashio::var.true "${modbus_passed_startup_window}"; then
@@ -799,5 +799,4 @@ done
 
 modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
 bashio::log.error "Modbus TCP startup retries exhausted for endpoint_ref=${modbus_endpoint_ref}; starting previous gateway binary with Modbus disabled"
-unset HELIANTHUS_MODBUS_REDACT_VALUE
 exec "${fallback_gateway_bin}" "${modbus_fallback_args[@]}"

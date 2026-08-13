@@ -3,9 +3,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -121,15 +123,24 @@ def test_invalid_or_partial_bundle_fails_before_gateway_start(
         guard.load_config(write_options(tmp_path, payload))
 
 
-def test_disabled_state_is_inert_even_with_retained_endpoint(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("endpoint", "dial_timeout"),
+    [
+        ("tcp://operator:retained@192.0.2.40:502", "stale-invalid-value"),
+        (None, {"stale": "invalid"}),
+    ],
+)
+def test_disabled_state_is_inert_even_with_retained_malformed_fields(
+    tmp_path: Path, endpoint: object, dial_timeout: object
+) -> None:
     guard = load_guard()
     config = guard.load_config(
         write_options(
             tmp_path,
             {
                 "modbus_tcp_enabled": False,
-                "modbus_tcp_endpoint": "tcp://operator:retained@192.0.2.40:502",
-                "modbus_tcp_dial_timeout": "5s",
+                "modbus_tcp_endpoint": endpoint,
+                "modbus_tcp_dial_timeout": dial_timeout,
             },
         )
     )
@@ -140,8 +151,17 @@ def test_disabled_state_is_inert_even_with_retained_endpoint(tmp_path: Path) -> 
 def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Path) -> None:
     endpoint = "tcp://operator:topsecret@192.0.2.40:502"
     options = write_options(tmp_path, enabled_options(modbus_tcp_endpoint=endpoint))
+    endpoint_file = tmp_path / "run" / "modbus-endpoint"
     result = subprocess.run(
-        [sys.executable, str(GUARD_PATH), "validate", "--options", str(options)],
+        [
+            sys.executable,
+            str(GUARD_PATH),
+            "validate",
+            "--options",
+            str(options),
+            "--endpoint-file",
+            str(endpoint_file),
+        ],
         text=True,
         capture_output=True,
         check=False,
@@ -149,15 +169,22 @@ def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Pat
     assert result.returncode != 0
     assert endpoint not in result.stderr
     assert "topsecret" not in result.stderr
+    assert not endpoint_file.exists()
 
-    env = os.environ.copy()
-    env["HELIANTHUS_MODBUS_REDACT_VALUE"] = "tcp://192.0.2.40:502"
+    endpoint_file.parent.mkdir()
+    endpoint_file.write_text("tcp://192.0.2.40:502", encoding="utf-8")
+    endpoint_file.chmod(0o600)
     redacted = subprocess.run(
-        [sys.executable, str(GUARD_PATH), "redact"],
+        [
+            sys.executable,
+            str(GUARD_PATH),
+            "redact",
+            "--endpoint-file",
+            str(endpoint_file),
+        ],
         input="dial tcp://192.0.2.40:502 and 192.0.2.40:502; lookup 192.0.2.40 failed\n",
         text=True,
         capture_output=True,
-        env=env,
         check=True,
     )
     assert "192.0.2.40" not in redacted.stdout
@@ -165,6 +192,50 @@ def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Pat
         "dial [REDACTED_MODBUS_ENDPOINT] and [REDACTED_MODBUS_ENDPOINT]; "
         "lookup [REDACTED_MODBUS_ENDPOINT] failed\n"
     )
+
+
+def test_endpoint_file_is_atomic_private_and_cleared_before_invalid_update(
+    tmp_path: Path,
+) -> None:
+    endpoint_file = tmp_path / "run" / "modbus-endpoint"
+    valid_options = write_options(tmp_path, enabled_options())
+    valid = subprocess.run(
+        [
+            sys.executable,
+            str(GUARD_PATH),
+            "validate",
+            "--options",
+            str(valid_options),
+            "--endpoint-file",
+            str(endpoint_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert valid.returncode == 0, valid.stderr
+    assert endpoint_file.read_text(encoding="utf-8") == "tcp://192.0.2.40:502"
+    assert stat.S_IMODE(endpoint_file.stat().st_mode) == 0o600
+
+    invalid_options = write_options(
+        tmp_path, enabled_options(modbus_tcp_dial_timeout="invalid")
+    )
+    invalid = subprocess.run(
+        [
+            sys.executable,
+            str(GUARD_PATH),
+            "validate",
+            "--options",
+            str(invalid_options),
+            "--endpoint-file",
+            str(endpoint_file),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert invalid.returncode != 0
+    assert not endpoint_file.exists()
 
 
 def test_health_cli_uses_validated_snapshot_not_mutable_options(tmp_path: Path) -> None:
@@ -247,7 +318,9 @@ def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> N
     assert config["options"]["modbus_tcp_endpoint"] == ""
     assert config["schema"]["modbus_tcp_endpoint"] == "password"
     assert "-modbus-tcp-enabled=true" in run
-    assert '"${modbus_tcp_endpoint}"' in run
+    assert '-modbus-tcp-endpoint-file "${modbus_endpoint_file}"' in run
+    assert "MODBUS_TCP_ENDPOINT=" not in run
+    assert "HELIANTHUS_MODBUS_REDACT_VALUE" not in run
     assert "modbus_runtime_guard.py" in run
     assert "MODBUS_RECOVERY_MAX_ATTEMPTS=3" in run
     assert "helianthus-gateway-fallback" in run
@@ -267,18 +340,30 @@ attempt = int(counter.read_text(encoding="utf-8")) + 1 if counter.exists() else 
 counter.write_text(str(attempt), encoding="utf-8")
 with Path(os.environ["TEST_CURRENT_ARGV_FILE"]).open("a", encoding="utf-8") as handle:
     handle.write("ATTEMPT\\n" + "\\n".join(sys.argv[1:]) + "\\n")
+Path(os.environ["TEST_CURRENT_ENV_FILE"]).write_text(json.dumps(dict(os.environ), sort_keys=True), encoding="utf-8")
+if "-modbus-tcp-endpoint-file" in sys.argv:
+    endpoint_index = sys.argv.index("-modbus-tcp-endpoint-file") + 1
+    raw_endpoint = Path(sys.argv[endpoint_index]).read_text(encoding="utf-8")
+else:
+    raw_endpoint = ""
+if os.environ.get("TEST_SIGNAL_PARENT") == "true":
+    Path(os.environ["TEST_CHILD_PID_FILE"]).write_text(str(os.getpid()), encoding="utf-8")
+    os.kill(os.getppid(), signal.SIGTERM)
 time.sleep(float(os.environ.get("TEST_CURRENT_SLEEP", "0")))
-sys.stderr.write("dial " + os.environ["TEST_RAW_ENDPOINT"] + " failed\\n")
+if raw_endpoint:
+    sys.stderr.write("dial " + raw_endpoint + " failed\\n")
 raise SystemExit(int(os.environ.get("TEST_CURRENT_EXIT", "42")))
 '''
     script = f'''#!/usr/bin/env python3
+import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
 
 if "--help" in sys.argv:
-    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint string\\n  -modbus-tcp-dial-timeout duration\\n  -instance-guid-source string\\n  -semantic-cache-path string\\n")
+    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint-file string\\n  -modbus-tcp-dial-timeout duration\\n  -instance-guid-source string\\n  -semantic-cache-path string\\n")
     raise SystemExit(0)
 {body}
 '''
@@ -292,6 +377,7 @@ def run_wrapper(
     *,
     current_exit: int = 42,
     current_sleep: float = 0,
+    signal_parent: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -330,10 +416,12 @@ def run_wrapper(
             "TEST_LOG_FILE": str(tmp_path / "wrapper.log"),
             "TEST_CURRENT_COUNTER": str(tmp_path / "current-count"),
             "TEST_CURRENT_ARGV_FILE": str(tmp_path / "current-argv"),
+            "TEST_CURRENT_ENV_FILE": str(tmp_path / "current-env.json"),
             "TEST_FALLBACK_ARGV_FILE": str(tmp_path / "fallback-argv"),
-            "TEST_RAW_ENDPOINT": str(payload.get("modbus_tcp_endpoint", "")),
+            "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
+            "TEST_SIGNAL_PARENT": str(signal_parent).lower(),
             "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(
                 ROOT
                 / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
@@ -344,6 +432,7 @@ def run_wrapper(
             "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(GUARD_PATH),
             "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
             "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health.json"),
+            "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
         }
     )
     return subprocess.run(
@@ -364,6 +453,14 @@ def test_wrapper_retries_three_times_then_runs_previous_binary_without_modbus(
 
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
+    current_argv = (tmp_path / "current-argv").read_text(encoding="utf-8")
+    current_env = (tmp_path / "current-env.json").read_text(encoding="utf-8")
+    assert endpoint not in current_argv
+    assert endpoint not in current_env
+    assert "-modbus-tcp-endpoint-file" in current_argv
+    endpoint_file = tmp_path / "modbus-endpoint"
+    assert endpoint_file.read_text(encoding="utf-8") == endpoint
+    assert stat.S_IMODE(endpoint_file.stat().st_mode) == 0o600
     fallback_argv = (tmp_path / "fallback-argv").read_text(encoding="utf-8")
     assert "modbus-tcp" not in fallback_argv
     assert endpoint not in result.stdout + result.stderr
@@ -382,7 +479,7 @@ def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
         {
             "modbus_tcp_enabled": False,
             "modbus_tcp_endpoint": "tcp://operator:retained@192.0.2.40:502",
-            "modbus_tcp_dial_timeout": "5s",
+            "modbus_tcp_dial_timeout": "stale-invalid-value",
         },
     )
 
@@ -391,12 +488,52 @@ def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
     assert not (tmp_path / "fallback-argv").exists()
     current_argv = (tmp_path / "current-argv").read_text(encoding="utf-8")
     assert "modbus-tcp" not in current_argv
+    assert not (tmp_path / "modbus-endpoint").exists()
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
     assert health["state"] == "DISABLED"
     assert health["enabled"] is False
 
 
-def test_wrapper_reports_running_after_bounded_startup_window(tmp_path: Path) -> None:
+def test_wrapper_signal_during_child_launch_stops_child_without_fallback(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        current_sleep=5,
+        signal_parent=True,
+    )
+
+    assert result.returncode != 0
+    child_pid = int((tmp_path / "child-pid").read_text(encoding="utf-8"))
+    for _ in range(20):
+        try:
+            os.kill(child_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail(f"gateway child {child_pid} survived wrapper termination")
+    assert not (tmp_path / "fallback-argv").exists()
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "STOPPED"
+    assert health["reason"] == "SIGNAL"
+
+
+def test_wrapper_clean_early_exit_still_reaches_bounded_fallback(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(tmp_path, enabled_options(), current_exit=0)
+
+    assert result.returncode == 0
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
+    assert (tmp_path / "fallback-argv").exists()
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "FALLBACK_ACTIVE"
+    assert health["reason"] == "STARTUP_RETRY_EXHAUSTED"
+
+
+def test_wrapper_marks_exit_after_bounded_running_window(tmp_path: Path) -> None:
     result = run_wrapper(
         tmp_path,
         enabled_options(modbus_tcp_dial_timeout="100ms"),
@@ -406,7 +543,7 @@ def test_wrapper_reports_running_after_bounded_startup_window(tmp_path: Path) ->
 
     assert result.returncode == 0
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
-    assert health["state"] == "RUNNING"
-    assert health["reason"] == "STARTUP_WINDOW_PASSED"
+    assert health["state"] == "EXITED_AFTER_STARTUP_WINDOW"
+    assert health["reason"] == "RUNTIME_EXIT"
     assert health["attempt"] == 1
     assert not (tmp_path / "fallback-argv").exists()

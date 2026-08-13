@@ -229,6 +229,7 @@ def _run_case(
                 "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options_file),
                 "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
+                "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
             }
         )
         stale_env_keys = {

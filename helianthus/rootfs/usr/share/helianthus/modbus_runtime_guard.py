@@ -31,6 +31,7 @@ _STATES = {
     "RECOVERY_RETRY",
     "FALLBACK_ACTIVE",
     "EXITED_AFTER_STARTUP_WINDOW",
+    "STOPPED",
 }
 
 
@@ -103,15 +104,16 @@ def load_config(path: Path) -> Config:
         raise ConfigError("options document must be an object")
 
     enabled = payload.get("modbus_tcp_enabled", False)
+    if type(enabled) is not bool:
+        raise ConfigError("invalid enabled option type")
+    if not enabled:
+        return Config(False, "", "", 0, "")
+
     endpoint = payload.get("modbus_tcp_endpoint", "")
     dial_timeout = payload.get("modbus_tcp_dial_timeout", "5s")
-    if type(enabled) is not bool or not isinstance(endpoint, str) or not isinstance(dial_timeout, str):
-        raise ConfigError("invalid option type")
-
+    if not isinstance(endpoint, str) or not isinstance(dial_timeout, str):
+        raise ConfigError("invalid active option type")
     timeout_ms = _duration_milliseconds(dial_timeout)
-    if not enabled:
-        return Config(False, "", dial_timeout, 0, "")
-
     _validate_endpoint(endpoint)
     endpoint_ref = "sha256:" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
     startup_window = max(5, min(40, math.ceil(timeout_ms / 1000) + 5))
@@ -159,14 +161,41 @@ def write_health(
             os.unlink(temporary)
 
 
+def write_endpoint_file(path: Path, config: Config) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not config.enabled:
+        with contextlib.suppress(FileNotFoundError):
+            path.unlink()
+        return
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(config.endpoint)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+
+
+def clear_endpoint_file(path: Path) -> None:
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()
+
+
 def _shell_assignment(name: str, value: str) -> str:
     return f"{name}={shlex.quote(value)}"
 
 
 def _validate_command(args: argparse.Namespace) -> int:
+    clear_endpoint_file(args.endpoint_file)
     config = load_config(args.options)
+    write_endpoint_file(args.endpoint_file, config)
     print(_shell_assignment("MODBUS_TCP_ENABLED", str(config.enabled).lower()))
-    print(_shell_assignment("MODBUS_TCP_ENDPOINT", config.endpoint))
     print(_shell_assignment("MODBUS_TCP_DIAL_TIMEOUT", config.dial_timeout))
     print(_shell_assignment("MODBUS_STARTUP_WINDOW_SECONDS", str(config.startup_window_seconds)))
     print(_shell_assignment("MODBUS_ENDPOINT_REF", config.endpoint_ref))
@@ -192,8 +221,11 @@ def _health_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _redact_command(_args: argparse.Namespace) -> int:
-    endpoint = os.environ.get("HELIANTHUS_MODBUS_REDACT_VALUE", "")
+def _redact_command(args: argparse.Namespace) -> int:
+    try:
+        endpoint = args.endpoint_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        endpoint = ""
     values: list[str] = []
     if endpoint:
         values.append(endpoint)
@@ -222,6 +254,7 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate")
     validate.add_argument("--options", type=Path, required=True)
+    validate.add_argument("--endpoint-file", type=Path, required=True)
     validate.set_defaults(handler=_validate_command)
 
     health = commands.add_parser("health")
@@ -236,6 +269,7 @@ def parser() -> argparse.ArgumentParser:
     health.set_defaults(handler=_health_command)
 
     redact = commands.add_parser("redact")
+    redact.add_argument("--endpoint-file", type=Path, required=True)
     redact.set_defaults(handler=_redact_command)
     return result
 
