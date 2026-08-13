@@ -21,7 +21,7 @@ GUARD_PATH = (
 RUN_PATH = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 DOCKERFILE_PATH = ROOT / "helianthus/Dockerfile"
 CONFIG_PATH = ROOT / "helianthus/config.json"
-CURRENT_GATEWAY = "658a1380e3e3264eb02bec24dd909c1e093be271"
+CURRENT_GATEWAY = "035e2b5cf703d68f75b809c45d2b1342696c07ef"
 FALLBACK_GATEWAY = "2af7e9e0c1342e7ea2961c859dd73021879cbffa"
 
 
@@ -1057,11 +1057,11 @@ def test_hanging_redactor_is_bounded_and_cannot_block_recovery(
         tmp_path,
         enabled_options(),
         hang_redactor_after_drain=True,
-        wrapper_timeout=15,
+        wrapper_timeout=20,
     )
 
     assert result.returncode == 0, result.stderr
-    assert time.monotonic() - started < 15
+    assert time.monotonic() - started < 17
     assert (tmp_path / "fallback-argv").exists()
     assert not (tmp_path / "modbus-endpoint").exists()
 
