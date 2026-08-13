@@ -83,6 +83,7 @@ modbus_child_pid=""
 modbus_redactor_pids=()
 modbus_redact_dir=""
 modbus_stop_requested=false
+modbus_runtime_failure_reason=""
 
 modbus_terminate_child() {
   local remaining
@@ -115,7 +116,12 @@ modbus_cleanup_redactors() {
         kill -KILL "${pid}" 2>/dev/null || true
       ) &
       watchdog=$!
-      if wait "${pid}"; then rc=0; else rc=$?; fi
+      while true; do
+        if wait "${pid}"; then rc=0; else rc=$?; fi
+        if ! kill -0 "${pid}" 2>/dev/null; then
+          break
+        fi
+      done
       kill -TERM "${watchdog}" 2>/dev/null || true
       wait "${watchdog}" 2>/dev/null || true
       if [ "${rc}" -ne 0 ]; then
@@ -175,9 +181,15 @@ modbus_write_health() {
 }
 
 modbus_forward_signal() {
+  local pid
   modbus_stop_requested=true
   if [ -n "${modbus_child_pid}" ]; then
     kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  fi
+  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
+    for pid in "${modbus_redactor_pids[@]}"; do
+      kill -TERM "${pid}" 2>/dev/null || true
+    done
   fi
 }
 
@@ -886,7 +898,16 @@ if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache
 if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
 
 if ! bashio::var.true "${modbus_tcp_enabled}"; then
+  if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_write_health STOPPED 0 current SIGNAL
+    exit 143
+  fi
   modbus_write_health DISABLED 0 current EXPLICIT_DISABLE
+  trap - TERM INT
+  if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_write_health STOPPED 0 current SIGNAL
+    exit 143
+  fi
   exec "${gateway_bin}" "${gateway_args[@]}"
 fi
 
@@ -912,6 +933,7 @@ modbus_passed_startup_window=false
 modbus_run_current() {
   local attempt_started elapsed rc ready_checks
   modbus_passed_startup_window=false
+  modbus_runtime_failure_reason=""
   if bashio::var.true "${modbus_stop_requested}"; then
     return 143
   fi
@@ -959,17 +981,24 @@ modbus_run_current() {
   fi
   attempt_started=$(date +%s)
   while kill -0 "${modbus_child_pid}" 2>/dev/null; do
+    if ! kill -0 "${modbus_redactor_pids[0]}" 2>/dev/null || ! kill -0 "${modbus_redactor_pids[1]}" 2>/dev/null; then
+      modbus_runtime_failure_reason=REDACTOR_EXIT
+      modbus_terminate_child
+      python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
+      modbus_cleanup_redactors || true
+      return 125
+    fi
     elapsed=$(( $(date +%s) - attempt_started ))
-    if [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
+    if ! bashio::var.true "${modbus_passed_startup_window}" && [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
       modbus_passed_startup_window=true
       modbus_write_health RUNNING "${attempt}" current STARTUP_WINDOW_PASSED
-      break
     fi
     sleep 1
   done
   if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
   modbus_child_pid=""
   if ! modbus_cleanup_redactors; then
+    modbus_runtime_failure_reason=REDACTOR_EXIT
     python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
     return 125
   fi
@@ -1011,11 +1040,11 @@ while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
     exit "${rc}"
   fi
   if bashio::var.true "${modbus_passed_startup_window}"; then
-    modbus_write_health EXITED_AFTER_STARTUP_WINDOW "${attempt}" current RUNTIME_EXIT
+    modbus_write_health EXITED_AFTER_STARTUP_WINDOW "${attempt}" current "${modbus_runtime_failure_reason:-RUNTIME_EXIT}"
     exit "${rc}"
   fi
   if [ "${attempt}" -lt "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; then
-    modbus_write_health RECOVERY_RETRY "${attempt}" current STARTUP_EXIT
+    modbus_write_health RECOVERY_RETRY "${attempt}" current "${modbus_runtime_failure_reason:-STARTUP_EXIT}"
     bashio::log.warning "Modbus TCP startup failed for endpoint_ref=${modbus_endpoint_ref}; bounded retry ${attempt}/${MODBUS_RECOVERY_MAX_ATTEMPTS}"
     sleep "${attempt}"
   fi

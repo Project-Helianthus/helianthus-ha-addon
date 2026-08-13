@@ -410,7 +410,11 @@ def run_wrapper(
     fail_health_state: str | None = None,
     wrapper_timeout: float | None = None,
     signal_wrapper_after: float | None = None,
+    signal_wrapper: signal.Signals = signal.SIGTERM,
+    signal_wait_for: str = "redactor_setup",
     hang_redactor_after_drain: bool = False,
+    redactor_exit_after_ready: float | None = None,
+    startup_delay_before_disabled_launch: float = 0,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -428,6 +432,13 @@ def run_wrapper(
     run = run.replace("/usr/local/bin/helianthus-gateway", "${TEST_CURRENT_GATEWAY_BIN}")
     run = run.replace("/data/helianthus-gateway", "${TEST_OVERRIDE_GATEWAY_BIN}")
     run = run.replace("/data/source_addr.last", "${TEST_SOURCE_STATE_FILE}")
+    if startup_delay_before_disabled_launch:
+        run = run.replace(
+            'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
+            f"sleep {startup_delay_before_disabled_launch!r} || true\n"
+            'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
+            1,
+        )
     wrapper.write_text(BASHIO_PRELUDE + "\n" + run, encoding="utf-8")
 
     runtime_state = tmp_path / "runtime_state.json"
@@ -450,16 +461,32 @@ def run_wrapper(
             encoding="utf-8",
         )
     guard_path = GUARD_PATH
-    if redactor_delay or fail_health_state is not None or hang_redactor_after_drain:
+    if (
+        redactor_delay
+        or fail_health_state is not None
+        or hang_redactor_after_drain
+        or redactor_exit_after_ready is not None
+    ):
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
-            f'''import runpy
+            f'''import os
+import runpy
 import sys
+import threading
 import time
+from pathlib import Path
 
 is_redactor = len(sys.argv) > 1 and sys.argv[1] == "redact"
 if is_redactor:
     time.sleep({redactor_delay!r})
+if is_redactor and {redactor_exit_after_ready is not None!r}:
+    ready_file = Path(sys.argv[sys.argv.index("--ready-file") + 1])
+    def exit_after_ready():
+        while not ready_file.exists():
+            time.sleep(0.01)
+        time.sleep({redactor_exit_after_ready!r})
+        os._exit(23)
+    threading.Thread(target=exit_after_ready, daemon=True).start()
 if len(sys.argv) > 1 and sys.argv[1] == "health" and "--state" in sys.argv:
     state = sys.argv[sys.argv.index("--state") + 1]
     if state == {fail_health_state!r}:
@@ -468,6 +495,9 @@ try:
     runpy.run_path({str(GUARD_PATH)!r}, run_name="__main__")
 except SystemExit as error:
     if is_redactor and {hang_redactor_after_drain!r} and error.code == 0:
+        Path({str(tmp_path)!r}, f"redactor-draining-{{os.getpid()}}").write_text(
+            str(os.getpid()), encoding="utf-8"
+        )
         time.sleep(30)
     raise
 ''',
@@ -524,13 +554,23 @@ except SystemExit as error:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    readiness_deadline = time.monotonic() + 5
-    while not list(tmp_path.glob(".modbus-redact.*")):
+    readiness_deadline = time.monotonic() + 8
+    while True:
+        if signal_wait_for == "redactor_setup":
+            ready = bool(list(tmp_path.glob(".modbus-redact.*")))
+        elif signal_wait_for == "redactor_drain":
+            ready = len(list(tmp_path.glob("redactor-draining-*"))) == 2
+        elif signal_wait_for == "startup_delay":
+            ready = True
+        else:
+            raise ValueError(f"unknown signal wait target: {signal_wait_for}")
+        if ready:
+            break
         if process.poll() is not None or time.monotonic() >= readiness_deadline:
             break
         time.sleep(0.01)
     time.sleep(signal_wrapper_after)
-    process.send_signal(signal.SIGTERM)
+    process.send_signal(signal_wrapper)
     stdout, stderr = process.communicate(timeout=wrapper_timeout)
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
@@ -581,6 +621,29 @@ def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
     assert health["state"] == "DISABLED"
     assert health["enabled"] is False
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_before_disabled_launch_never_execs_gateway(
+    tmp_path: Path, wrapper_signal: signal.Signals
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        {"modbus_tcp_enabled": False},
+        startup_delay_before_disabled_launch=2,
+        signal_wrapper_after=0.2,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="startup_delay",
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "child-pid").exists()
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "STOPPED"
+    assert health["reason"] == "SIGNAL"
 
 
 @pytest.mark.parametrize("parent_signal", [signal.SIGTERM, signal.SIGINT])
@@ -749,6 +812,68 @@ def test_hanging_redactor_is_bounded_and_cannot_block_recovery(
     assert result.returncode == 0, result.stderr
     assert time.monotonic() - started < 15
     assert (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+
+
+def test_signal_during_redactor_drain_reaps_every_redactor(tmp_path: Path) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        hang_redactor_after_drain=True,
+        signal_wrapper_after=0,
+        signal_wait_for="redactor_drain",
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    redactor_pids = [
+        int(path.read_text(encoding="utf-8"))
+        for path in tmp_path.glob("redactor-draining-*")
+    ]
+    assert len(redactor_pids) == 2
+    for pid in redactor_pids:
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+
+
+def test_redactor_exit_after_readiness_terminates_gateway_and_recovers(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        current_sleep=30,
+        redactor_exit_after_ready=0.2,
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
+    assert (tmp_path / "fallback-argv").exists()
+    child_pid = int((tmp_path / "child-pid").read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(child_pid, 0)
+    assert not (tmp_path / "modbus-endpoint").exists()
+
+
+def test_redactor_exit_after_startup_window_records_truthful_terminal_reason(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        current_sleep=30,
+        redactor_exit_after_ready=7,
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "fallback-argv").exists()
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "EXITED_AFTER_STARTUP_WINDOW"
+    assert health["reason"] == "REDACTOR_EXIT"
     assert not (tmp_path / "modbus-endpoint").exists()
 
 
