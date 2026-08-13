@@ -8,7 +8,6 @@ import datetime as dt
 import json
 import os
 import re
-import subprocess
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -138,29 +137,19 @@ def validate_artifact(
 
 
 def _github_token() -> str:
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
-    if token:
-        return token
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token"], check=True, capture_output=True, text=True
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise ValueError("GitHub token unavailable for online provenance verification") from exc
-    token = result.stdout.strip()
-    if not token:
-        raise ValueError("GitHub token unavailable for online provenance verification")
-    return token
+    return os.environ.get("GITHUB_TOKEN", "").strip()
 
 
 def _github_json(path: str, token: str) -> Any:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         f"https://api.github.com{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)

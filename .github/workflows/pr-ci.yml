@@ -113,8 +113,6 @@ jobs:
 
       - name: Validate gateway parity gate artifact
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.REPO_READ_TOKEN }}
         run: |
           set -euo pipefail
           gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"
