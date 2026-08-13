@@ -363,8 +363,8 @@ if "-modbus-tcp-endpoint-file" in sys.argv:
     raw_endpoint = Path(sys.argv[endpoint_index]).read_text(encoding="utf-8")
 else:
     raw_endpoint = ""
+Path(os.environ["TEST_CHILD_PID_FILE"]).write_text(str(os.getpid()), encoding="utf-8")
 if os.environ.get("TEST_PARENT_SIGNAL"):
-    Path(os.environ["TEST_CHILD_PID_FILE"]).write_text(str(os.getpid()), encoding="utf-8")
     os.kill(os.getppid(), int(os.environ["TEST_PARENT_SIGNAL"]))
 time.sleep(float(os.environ.get("TEST_CURRENT_SLEEP", "0")))
 if raw_endpoint:
@@ -406,6 +406,9 @@ def run_wrapper(
     fallback_exit: int = 0,
     fallback_sleep: float = 0,
     preexisting_health_state: str | None = None,
+    redactor_delay: float = 0,
+    fail_health_state: str | None = None,
+    wrapper_timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -444,6 +447,24 @@ def run_wrapper(
             json.dumps({"state": preexisting_health_state, "endpoint_ref": "sha256:stale"}),
             encoding="utf-8",
         )
+    guard_path = GUARD_PATH
+    if redactor_delay or fail_health_state is not None:
+        guard_path = tmp_path / "guard-proxy.py"
+        guard_path.write_text(
+            f'''import runpy
+import sys
+import time
+
+if len(sys.argv) > 1 and sys.argv[1] == "redact":
+    time.sleep({redactor_delay!r})
+if len(sys.argv) > 1 and sys.argv[1] == "health" and "--state" in sys.argv:
+    state = sys.argv[sys.argv.index("--state") + 1]
+    if state == {fail_health_state!r}:
+        raise SystemExit(2)
+runpy.run_path({str(GUARD_PATH)!r}, run_name="__main__")
+''',
+            encoding="utf-8",
+        )
     env = os.environ.copy()
     env.update(
         {
@@ -469,7 +490,7 @@ def run_wrapper(
             "HELIANTHUS_RUNTIME_STATE_PATH": str(runtime_state),
             "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
             "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
-            "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(GUARD_PATH),
+            "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(guard_path),
             "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
             "HELIANTHUS_MODBUS_HEALTH_FILE": str(health_path),
             "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
@@ -482,6 +503,7 @@ def run_wrapper(
         text=True,
         capture_output=True,
         check=False,
+        timeout=wrapper_timeout,
     )
 
 
@@ -631,6 +653,41 @@ def test_fallback_exit_after_startup_window_is_recorded_truthfully(
     assert health["state"] == "FALLBACK_EXITED"
     assert health["binary"] == "fallback"
     assert health["reason"] == "FALLBACK_RUNTIME_EXIT"
+
+
+def test_delayed_redactor_keeps_endpoint_secret_until_stream_is_drained(
+    tmp_path: Path,
+) -> None:
+    endpoint = "tcp://secret-host.example:502"
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_endpoint=endpoint),
+        redactor_delay=4,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert endpoint not in result.stdout + result.stderr
+    assert "secret-host.example" not in result.stdout + result.stderr
+    assert not (tmp_path / "modbus-endpoint").exists()
+
+
+def test_health_failure_after_child_launch_reaps_child_and_clears_endpoint(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        current_sleep=30,
+        fail_health_state="RUNNING",
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode != 0
+    child_pid = int((tmp_path / "child-pid").read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(child_pid, 0)
+    assert not (tmp_path / "modbus-endpoint").exists()
+    assert not (tmp_path / "fallback-argv").exists()
 
 
 def test_wrapper_marks_exit_after_bounded_running_window(tmp_path: Path) -> None:

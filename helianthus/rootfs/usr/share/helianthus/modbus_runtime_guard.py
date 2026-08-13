@@ -234,6 +234,12 @@ def _clear_endpoint_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _clear_runtime_command(args: argparse.Namespace) -> int:
+    clear_endpoint_file(args.endpoint_file)
+    clear_health_file(args.health)
+    return 0
+
+
 def _redact_command(args: argparse.Namespace) -> int:
     try:
         endpoint = args.endpoint_file.read_text(encoding="utf-8")
@@ -254,11 +260,20 @@ def _redact_command(args: argparse.Namespace) -> int:
         if hostname:
             values.append(hostname)
     values = sorted(set(values), key=len, reverse=True)
-    for line in sys.stdin:
-        for value in values:
-            line = line.replace(value, "[REDACTED_MODBUS_ENDPOINT]")
-        sys.stdout.write(line)
-        sys.stdout.flush()
+    if args.ready_file is not None:
+        args.ready_file.write_text("ready\n", encoding="utf-8")
+        args.ready_file.chmod(0o600)
+    stream = (
+        args.input_fifo.open("r", encoding="utf-8")
+        if args.input_fifo is not None
+        else contextlib.nullcontext(sys.stdin)
+    )
+    with stream as input_stream:
+        for line in input_stream:
+            for value in values:
+                line = line.replace(value, "[REDACTED_MODBUS_ENDPOINT]")
+            sys.stdout.write(line)
+            sys.stdout.flush()
     return 0
 
 
@@ -286,8 +301,15 @@ def parser() -> argparse.ArgumentParser:
     clear_endpoint.add_argument("--endpoint-file", type=Path, required=True)
     clear_endpoint.set_defaults(handler=_clear_endpoint_command)
 
+    clear_runtime = commands.add_parser("clear-runtime")
+    clear_runtime.add_argument("--endpoint-file", type=Path, required=True)
+    clear_runtime.add_argument("--health", type=Path, required=True)
+    clear_runtime.set_defaults(handler=_clear_runtime_command)
+
     redact = commands.add_parser("redact")
     redact.add_argument("--endpoint-file", type=Path, required=True)
+    redact.add_argument("--input-fifo", type=Path)
+    redact.add_argument("--ready-file", type=Path)
     redact.set_defaults(handler=_redact_command)
     return result
 

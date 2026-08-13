@@ -75,6 +75,65 @@ modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
 modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"
 modbus_endpoint_ref="${MODBUS_ENDPOINT_REF}"
 MODBUS_RECOVERY_MAX_ATTEMPTS=3
+modbus_child_pid=""
+modbus_redactor_pids=()
+modbus_redact_dir=""
+
+modbus_terminate_child() {
+  local remaining
+  if [ -z "${modbus_child_pid}" ]; then
+    return 0
+  fi
+  kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  remaining=50
+  while kill -0 "${modbus_child_pid}" 2>/dev/null && [ "${remaining}" -gt 0 ]; do
+    sleep 0.1
+    remaining=$((remaining - 1))
+  done
+  if kill -0 "${modbus_child_pid}" 2>/dev/null; then
+    kill -KILL "${modbus_child_pid}" 2>/dev/null || true
+  fi
+  wait "${modbus_child_pid}" 2>/dev/null || true
+  modbus_child_pid=""
+}
+
+modbus_cleanup_redactors() {
+  local pid status
+  status=0
+  for pid in "${modbus_redactor_pids[@]}"; do
+    if ! wait "${pid}"; then
+      status=1
+    fi
+  done
+  modbus_redactor_pids=()
+  if [ -n "${modbus_redact_dir}" ]; then
+    rm -f \
+      "${modbus_redact_dir}/stdout" \
+      "${modbus_redact_dir}/stderr" \
+      "${modbus_redact_dir}/stdout.ready" \
+      "${modbus_redact_dir}/stderr.ready"
+    rmdir "${modbus_redact_dir}" 2>/dev/null || status=1
+    modbus_redact_dir=""
+  fi
+  return "${status}"
+}
+
+modbus_abort_redactors() {
+  local pid
+  for pid in "${modbus_redactor_pids[@]}"; do
+    kill -TERM "${pid}" 2>/dev/null || true
+  done
+  modbus_cleanup_redactors || true
+}
+
+modbus_fail_closed() {
+  modbus_terminate_child
+  modbus_abort_redactors
+  python3 "${modbus_guard}" clear-runtime \
+    --endpoint-file "${modbus_endpoint_file}" \
+    --health "${modbus_health_file}" >/dev/null 2>&1 || true
+  bashio::exit.nok "$1"
+}
 
 modbus_write_health() {
   local state attempt binary reason
@@ -82,7 +141,7 @@ modbus_write_health() {
   attempt="$2"
   binary="$3"
   reason="$4"
-  python3 "${modbus_guard}" health \
+  if ! python3 "${modbus_guard}" health \
     --health "${modbus_health_file}" \
     --enabled "${modbus_tcp_enabled}" \
     --endpoint-ref "${modbus_endpoint_ref}" \
@@ -90,8 +149,9 @@ modbus_write_health() {
     --attempt "${attempt}" \
     --max-attempts "${MODBUS_RECOVERY_MAX_ATTEMPTS}" \
     --binary "${binary}" \
-    --reason "${reason}" || \
-    bashio::exit.nok "Modbus TCP health update failed"
+    --reason "${reason}"; then
+    modbus_fail_closed "Modbus TCP health update failed"
+  fi
 }
 
 # Validate protected eeBUS values before bashio captures them. Bash command
@@ -808,7 +868,6 @@ if [ "${#fallback_semantic_cache_args[@]}" -ne 0 ]; then modbus_fallback_args+=(
 if [ "${#fallback_proxy_listen_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_proxy_listen_args[@]}"); fi
 
 modbus_stop_requested=false
-modbus_child_pid=""
 modbus_passed_startup_window=false
 modbus_forward_signal() {
   modbus_stop_requested=true
@@ -819,14 +878,43 @@ modbus_forward_signal() {
 trap modbus_forward_signal TERM INT
 
 modbus_run_current() {
-  local attempt_started elapsed rc
+  local attempt_started elapsed rc ready_checks
   modbus_passed_startup_window=false
   if bashio::var.true "${modbus_stop_requested}"; then
     return 143
   fi
+  modbus_redact_dir=$(mktemp -d "${modbus_endpoint_file%/*}/.modbus-redact.XXXXXX") || \
+    modbus_fail_closed "Modbus TCP redaction setup failed"
+  chmod 0700 "${modbus_redact_dir}" || \
+    modbus_fail_closed "Modbus TCP redaction setup failed"
+  mkfifo "${modbus_redact_dir}/stdout" "${modbus_redact_dir}/stderr" || \
+    modbus_fail_closed "Modbus TCP redaction setup failed"
+  chmod 0600 "${modbus_redact_dir}/stdout" "${modbus_redact_dir}/stderr" || \
+    modbus_fail_closed "Modbus TCP redaction setup failed"
+  python3 "${modbus_guard}" redact \
+    --endpoint-file "${modbus_endpoint_file}" \
+    --input-fifo "${modbus_redact_dir}/stdout" \
+    --ready-file "${modbus_redact_dir}/stdout.ready" &
+  modbus_redactor_pids+=("$!")
+  python3 "${modbus_guard}" redact \
+    --endpoint-file "${modbus_endpoint_file}" \
+    --input-fifo "${modbus_redact_dir}/stderr" \
+    --ready-file "${modbus_redact_dir}/stderr.ready" >&2 &
+  modbus_redactor_pids+=("$!")
+  ready_checks=100
+  while { [ ! -f "${modbus_redact_dir}/stdout.ready" ] || [ ! -f "${modbus_redact_dir}/stderr.ready" ]; } && [ "${ready_checks}" -gt 0 ]; do
+    if ! kill -0 "${modbus_redactor_pids[0]}" 2>/dev/null || ! kill -0 "${modbus_redactor_pids[1]}" 2>/dev/null; then
+      modbus_fail_closed "Modbus TCP redaction setup failed"
+    fi
+    sleep 0.05
+    ready_checks=$((ready_checks - 1))
+  done
+  if [ "${ready_checks}" -eq 0 ]; then
+    modbus_fail_closed "Modbus TCP redaction setup timed out"
+  fi
   "${gateway_bin}" "${modbus_current_args[@]}" \
-    > >(python3 "${modbus_guard}" redact --endpoint-file "${modbus_endpoint_file}") \
-    2> >(python3 "${modbus_guard}" redact --endpoint-file "${modbus_endpoint_file}" >&2) &
+    > "${modbus_redact_dir}/stdout" \
+    2> "${modbus_redact_dir}/stderr" &
   modbus_child_pid=$!
   if bashio::var.true "${modbus_stop_requested}"; then
     kill -TERM "${modbus_child_pid}" 2>/dev/null || true
@@ -843,6 +931,10 @@ modbus_run_current() {
   done
   if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
   modbus_child_pid=""
+  if ! modbus_cleanup_redactors; then
+    python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
+    return 125
+  fi
   return "${rc}"
 }
 
