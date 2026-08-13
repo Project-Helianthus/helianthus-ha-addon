@@ -187,11 +187,17 @@ def clear_endpoint_file(path: Path) -> None:
         path.unlink()
 
 
+def clear_health_file(path: Path) -> None:
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()
+
+
 def _shell_assignment(name: str, value: str) -> str:
     return f"{name}={shlex.quote(value)}"
 
 
 def _validate_command(args: argparse.Namespace) -> int:
+    clear_health_file(args.health)
     clear_endpoint_file(args.endpoint_file)
     config = load_config(args.options)
     write_endpoint_file(args.endpoint_file, config)
@@ -255,6 +261,7 @@ def parser() -> argparse.ArgumentParser:
     validate = commands.add_parser("validate")
     validate.add_argument("--options", type=Path, required=True)
     validate.add_argument("--endpoint-file", type=Path, required=True)
+    validate.add_argument("--health", type=Path, required=True)
     validate.set_defaults(handler=_validate_command)
 
     health = commands.add_parser("health")

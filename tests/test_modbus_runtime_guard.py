@@ -148,6 +148,7 @@ def test_disabled_state_is_inert_even_with_retained_malformed_fields(
     assert config.endpoint == ""
     assert config.endpoint_ref == ""
 
+
 def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Path) -> None:
     endpoint = "tcp://operator:topsecret@192.0.2.40:502"
     options = write_options(tmp_path, enabled_options(modbus_tcp_endpoint=endpoint))
@@ -161,6 +162,8 @@ def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Pat
             str(options),
             "--endpoint-file",
             str(endpoint_file),
+            "--health",
+            str(tmp_path / "health.json"),
         ],
         text=True,
         capture_output=True,
@@ -208,6 +211,8 @@ def test_endpoint_file_is_atomic_private_and_cleared_before_invalid_update(
             str(valid_options),
             "--endpoint-file",
             str(endpoint_file),
+            "--health",
+            str(tmp_path / "health.json"),
         ],
         text=True,
         capture_output=True,
@@ -229,6 +234,8 @@ def test_endpoint_file_is_atomic_private_and_cleared_before_invalid_update(
             str(invalid_options),
             "--endpoint-file",
             str(endpoint_file),
+            "--health",
+            str(tmp_path / "health.json"),
         ],
         text=True,
         capture_output=True,
@@ -327,10 +334,19 @@ def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> N
     assert "-modbus-tcp-enabled" not in run.split("modbus_fallback_args", 1)[-1]
 
 
-def write_gateway_stub(path: Path, *, fallback: bool) -> None:
+def write_gateway_stub(
+    path: Path, *, fallback: bool, unsupported_optional_flag: str | None = None
+) -> None:
     if fallback:
-        body = '''
+        body = f'''
 Path(os.environ["TEST_FALLBACK_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
+unsupported_optional_flag = {unsupported_optional_flag!r}
+if unsupported_optional_flag and any(
+    arg == "-" + unsupported_optional_flag
+    or arg.startswith("-" + unsupported_optional_flag + "=")
+    for arg in sys.argv[1:]
+):
+    raise SystemExit(64)
 raise SystemExit(0)
 '''
     else:
@@ -346,14 +362,21 @@ if "-modbus-tcp-endpoint-file" in sys.argv:
     raw_endpoint = Path(sys.argv[endpoint_index]).read_text(encoding="utf-8")
 else:
     raw_endpoint = ""
-if os.environ.get("TEST_SIGNAL_PARENT") == "true":
+if os.environ.get("TEST_PARENT_SIGNAL"):
     Path(os.environ["TEST_CHILD_PID_FILE"]).write_text(str(os.getpid()), encoding="utf-8")
-    os.kill(os.getppid(), signal.SIGTERM)
+    os.kill(os.getppid(), int(os.environ["TEST_PARENT_SIGNAL"]))
 time.sleep(float(os.environ.get("TEST_CURRENT_SLEEP", "0")))
 if raw_endpoint:
     sys.stderr.write("dial " + raw_endpoint + " failed\\n")
 raise SystemExit(int(os.environ.get("TEST_CURRENT_EXIT", "42")))
 '''
+    optional_help = {
+        "enable-static-seed-table": "  -enable-static-seed-table boolean\\n",
+        "instance-guid-source": "  -instance-guid-source string\\n",
+        "semantic-cache-path": "  -semantic-cache-path string\\n",
+    }
+    optional_help.pop(unsupported_optional_flag, None)
+    optional_help_text = "".join(optional_help.values())
     script = f'''#!/usr/bin/env python3
 import json
 import os
@@ -363,7 +386,7 @@ import time
 from pathlib import Path
 
 if "--help" in sys.argv:
-    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint-file string\\n  -modbus-tcp-dial-timeout duration\\n  -instance-guid-source string\\n  -semantic-cache-path string\\n")
+    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint-file string\\n  -modbus-tcp-dial-timeout duration\\n{optional_help_text}")
     raise SystemExit(0)
 {body}
 '''
@@ -377,14 +400,20 @@ def run_wrapper(
     *,
     current_exit: int = 42,
     current_sleep: float = 0,
-    signal_parent: bool = False,
+    signal_parent: signal.Signals | None = None,
+    fallback_unsupported_optional_flag: str | None = None,
+    preexisting_health_state: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
     wrapper = tmp_path / "run"
     options = write_options(tmp_path, payload)
     write_gateway_stub(current, fallback=False)
-    write_gateway_stub(fallback, fallback=True)
+    write_gateway_stub(
+        fallback,
+        fallback=True,
+        unsupported_optional_flag=fallback_unsupported_optional_flag,
+    )
 
     run = RUN_PATH.read_text(encoding="utf-8")
     run = run.replace("/usr/local/bin/helianthus-gateway-fallback", "${TEST_FALLBACK_GATEWAY_BIN}")
@@ -406,6 +435,12 @@ def run_wrapper(
         ),
         encoding="utf-8",
     )
+    health_path = tmp_path / "health.json"
+    if preexisting_health_state is not None:
+        health_path.write_text(
+            json.dumps({"state": preexisting_health_state, "endpoint_ref": "sha256:stale"}),
+            encoding="utf-8",
+        )
     env = os.environ.copy()
     env.update(
         {
@@ -421,7 +456,7 @@ def run_wrapper(
             "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
-            "TEST_SIGNAL_PARENT": str(signal_parent).lower(),
+            "TEST_PARENT_SIGNAL": str(signal_parent.value) if signal_parent else "",
             "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(
                 ROOT
                 / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
@@ -431,7 +466,7 @@ def run_wrapper(
             "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
             "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(GUARD_PATH),
             "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
-            "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health.json"),
+            "HELIANTHUS_MODBUS_HEALTH_FILE": str(health_path),
             "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
         }
     )
@@ -494,14 +529,15 @@ def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
     assert health["enabled"] is False
 
 
+@pytest.mark.parametrize("parent_signal", [signal.SIGTERM, signal.SIGINT])
 def test_wrapper_signal_during_child_launch_stops_child_without_fallback(
-    tmp_path: Path,
+    tmp_path: Path, parent_signal: signal.Signals
 ) -> None:
     result = run_wrapper(
         tmp_path,
         enabled_options(),
         current_sleep=5,
-        signal_parent=True,
+        signal_parent=parent_signal,
     )
 
     assert result.returncode != 0
@@ -518,6 +554,49 @@ def test_wrapper_signal_during_child_launch_stops_child_without_fallback(
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
     assert health["state"] == "STOPPED"
     assert health["reason"] == "SIGNAL"
+
+
+@pytest.mark.parametrize("stale_state", ["RUNNING", "FALLBACK_ACTIVE"])
+def test_wrapper_invalid_config_clears_stale_health(
+    tmp_path: Path, stale_state: str
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="invalid"),
+        preexisting_health_state=stale_state,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "health.json").exists()
+    assert not (tmp_path / "current-count").exists()
+    assert not (tmp_path / "fallback-argv").exists()
+
+
+@pytest.mark.parametrize(
+    "unsupported_flag",
+    ["enable-static-seed-table", "instance-guid-source", "semantic-cache-path"],
+)
+def test_fallback_omits_optional_flag_unsupported_by_fallback_binary(
+    tmp_path: Path, unsupported_flag: str
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        fallback_unsupported_optional_flag=unsupported_flag,
+    )
+
+    assert result.returncode == 0, result.stderr
+    current_argv = (tmp_path / "current-argv").read_text(encoding="utf-8")
+    fallback_argv = (tmp_path / "fallback-argv").read_text(encoding="utf-8")
+    expected = "-" + unsupported_flag
+    assert any(
+        arg == expected or arg.startswith(expected + "=")
+        for arg in current_argv.splitlines()
+    )
+    assert not any(
+        arg == expected or arg.startswith(expected + "=")
+        for arg in fallback_argv.splitlines()
+    )
 
 
 def test_wrapper_clean_early_exit_still_reaches_bounded_fallback(
