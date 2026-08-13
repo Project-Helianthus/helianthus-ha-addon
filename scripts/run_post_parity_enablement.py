@@ -32,6 +32,11 @@ def parse_args() -> argparse.Namespace:
         help="Expected gateway source repository",
     )
     parser.add_argument(
+        "--source-ref",
+        required=True,
+        help="Expected full gateway commit pinned by this add-on build",
+    )
+    parser.add_argument(
         "--addon-config",
         default="helianthus/config.json",
         help="Path to add-on config.json",
@@ -112,7 +117,9 @@ def main() -> int:
         print(f"Post-parity enablement: FAIL ({exc})")
         return 1
 
-    rollout_errors = guardrails.validate_guardrails(guardrail, artifact, args.source_repo)
+    rollout_errors = guardrails.validate_guardrails(
+        guardrail, artifact, args.source_repo, args.source_ref
+    )
     if rollout_errors:
         print(f"Post-parity enablement: FAIL ({'; '.join(rollout_errors)})")
         return 1

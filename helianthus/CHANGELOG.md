@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.41 (2026-08-13)
+
+- Package the M9 promoted semantic consumer chain: 18 locked eeBUS leaves are
+  available through GraphQL and Portal while stable eBUS MCP remains owner-only.
+- Pair with Home Assistant integration commit
+  `8b069f82d5aa479919e0649af6eb2d58db1a04f8` for existing-entity enrichment and
+  the read-only DHW overrun diagnostic sensor.
+
 ## 0.6.40 (2026-08-13)
 
 - Canonicalize empty eeBUS source-profile function lists as JSON arrays so

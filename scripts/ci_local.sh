@@ -4,6 +4,12 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"
+if [[ ! "$gateway_version" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Invalid EBUSGATEWAY_VERSION in helianthus/Dockerfile: ${gateway_version:-<empty>}" >&2
+  exit 1
+fi
+
 echo "==> validate JSON syntax"
 found=0
 while IFS= read -r file; do
@@ -48,13 +54,14 @@ echo "==> persistent eeBUS wrapper wiring"
 python3 scripts/check_eebus_wrapper.py
 
 echo "==> gateway parity gate readiness"
-python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json
+python3 -m pytest tests/test_gateway_parity_gate.py -q
+python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --verify-github
 
 echo "==> rollout guardrails"
-python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json
+python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version"
 
 echo "==> post-parity enablement tasks"
-python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
+python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
 
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 scripts/check_markdown_private_ips.py --self-test

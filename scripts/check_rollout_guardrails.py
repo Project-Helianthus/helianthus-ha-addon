@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
         default=parity.REQUIRED_SOURCE_REPO,
         help="Expected gateway source repository",
     )
+    parser.add_argument(
+        "--source-ref",
+        required=True,
+        help="Expected full gateway commit pinned by this add-on build",
+    )
     return parser.parse_args()
 
 
@@ -39,7 +44,9 @@ def load_guardrail(path: str) -> dict:
     return payload
 
 
-def validate_guardrails(guardrail: dict, artifact: dict, source_repo: str) -> list[str]:
+def validate_guardrails(
+    guardrail: dict, artifact: dict, source_repo: str, source_ref: str
+) -> list[str]:
     errors: list[str] = []
 
     stage = str(guardrail.get("stage", "")).strip()
@@ -73,7 +80,7 @@ def validate_guardrails(guardrail: dict, artifact: dict, source_repo: str) -> li
     if not allow_consumer_expansion:
         errors.append("post_parity stage requires allow_consumer_expansion=true")
 
-    parity_errors = parity.validate_artifact(artifact, source_repo)
+    parity_errors = parity.validate_artifact(artifact, source_repo, source_ref)
     if parity_errors:
         errors.extend(parity_errors)
         return errors
@@ -116,7 +123,7 @@ def main() -> int:
         print(f"Rollout guardrails: FAIL ({exc})")
         return 1
 
-    errors = validate_guardrails(guardrail, artifact, args.source_repo)
+    errors = validate_guardrails(guardrail, artifact, args.source_repo, args.source_ref)
     if errors:
         print(f"Rollout guardrails: FAIL ({'; '.join(errors)})")
         return 1
