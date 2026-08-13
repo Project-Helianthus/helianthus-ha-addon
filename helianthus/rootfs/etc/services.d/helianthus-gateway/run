@@ -84,8 +84,9 @@ modbus_write_health() {
   binary="$3"
   reason="$4"
   python3 "${modbus_guard}" health \
-    --options "${modbus_options_path}" \
     --health "${modbus_health_file}" \
+    --enabled "${modbus_tcp_enabled}" \
+    --endpoint-ref "${modbus_endpoint_ref}" \
     --state "${state}" \
     --attempt "${attempt}" \
     --max-attempts "${MODBUS_RECOVERY_MAX_ATTEMPTS}" \

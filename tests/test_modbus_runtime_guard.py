@@ -154,14 +154,52 @@ def test_cli_error_and_redactor_never_emit_endpoint_or_credentials(tmp_path: Pat
     env["HELIANTHUS_MODBUS_REDACT_VALUE"] = "tcp://192.0.2.40:502"
     redacted = subprocess.run(
         [sys.executable, str(GUARD_PATH), "redact"],
-        input="dial tcp://192.0.2.40:502 and 192.0.2.40:502 failed\n",
+        input="dial tcp://192.0.2.40:502 and 192.0.2.40:502; lookup 192.0.2.40 failed\n",
         text=True,
         capture_output=True,
         env=env,
         check=True,
     )
     assert "192.0.2.40" not in redacted.stdout
-    assert redacted.stdout == "dial [REDACTED_MODBUS_ENDPOINT] and [REDACTED_MODBUS_ENDPOINT] failed\n"
+    assert redacted.stdout == (
+        "dial [REDACTED_MODBUS_ENDPOINT] and [REDACTED_MODBUS_ENDPOINT]; "
+        "lookup [REDACTED_MODBUS_ENDPOINT] failed\n"
+    )
+
+
+def test_health_cli_uses_validated_snapshot_not_mutable_options(tmp_path: Path) -> None:
+    health = tmp_path / "health.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(GUARD_PATH),
+            "health",
+            "--health",
+            str(health),
+            "--enabled",
+            "true",
+            "--endpoint-ref",
+            "sha256:0123456789abcdef",
+            "--state",
+            "CONFIG_VALIDATED",
+            "--attempt",
+            "1",
+            "--max-attempts",
+            "3",
+            "--binary",
+            "current",
+            "--reason",
+            "CONFIG_VALID",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(health.read_text(encoding="utf-8"))
+    assert payload["enabled"] is True
+    assert payload["endpoint_ref"] == "sha256:0123456789abcdef"
 
 
 def test_health_is_atomic_private_deterministic_and_redacted(tmp_path: Path) -> None:

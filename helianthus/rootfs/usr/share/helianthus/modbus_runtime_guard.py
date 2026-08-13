@@ -175,9 +175,15 @@ def _validate_command(args: argparse.Namespace) -> int:
 
 
 def _health_command(args: argparse.Namespace) -> int:
+    enabled = args.enabled == "true"
+    if enabled:
+        if re.fullmatch(r"sha256:[0-9a-f]{16}", args.endpoint_ref) is None:
+            raise ConfigError("invalid endpoint reference")
+    elif args.endpoint_ref:
+        raise ConfigError("disabled health contains an endpoint reference")
     write_health(
         args.health,
-        load_config(args.options),
+        Config(enabled, "", "", 0, args.endpoint_ref),
         state=args.state,
         attempt=args.attempt,
         max_attempts=args.max_attempts,
@@ -193,11 +199,16 @@ def _redact_command(_args: argparse.Namespace) -> int:
     if endpoint:
         values.append(endpoint)
         try:
-            netloc = urlsplit(endpoint).netloc
+            parsed = urlsplit(endpoint)
+            netloc = parsed.netloc
+            hostname = parsed.hostname or ""
         except ValueError:
             netloc = ""
+            hostname = ""
         if netloc:
             values.append(netloc)
+        if hostname:
+            values.append(hostname)
     values = sorted(set(values), key=len, reverse=True)
     for line in sys.stdin:
         for value in values:
@@ -215,8 +226,9 @@ def parser() -> argparse.ArgumentParser:
     validate.set_defaults(handler=_validate_command)
 
     health = commands.add_parser("health")
-    health.add_argument("--options", type=Path, required=True)
     health.add_argument("--health", type=Path, required=True)
+    health.add_argument("--enabled", choices=("true", "false"), required=True)
+    health.add_argument("--endpoint-ref", default="")
     health.add_argument("--state", choices=sorted(_STATES), required=True)
     health.add_argument("--attempt", type=int, required=True)
     health.add_argument("--max-attempts", type=int, required=True)
