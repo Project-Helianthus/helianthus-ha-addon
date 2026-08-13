@@ -84,6 +84,8 @@ modbus_redactor_pids=()
 modbus_redact_dir=""
 modbus_stop_requested=false
 modbus_runtime_failure_reason=""
+modbus_active_attempt=0
+modbus_active_binary=current
 
 modbus_terminate_child() {
   local remaining
@@ -181,16 +183,12 @@ modbus_write_health() {
 }
 
 modbus_forward_signal() {
-  local pid
+  trap - TERM INT
   modbus_stop_requested=true
-  if [ -n "${modbus_child_pid}" ]; then
-    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
-  fi
-  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
-    for pid in "${modbus_redactor_pids[@]}"; do
-      kill -TERM "${pid}" 2>/dev/null || true
-    done
-  fi
+  modbus_terminate_child
+  modbus_abort_redactors
+  modbus_write_health STOPPED "${modbus_active_attempt}" "${modbus_active_binary}" SIGNAL
+  exit 143
 }
 
 modbus_exit_cleanup() {
@@ -1033,6 +1031,8 @@ modbus_run_fallback() {
 
 attempt=1
 while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
+  modbus_active_attempt="${attempt}"
+  modbus_active_binary=current
   modbus_write_health CONFIG_VALIDATED "${attempt}" current CONFIG_VALID
   if modbus_run_current; then rc=0; else rc=$?; fi
   if bashio::var.true "${modbus_stop_requested}"; then
@@ -1054,6 +1054,8 @@ done
 bashio::log.error "Modbus TCP startup retries exhausted for endpoint_ref=${modbus_endpoint_ref}; starting previous gateway binary with Modbus disabled"
 python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" || \
   bashio::exit.nok "Modbus TCP endpoint cleanup failed before recovery fallback"
+modbus_active_attempt="${MODBUS_RECOVERY_MAX_ATTEMPTS}"
+modbus_active_binary=fallback
 modbus_write_health FALLBACK_STARTING "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
 if modbus_run_fallback; then rc=0; else rc=$?; fi
 if bashio::var.true "${modbus_stop_requested}"; then

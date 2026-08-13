@@ -335,12 +335,18 @@ def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> N
 
 
 def write_gateway_stub(
-    path: Path, *, fallback: bool, unsupported_optional_flag: str | None = None
+    path: Path,
+    *,
+    fallback: bool,
+    unsupported_optional_flag: str | None = None,
+    ignore_term: bool = False,
 ) -> None:
     if fallback:
         body = f'''
 Path(os.environ["TEST_FALLBACK_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
 unsupported_optional_flag = {unsupported_optional_flag!r}
+if {ignore_term!r}:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 if unsupported_optional_flag and any(
     arg == "-" + unsupported_optional_flag
     or arg.startswith("-" + unsupported_optional_flag + "=")
@@ -405,6 +411,7 @@ def run_wrapper(
     fallback_unsupported_optional_flag: str | None = None,
     fallback_exit: int = 0,
     fallback_sleep: float = 0,
+    fallback_ignore_term: bool = False,
     preexisting_health_state: str | None = None,
     redactor_delay: float = 0,
     fail_health_state: str | None = None,
@@ -415,6 +422,8 @@ def run_wrapper(
     hang_redactor_after_drain: bool = False,
     redactor_exit_after_ready: float | None = None,
     startup_delay_before_disabled_launch: float = 0,
+    startup_delay_before_gateway_launch: float = 0,
+    record_health_calls: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -425,6 +434,7 @@ def run_wrapper(
         fallback,
         fallback=True,
         unsupported_optional_flag=fallback_unsupported_optional_flag,
+        ignore_term=fallback_ignore_term,
     )
 
     run = RUN_PATH.read_text(encoding="utf-8")
@@ -437,6 +447,14 @@ def run_wrapper(
             'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
             f"sleep {startup_delay_before_disabled_launch!r} || true\n"
             'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
+            1,
+        )
+    if startup_delay_before_gateway_launch:
+        run = run.replace(
+            '  "${gateway_bin}" "${modbus_current_args[@]}" \\\n',
+            '  : > "${TEST_SIGNAL_BOUNDARY_FILE}"\n'
+            f"  sleep {startup_delay_before_gateway_launch!r} || true\n"
+            '  "${gateway_bin}" "${modbus_current_args[@]}" \\\n',
             1,
         )
     wrapper.write_text(BASHIO_PRELUDE + "\n" + run, encoding="utf-8")
@@ -466,6 +484,7 @@ def run_wrapper(
         or fail_health_state is not None
         or hang_redactor_after_drain
         or redactor_exit_after_ready is not None
+        or record_health_calls
     ):
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
@@ -489,6 +508,9 @@ if is_redactor and {redactor_exit_after_ready is not None!r}:
     threading.Thread(target=exit_after_ready, daemon=True).start()
 if len(sys.argv) > 1 and sys.argv[1] == "health" and "--state" in sys.argv:
     state = sys.argv[sys.argv.index("--state") + 1]
+    if {record_health_calls!r}:
+        with Path({str(tmp_path / "health-calls")!r}).open("a", encoding="utf-8") as handle:
+            handle.write(state + "\\n")
     if state == {fail_health_state!r}:
         raise SystemExit(2)
 try:
@@ -516,6 +538,7 @@ except SystemExit as error:
             "TEST_CURRENT_ENV_FILE": str(tmp_path / "current-env.json"),
             "TEST_FALLBACK_ARGV_FILE": str(tmp_path / "fallback-argv"),
             "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
+            "TEST_SIGNAL_BOUNDARY_FILE": str(tmp_path / "signal-boundary"),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
             "TEST_FALLBACK_EXIT": str(fallback_exit),
@@ -562,6 +585,15 @@ except SystemExit as error:
             ready = len(list(tmp_path.glob("redactor-draining-*"))) == 2
         elif signal_wait_for == "startup_delay":
             ready = True
+        elif signal_wait_for == "gateway_launch_boundary":
+            ready = (tmp_path / "signal-boundary").exists()
+        elif signal_wait_for == "retry_backoff":
+            log_path = tmp_path / "wrapper.log"
+            ready = log_path.exists() and "bounded retry" in log_path.read_text(
+                encoding="utf-8"
+            )
+        elif signal_wait_for == "fallback_running":
+            ready = (tmp_path / "fallback-argv").exists()
         else:
             raise ValueError(f"unknown signal wait target: {signal_wait_for}")
         if ready:
@@ -644,6 +676,78 @@ def test_signal_before_disabled_launch_never_execs_gateway(
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
     assert health["state"] == "STOPPED"
     assert health["reason"] == "SIGNAL"
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_at_enabled_launch_boundary_is_terminal(
+    tmp_path: Path, wrapper_signal: signal.Signals
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        startup_delay_before_gateway_launch=2,
+        signal_wrapper_after=0,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="gateway_launch_boundary",
+        record_health_calls=True,
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "child-pid").exists()
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+    assert (tmp_path / "health-calls").read_text(encoding="utf-8").splitlines() == [
+        "CONFIG_VALIDATED",
+        "STOPPED",
+    ]
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_during_retry_backoff_cannot_start_another_attempt(
+    tmp_path: Path, wrapper_signal: signal.Signals
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        signal_wrapper_after=0,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="retry_backoff",
+        record_health_calls=True,
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "1"
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+    assert (tmp_path / "health-calls").read_text(encoding="utf-8").splitlines() == [
+        "CONFIG_VALIDATED",
+        "RECOVERY_RETRY",
+        "STOPPED",
+    ]
+
+
+def test_signal_boundedly_kills_and_reaps_term_ignoring_fallback(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        fallback_sleep=30,
+        fallback_ignore_term=True,
+        signal_wrapper_after=0.2,
+        signal_wait_for="fallback_running",
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert time.time() - (tmp_path / "fallback-argv").stat().st_mtime < 8
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "STOPPED"
+    assert health["binary"] == "fallback"
+    assert health["reason"] == "SIGNAL"
+    assert not (tmp_path / "modbus-endpoint").exists()
 
 
 @pytest.mark.parametrize("parent_signal", [signal.SIGTERM, signal.SIGINT])
