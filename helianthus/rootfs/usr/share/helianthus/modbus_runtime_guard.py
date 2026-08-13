@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import ipaddress
 import json
@@ -154,10 +155,8 @@ def write_health(
             os.fsync(handle.fileno())
         os.replace(temporary, path)
     finally:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary)
-        except FileNotFoundError:
-            pass
 
 
 def _shell_assignment(name: str, value: str) -> str:
