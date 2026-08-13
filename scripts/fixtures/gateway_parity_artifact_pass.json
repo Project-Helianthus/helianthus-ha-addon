@@ -1,7 +1,26 @@
 {
+  "evidence_kind": "github_actions_tree_equivalent_ci_v1",
   "source_repo": "Project-Helianthus/helianthus-ebusgateway",
   "source_ref": "2af7e9e0c1342e7ea2961c859dd73021879cbffa",
-  "generated_at": "2026-02-24T00:00:00Z",
+  "source_tree": "8d5c3ba4a9ca760cdb9a832857091f6c3665b2a5",
+  "tested_ref": "3df9c8c0b04008699336643cb7988533df55201f",
+  "tested_tree": "8d5c3ba4a9ca760cdb9a832857091f6c3665b2a5",
+  "generated_at": "2026-08-13T07:00:37Z",
+  "workflow_run": {
+    "id": 31675678053,
+    "attempt": 1,
+    "head_sha": "3df9c8c0b04008699336643cb7988533df55201f",
+    "status": "completed",
+    "conclusion": "success",
+    "updated_at": "2026-08-13T07:00:37Z",
+    "url": "https://github.com/Project-Helianthus/helianthus-ebusgateway/actions/runs/31675678053",
+    "jobs": [
+      {"id": 94369611208, "name": "build", "status": "completed", "conclusion": "success"},
+      {"id": 94369611219, "name": "test", "status": "completed", "conclusion": "success"},
+      {"id": 94369611250, "name": "terminology", "status": "completed", "conclusion": "success"},
+      {"id": 94369611315, "name": "lint", "status": "completed", "conclusion": "success"}
+    ]
+  },
   "gates": {
     "parity_contract": {
       "status": "pass",

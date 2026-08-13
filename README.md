@@ -133,9 +133,9 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | smoke docs gate (CI parity) | `python3 scripts/validate_smoke_docs.py` |
 | eeBUS HA network proof contract | `python3 scripts/check_eebus_ha_network_proof.py --self-test && python3 scripts/check_eebus_ha_network_proof.py --artifact scripts/fixtures/eebus_ha_network_proof_contract_pass.json --mode contract` |
 | source address wrapper migration | `python3 scripts/check_source_addr_wrapper.py` |
-| gateway parity gate readiness | `python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
-| rollout guardrails | `python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json` |
-| post-parity enablement tasks | `python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
+| gateway parity gate readiness | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --verify-github` |
+| rollout guardrails | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version"` |
+| post-parity enablement tasks | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
 | Markdown private IPv4 gate | `python3 scripts/check_markdown_private_ips.py --self-test && python3 scripts/check_markdown_private_ips.py` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
 

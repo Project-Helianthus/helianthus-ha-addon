@@ -113,10 +113,12 @@ jobs:
 
       - name: Validate gateway parity gate artifact
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.REPO_READ_TOKEN }}
         run: |
           set -euo pipefail
           gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"
-          python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "${gateway_version}"
+          python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "${gateway_version}" --verify-github
 
       - name: Validate rollout guardrails
         shell: bash

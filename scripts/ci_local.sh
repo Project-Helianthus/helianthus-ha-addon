@@ -54,7 +54,7 @@ echo "==> persistent eeBUS wrapper wiring"
 python3 scripts/check_eebus_wrapper.py
 
 echo "==> gateway parity gate readiness"
-python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version"
+python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --verify-github
 
 echo "==> rollout guardrails"
 python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version"
