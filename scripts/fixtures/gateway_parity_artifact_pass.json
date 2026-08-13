@@ -1,6 +1,6 @@
 {
   "source_repo": "Project-Helianthus/helianthus-ebusgateway",
-  "source_ref": "refs/heads/mcpfirst-cruise-control",
+  "source_ref": "2af7e9e0c1342e7ea2961c859dd73021879cbffa",
   "generated_at": "2026-02-24T00:00:00Z",
   "gates": {
     "parity_contract": {

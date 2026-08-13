@@ -20,6 +20,11 @@ def parse_args() -> argparse.Namespace:
         default=REQUIRED_SOURCE_REPO,
         help="Expected gateway source repository",
     )
+    parser.add_argument(
+        "--source-ref",
+        required=True,
+        help="Expected full gateway commit pinned by this add-on build",
+    )
     return parser.parse_args()
 
 
@@ -31,7 +36,9 @@ def load_artifact(path: str) -> dict[str, Any]:
     return payload
 
 
-def validate_artifact(payload: dict[str, Any], expected_source_repo: str) -> list[str]:
+def validate_artifact(
+    payload: dict[str, Any], expected_source_repo: str, expected_source_ref: str
+) -> list[str]:
     errors: list[str] = []
 
     source_repo = str(payload.get("source_repo", "")).strip()
@@ -40,8 +47,11 @@ def validate_artifact(payload: dict[str, Any], expected_source_repo: str) -> lis
             f"source_repo mismatch: got={source_repo or '<empty>'} expected={expected_source_repo}"
         )
 
-    if not str(payload.get("source_ref", "")).strip():
-        errors.append("source_ref missing")
+    source_ref = str(payload.get("source_ref", "")).strip()
+    if source_ref != expected_source_ref:
+        errors.append(
+            f"source_ref mismatch: got={source_ref or '<empty>'} expected={expected_source_ref}"
+        )
     if not str(payload.get("generated_at", "")).strip():
         errors.append("generated_at missing")
 
@@ -76,7 +86,7 @@ def main() -> int:
         print(f"Gateway parity gate: FAIL ({exc})")
         return 1
 
-    errors = validate_artifact(payload, args.source_repo)
+    errors = validate_artifact(payload, args.source_repo, args.source_ref)
     if errors:
         print(f"Gateway parity gate: FAIL ({'; '.join(errors)})")
         return 1
