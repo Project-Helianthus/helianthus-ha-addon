@@ -409,6 +409,8 @@ def run_wrapper(
     redactor_delay: float = 0,
     fail_health_state: str | None = None,
     wrapper_timeout: float | None = None,
+    signal_wrapper_after: float | None = None,
+    hang_redactor_after_drain: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -448,20 +450,26 @@ def run_wrapper(
             encoding="utf-8",
         )
     guard_path = GUARD_PATH
-    if redactor_delay or fail_health_state is not None:
+    if redactor_delay or fail_health_state is not None or hang_redactor_after_drain:
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
             f'''import runpy
 import sys
 import time
 
-if len(sys.argv) > 1 and sys.argv[1] == "redact":
+is_redactor = len(sys.argv) > 1 and sys.argv[1] == "redact"
+if is_redactor:
     time.sleep({redactor_delay!r})
 if len(sys.argv) > 1 and sys.argv[1] == "health" and "--state" in sys.argv:
     state = sys.argv[sys.argv.index("--state") + 1]
     if state == {fail_health_state!r}:
         raise SystemExit(2)
-runpy.run_path({str(GUARD_PATH)!r}, run_name="__main__")
+try:
+    runpy.run_path({str(GUARD_PATH)!r}, run_name="__main__")
+except SystemExit as error:
+    if is_redactor and {hang_redactor_after_drain!r} and error.code == 0:
+        time.sleep(30)
+    raise
 ''',
             encoding="utf-8",
         )
@@ -494,17 +502,37 @@ runpy.run_path({str(GUARD_PATH)!r}, run_name="__main__")
             "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
             "HELIANTHUS_MODBUS_HEALTH_FILE": str(health_path),
             "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
+            "HELIANTHUS_MODBUS_REDACTOR_DRAIN_SECONDS": "1",
         }
     )
-    return subprocess.run(
-        ["bash", str(wrapper)],
+    command = ["bash", str(wrapper)]
+    if signal_wrapper_after is None:
+        return subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=wrapper_timeout,
+        )
+    process = subprocess.Popen(
+        command,
         cwd=ROOT,
         env=env,
         text=True,
-        capture_output=True,
-        check=False,
-        timeout=wrapper_timeout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    readiness_deadline = time.monotonic() + 5
+    while not list(tmp_path.glob(".modbus-redact.*")):
+        if process.poll() is not None or time.monotonic() >= readiness_deadline:
+            break
+        time.sleep(0.01)
+    time.sleep(signal_wrapper_after)
+    process.send_signal(signal.SIGTERM)
+    stdout, stderr = process.communicate(timeout=wrapper_timeout)
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def test_wrapper_retries_three_times_then_runs_previous_binary_without_modbus(
@@ -688,6 +716,40 @@ def test_health_failure_after_child_launch_reaps_child_and_clears_endpoint(
         os.kill(child_pid, 0)
     assert not (tmp_path / "modbus-endpoint").exists()
     assert not (tmp_path / "fallback-argv").exists()
+
+
+def test_signal_during_redactor_handshake_never_launches_gateway(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        redactor_delay=4,
+        signal_wrapper_after=0.5,
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert not (tmp_path / "child-pid").exists()
+    assert not (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
+
+
+def test_hanging_redactor_is_bounded_and_cannot_block_recovery(
+    tmp_path: Path,
+) -> None:
+    started = time.monotonic()
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        hang_redactor_after_drain=True,
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert time.monotonic() - started < 15
+    assert (tmp_path / "fallback-argv").exists()
+    assert not (tmp_path / "modbus-endpoint").exists()
 
 
 def test_wrapper_marks_exit_after_bounded_running_window(tmp_path: Path) -> None:

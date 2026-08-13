@@ -75,9 +75,14 @@ modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
 modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"
 modbus_endpoint_ref="${MODBUS_ENDPOINT_REF}"
 MODBUS_RECOVERY_MAX_ATTEMPTS=3
+MODBUS_REDACTOR_DRAIN_SECONDS="${HELIANTHUS_MODBUS_REDACTOR_DRAIN_SECONDS:-5}"
+if ! [[ "${MODBUS_REDACTOR_DRAIN_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${MODBUS_REDACTOR_DRAIN_SECONDS}" -gt 10 ]; then
+  bashio::exit.nok "Modbus TCP redactor drain bound is invalid"
+fi
 modbus_child_pid=""
 modbus_redactor_pids=()
 modbus_redact_dir=""
+modbus_stop_requested=false
 
 modbus_terminate_child() {
   local remaining
@@ -98,13 +103,26 @@ modbus_terminate_child() {
 }
 
 modbus_cleanup_redactors() {
-  local pid status
+  local pid status watchdog rc
   status=0
-  for pid in "${modbus_redactor_pids[@]}"; do
-    if ! wait "${pid}"; then
-      status=1
-    fi
-  done
+  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
+    for pid in "${modbus_redactor_pids[@]}"; do
+      (
+        trap - TERM INT EXIT
+        sleep "${MODBUS_REDACTOR_DRAIN_SECONDS}"
+        kill -TERM "${pid}" 2>/dev/null || exit 0
+        sleep 1
+        kill -KILL "${pid}" 2>/dev/null || true
+      ) &
+      watchdog=$!
+      if wait "${pid}"; then rc=0; else rc=$?; fi
+      kill -TERM "${watchdog}" 2>/dev/null || true
+      wait "${watchdog}" 2>/dev/null || true
+      if [ "${rc}" -ne 0 ]; then
+        status=1
+      fi
+    done
+  fi
   modbus_redactor_pids=()
   if [ -n "${modbus_redact_dir}" ]; then
     rm -f \
@@ -120,9 +138,11 @@ modbus_cleanup_redactors() {
 
 modbus_abort_redactors() {
   local pid
-  for pid in "${modbus_redactor_pids[@]}"; do
-    kill -TERM "${pid}" 2>/dev/null || true
-  done
+  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
+    for pid in "${modbus_redactor_pids[@]}"; do
+      kill -TERM "${pid}" 2>/dev/null || true
+    done
+  fi
   modbus_cleanup_redactors || true
 }
 
@@ -153,6 +173,26 @@ modbus_write_health() {
     modbus_fail_closed "Modbus TCP health update failed"
   fi
 }
+
+modbus_forward_signal() {
+  modbus_stop_requested=true
+  if [ -n "${modbus_child_pid}" ]; then
+    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  fi
+}
+
+modbus_exit_cleanup() {
+  if [ "${BASH_SUBSHELL:-0}" -ne 0 ]; then
+    return 0
+  fi
+  modbus_terminate_child
+  modbus_abort_redactors
+  python3 "${modbus_guard}" clear-endpoint \
+    --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
+}
+
+trap modbus_forward_signal TERM INT
+trap modbus_exit_cleanup EXIT
 
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain
@@ -867,15 +907,7 @@ if [ "${#fallback_static_seed_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${
 if [ "${#fallback_semantic_cache_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_semantic_cache_args[@]}"); fi
 if [ "${#fallback_proxy_listen_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_proxy_listen_args[@]}"); fi
 
-modbus_stop_requested=false
 modbus_passed_startup_window=false
-modbus_forward_signal() {
-  modbus_stop_requested=true
-  if [ -n "${modbus_child_pid}" ]; then
-    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
-  fi
-}
-trap modbus_forward_signal TERM INT
 
 modbus_run_current() {
   local attempt_started elapsed rc ready_checks
@@ -903,14 +935,20 @@ modbus_run_current() {
   modbus_redactor_pids+=("$!")
   ready_checks=100
   while { [ ! -f "${modbus_redact_dir}/stdout.ready" ] || [ ! -f "${modbus_redact_dir}/stderr.ready" ]; } && [ "${ready_checks}" -gt 0 ]; do
+    if bashio::var.true "${modbus_stop_requested}"; then
+      modbus_fail_closed "Modbus TCP startup stopped before gateway launch"
+    fi
     if ! kill -0 "${modbus_redactor_pids[0]}" 2>/dev/null || ! kill -0 "${modbus_redactor_pids[1]}" 2>/dev/null; then
       modbus_fail_closed "Modbus TCP redaction setup failed"
     fi
-    sleep 0.05
+    sleep 0.05 || true
     ready_checks=$((ready_checks - 1))
   done
   if [ "${ready_checks}" -eq 0 ]; then
     modbus_fail_closed "Modbus TCP redaction setup timed out"
+  fi
+  if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_fail_closed "Modbus TCP startup stopped before gateway launch"
   fi
   "${gateway_bin}" "${modbus_current_args[@]}" \
     > "${modbus_redact_dir}/stdout" \
