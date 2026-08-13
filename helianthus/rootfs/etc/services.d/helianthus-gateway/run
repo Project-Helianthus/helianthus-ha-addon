@@ -59,6 +59,7 @@ modbus_health_file="${HELIANTHUS_MODBUS_HEALTH_FILE:-/data/modbus-runtime-health
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
 modbus_validator_pid=""
 modbus_validator_output=""
+modbus_validation_stop_requested=false
 
 modbus_terminate_validator() {
   local remaining
@@ -98,6 +99,10 @@ modbus_validation_signal() {
   exit 143
 }
 
+modbus_validation_defer_signal() {
+  modbus_validation_stop_requested=true
+}
+
 trap modbus_validation_signal TERM INT
 trap modbus_validation_cleanup EXIT
 
@@ -109,11 +114,16 @@ modbus_validator_output=$(mktemp "${TMPDIR:-/tmp}/helianthus-modbus-validate.XXX
   bashio::exit.nok "Modbus TCP validation setup failed"
 chmod 0600 "${modbus_validator_output}" || \
   bashio::exit.nok "Modbus TCP validation setup failed"
+trap modbus_validation_defer_signal TERM INT
 python3 "${modbus_guard}" validate \
   --options "${modbus_options_path}" \
   --endpoint-file "${modbus_endpoint_file}" \
   --health "${modbus_health_file}" > "${modbus_validator_output}" &
 modbus_validator_pid=$!
+trap modbus_validation_signal TERM INT
+if bashio::var.true "${modbus_validation_stop_requested}"; then
+  modbus_validation_signal
+fi
 if wait "${modbus_validator_pid}"; then
   modbus_validator_pid=""
   modbus_eval="$(<"${modbus_validator_output}")"
@@ -247,6 +257,10 @@ modbus_forward_signal() {
   modbus_abort_redactors
   modbus_write_health STOPPED "${modbus_active_attempt}" "${modbus_active_binary}" SIGNAL
   exit 143
+}
+
+modbus_defer_signal() {
+  modbus_stop_requested=true
 }
 
 modbus_exit_cleanup() {
@@ -1000,16 +1014,26 @@ modbus_run_current() {
     modbus_fail_closed "Modbus TCP redaction setup failed"
   chmod 0600 "${modbus_redact_dir}/stdout" "${modbus_redact_dir}/stderr" || \
     modbus_fail_closed "Modbus TCP redaction setup failed"
+  trap modbus_defer_signal TERM INT
   python3 "${modbus_guard}" redact \
     --endpoint-file "${modbus_endpoint_file}" \
     --input-fifo "${modbus_redact_dir}/stdout" \
     --ready-file "${modbus_redact_dir}/stdout.ready" &
   modbus_redactor_pids+=("$!")
+  trap modbus_forward_signal TERM INT
+  if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_forward_signal
+  fi
+  trap modbus_defer_signal TERM INT
   python3 "${modbus_guard}" redact \
     --endpoint-file "${modbus_endpoint_file}" \
     --input-fifo "${modbus_redact_dir}/stderr" \
     --ready-file "${modbus_redact_dir}/stderr.ready" >&2 &
   modbus_redactor_pids+=("$!")
+  trap modbus_forward_signal TERM INT
+  if bashio::var.true "${modbus_stop_requested}"; then
+    modbus_forward_signal
+  fi
   ready_checks=100
   while { [ ! -f "${modbus_redact_dir}/stdout.ready" ] || [ ! -f "${modbus_redact_dir}/stderr.ready" ]; } && [ "${ready_checks}" -gt 0 ]; do
     if bashio::var.true "${modbus_stop_requested}"; then
@@ -1027,12 +1051,14 @@ modbus_run_current() {
   if bashio::var.true "${modbus_stop_requested}"; then
     modbus_fail_closed "Modbus TCP startup stopped before gateway launch"
   fi
+  trap modbus_defer_signal TERM INT
   "${gateway_bin}" "${modbus_current_args[@]}" \
     > "${modbus_redact_dir}/stdout" \
     2> "${modbus_redact_dir}/stderr" &
   modbus_child_pid=$!
+  trap modbus_forward_signal TERM INT
   if bashio::var.true "${modbus_stop_requested}"; then
-    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+    modbus_forward_signal
   fi
   attempt_started=$(date +%s)
   while kill -0 "${modbus_child_pid}" 2>/dev/null; do
@@ -1066,10 +1092,12 @@ modbus_run_fallback() {
   if bashio::var.true "${modbus_stop_requested}"; then
     return 143
   fi
+  trap modbus_defer_signal TERM INT
   "${fallback_gateway_bin}" "${modbus_fallback_args[@]}" &
   modbus_child_pid=$!
+  trap modbus_forward_signal TERM INT
   if bashio::var.true "${modbus_stop_requested}"; then
-    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+    modbus_forward_signal
   fi
   attempt_started=$(date +%s)
   while kill -0 "${modbus_child_pid}" 2>/dev/null; do

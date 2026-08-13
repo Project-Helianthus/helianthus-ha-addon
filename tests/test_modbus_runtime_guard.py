@@ -344,6 +344,7 @@ def write_gateway_stub(
     if fallback:
         body = f'''
 Path(os.environ["TEST_FALLBACK_ARGV_FILE"]).write_text("\\n".join(sys.argv[1:]) + "\\n", encoding="utf-8")
+Path(os.environ["TEST_FALLBACK_PID_FILE"]).write_text(str(os.getpid()), encoding="utf-8")
 unsupported_optional_flag = {unsupported_optional_flag!r}
 if {ignore_term!r}:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -426,6 +427,7 @@ def run_wrapper(
     startup_delay_after_disabled_health: float = 0,
     startup_delay_before_gateway_launch: float = 0,
     record_health_calls: bool = False,
+    registration_delay_target: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -467,6 +469,25 @@ def run_wrapper(
             '  "${gateway_bin}" "${modbus_current_args[@]}" \\\n',
             1,
         )
+    if registration_delay_target is not None:
+        boundary = (
+            '  : > "${TEST_REGISTRATION_BOUNDARY_FILE}"\n'
+            "  sleep 2 || true\n"
+        )
+        registration_needles = {
+            "validator": "modbus_validator_pid=$!\n",
+            "redactor_stdout": '  modbus_redactor_pids+=("$!")\n',
+            "redactor_stderr": '  modbus_redactor_pids+=("$!")\n',
+            "current": "  modbus_child_pid=$!\n",
+            "fallback": "  modbus_child_pid=$!\n",
+        }
+        needle = registration_needles[registration_delay_target]
+        occurrence = 2 if registration_delay_target in {"redactor_stderr", "fallback"} else 1
+        start = -1
+        for _ in range(occurrence):
+            start = run.find(needle, start + 1)
+            assert start >= 0
+        run = run[:start] + boundary + run[start:]
     wrapper.write_text(BASHIO_PRELUDE + "\n" + run, encoding="utf-8")
 
     runtime_state = tmp_path / "runtime_state.json"
@@ -496,6 +517,7 @@ def run_wrapper(
         or hang_redactor_after_drain
         or redactor_exit_after_ready is not None
         or record_health_calls
+        or registration_delay_target is not None
     ):
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
@@ -512,6 +534,9 @@ if is_validator:
     Path({str(tmp_path / "validator-pid")!r}).write_text(str(os.getpid()), encoding="utf-8")
     time.sleep({validator_delay!r})
 if is_redactor:
+    Path({str(tmp_path)!r}, f"redactor-pid-{{os.getpid()}}").write_text(
+        str(os.getpid()), encoding="utf-8"
+    )
     time.sleep({redactor_delay!r})
 if is_redactor and {redactor_exit_after_ready is not None!r}:
     ready_file = Path(sys.argv[sys.argv.index("--ready-file") + 1])
@@ -552,10 +577,14 @@ except SystemExit as error:
             "TEST_CURRENT_ARGV_FILE": str(tmp_path / "current-argv"),
             "TEST_CURRENT_ENV_FILE": str(tmp_path / "current-env.json"),
             "TEST_FALLBACK_ARGV_FILE": str(tmp_path / "fallback-argv"),
+            "TEST_FALLBACK_PID_FILE": str(tmp_path / "fallback-pid"),
             "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
             "TEST_SIGNAL_BOUNDARY_FILE": str(tmp_path / "signal-boundary"),
             "TEST_DISABLED_HEALTH_BOUNDARY_FILE": str(
                 tmp_path / "disabled-health-boundary"
+            ),
+            "TEST_REGISTRATION_BOUNDARY_FILE": str(
+                tmp_path / "registration-boundary"
             ),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
@@ -616,6 +645,8 @@ except SystemExit as error:
             ready = (tmp_path / "fallback-argv").exists()
         elif signal_wait_for == "validator_running":
             ready = (tmp_path / "validator-pid").exists()
+        elif signal_wait_for == "registration_boundary":
+            ready = (tmp_path / "registration-boundary").exists()
         else:
             raise ValueError(f"unknown signal wait target: {signal_wait_for}")
         if ready:
@@ -699,6 +730,53 @@ def test_signal_during_validation_reaps_validator_and_clears_runtime(
     assert not (tmp_path / "health.json").exists()
     assert not (tmp_path / "child-pid").exists()
     assert not (tmp_path / "fallback-argv").exists()
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+@pytest.mark.parametrize(
+    "registration_target",
+    ["validator", "redactor_stdout", "redactor_stderr", "current", "fallback"],
+)
+def test_signal_during_pid_registration_reaps_spawned_process(
+    tmp_path: Path,
+    wrapper_signal: signal.Signals,
+    registration_target: str,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        current_sleep=30 if registration_target == "current" else 0,
+        fallback_sleep=30 if registration_target == "fallback" else 0,
+        validator_delay=30 if registration_target == "validator" else 0,
+        registration_delay_target=registration_target,
+        signal_wrapper_after=0,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="registration_boundary",
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode != 0
+    pid_paths: list[Path]
+    if registration_target == "validator":
+        pid_paths = [tmp_path / "validator-pid"]
+    elif registration_target.startswith("redactor_"):
+        pid_paths = list(tmp_path.glob("redactor-pid-*"))
+    elif registration_target == "current":
+        pid_paths = [tmp_path / "child-pid"]
+    else:
+        pid_paths = [tmp_path / "fallback-pid"]
+    assert pid_paths
+    for path in pid_paths:
+        pid = int(path.read_text(encoding="utf-8"))
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    assert not (tmp_path / "modbus-endpoint").exists()
+    if registration_target == "validator":
+        assert not (tmp_path / "health.json").exists()
+    else:
+        health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+        assert health["state"] == "STOPPED"
+        assert health["reason"] == "SIGNAL"
 
 
 @pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
