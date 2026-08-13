@@ -6,7 +6,8 @@ ARG VRCEXPLORER_VERSION=v0.5.1
 FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG EBUSGATEWAY_VERSION=2af7e9e0c1342e7ea2961c859dd73021879cbffa
+ARG EBUSGATEWAY_VERSION=035e2b5cf703d68f75b809c45d2b1342696c07ef
+ARG EBUSGATEWAY_FALLBACK_VERSION=2af7e9e0c1342e7ea2961c859dd73021879cbffa
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
@@ -32,6 +33,12 @@ RUN --mount=type=secret,id=github_token \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
       GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
       go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway; \
+    git checkout --detach "${EBUSGATEWAY_FALLBACK_VERSION}"; \
+    test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_FALLBACK_VERSION}"; \
+    test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
+    GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+      GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
+      go build -trimpath -buildvcs=true -o /out/gateway-fallback ./cmd/gateway; \
     if [ -n "${github_token_value}" ]; then \
       sh /usr/local/bin/verify-no-secret "${github_token_value}" /root /src /out /tmp /go; \
     fi
@@ -64,6 +71,8 @@ ARG VRCEXPLORER_VERSION=v0.5.1
 RUN apk add --no-cache python3 ca-certificates
 
 COPY --from=builder /out/gateway /usr/local/bin/helianthus-gateway
+COPY --from=builder /out/gateway-fallback /usr/local/bin/helianthus-gateway-fallback
 COPY --from=vrc-explorer /out/python /opt/helianthus-vrc-explorer
 COPY rootfs/ /
-RUN chmod +x /usr/share/helianthus/check_runtime_state_wrapper.py
+RUN chmod +x /usr/share/helianthus/check_runtime_state_wrapper.py \
+    /usr/share/helianthus/modbus_runtime_guard.py

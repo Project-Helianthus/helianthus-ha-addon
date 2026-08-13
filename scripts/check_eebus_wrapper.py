@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG = REPO_ROOT / "helianthus/config.json"
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 RUNTIME_STATE_WRAPPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
+MODBUS_RUNTIME_GUARD = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 
 EXPECTED_OPTIONS = {
     "eebus_enabled": False,
@@ -225,6 +226,10 @@ def _run_case(
                 "TEST_EEBUS_INTERFACE_ID_PATH": str(interface_id_file),
                 "TEST_EEBUS_MACHINE_ID_PATH": str(machine_id_file),
                 "TEST_EEBUS_OPTIONS_PATH": str(options_file),
+                "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
+                "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options_file),
+                "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
+                "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
             }
         )
         stale_env_keys = {

@@ -14,13 +14,14 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 RUNTIME_STATE_WRAPPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
+MODBUS_RUNTIME_GUARD = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 DOCKERFILE = REPO_ROOT / "helianthus/Dockerfile"
 BUILD_WORKFLOW = REPO_ROOT / ".github/workflows/build.yml"
 TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
-REQUIRED_GATEWAY_VERSION = "2af7e9e0c1342e7ea2961c859dd73021879cbffa"
+REQUIRED_GATEWAY_VERSION = "035e2b5cf703d68f75b809c45d2b1342696c07ef"
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -205,6 +206,10 @@ def _run_wrapper_case(
                 "HELIANTHUS_RUNTIME_STATE_PATH": str(runtime_state_file),
                 "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(instance_guid_file),
                 "HELIANTHUS_MIGRATION_MARKER_PATH": str(legacy_marker_file),
+                "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
+                "HELIANTHUS_MODBUS_OPTIONS_PATH": str(tmp / "missing-options.json"),
+                "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
+                "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
             },
         )
 

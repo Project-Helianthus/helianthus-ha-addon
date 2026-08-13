@@ -36,6 +36,22 @@ Key options are exposed in `config.json`:
 - `subscription_path`: GraphQL subscriptions endpoint path
 - `mcp_path`: MCP endpoint path
 - `mdns`: enable/disable mDNS advertisement
+- `modbus_tcp_enabled`: opt in to the read-only Modbus TCP sidecar (default `false`)
+- `modbus_tcp_endpoint`: one `tcp://host:port` endpoint; Supervisor treats it as a password field and embedded credentials are rejected
+- `modbus_tcp_dial_timeout`: bounded `ms` or `s` dial timeout from 100 ms through 30 s
+
+Modbus startup writes `/data/modbus-runtime-health.json` with only a truncated
+endpoint fingerprint. Three failures inside the bounded startup window activate
+the packaged previous gateway binary with all Modbus flags omitted. The endpoint
+file is removed before fallback launch. Health moves through
+`FALLBACK_STARTING` and reaches `FALLBACK_ACTIVE` only after the fallback
+survives the startup window; any later or earlier fallback exit is recorded as
+`FALLBACK_EXITED` instead of leaving a stale active state. Gateway output passes
+through private synchronized redaction pipes before publication; a redactor or
+health-write failure terminates and reaps the child before restart. Set
+`modbus_tcp_enabled=false` to restore the normal inert path; any retained
+endpoint value is ignored and omitted from arguments and health. Rollback to
+add-on `0.6.41` restores the same previous gateway pin.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
