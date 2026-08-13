@@ -57,13 +57,71 @@ modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
 modbus_health_file="${HELIANTHUS_MODBUS_HEALTH_FILE:-/data/modbus-runtime-health.json}"
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
+modbus_validator_pid=""
+modbus_validator_output=""
+
+modbus_terminate_validator() {
+  local remaining
+  if [ -z "${modbus_validator_pid}" ]; then
+    return 0
+  fi
+  kill -TERM "${modbus_validator_pid}" 2>/dev/null || true
+  remaining=50
+  while kill -0 "${modbus_validator_pid}" 2>/dev/null && [ "${remaining}" -gt 0 ]; do
+    sleep 0.1
+    remaining=$((remaining - 1))
+  done
+  if kill -0 "${modbus_validator_pid}" 2>/dev/null; then
+    kill -KILL "${modbus_validator_pid}" 2>/dev/null || true
+  fi
+  wait "${modbus_validator_pid}" 2>/dev/null || true
+  modbus_validator_pid=""
+}
+
+modbus_validation_cleanup() {
+  if [ "${BASH_SUBSHELL:-0}" -ne 0 ]; then
+    return 0
+  fi
+  modbus_terminate_validator
+  if [ -n "${modbus_validator_output}" ]; then
+    rm -f "${modbus_validator_output}"
+    modbus_validator_output=""
+  fi
+  python3 "${modbus_guard}" clear-runtime \
+    --endpoint-file "${modbus_endpoint_file}" \
+    --health "${modbus_health_file}" >/dev/null 2>&1 || true
+}
+
+modbus_validation_signal() {
+  trap - TERM INT
+  modbus_validation_cleanup
+  exit 143
+}
+
+trap modbus_validation_signal TERM INT
+trap modbus_validation_cleanup EXIT
+
 MODBUS_TCP_ENABLED=""
 MODBUS_TCP_DIAL_TIMEOUT=""
 MODBUS_STARTUP_WINDOW_SECONDS=""
 MODBUS_ENDPOINT_REF=""
-if modbus_eval=$(python3 "${modbus_guard}" validate --options "${modbus_options_path}" --endpoint-file "${modbus_endpoint_file}" --health "${modbus_health_file}"); then
+modbus_validator_output=$(mktemp "${TMPDIR:-/tmp}/helianthus-modbus-validate.XXXXXX") || \
+  bashio::exit.nok "Modbus TCP validation setup failed"
+chmod 0600 "${modbus_validator_output}" || \
+  bashio::exit.nok "Modbus TCP validation setup failed"
+python3 "${modbus_guard}" validate \
+  --options "${modbus_options_path}" \
+  --endpoint-file "${modbus_endpoint_file}" \
+  --health "${modbus_health_file}" > "${modbus_validator_output}" &
+modbus_validator_pid=$!
+if wait "${modbus_validator_pid}"; then
+  modbus_validator_pid=""
+  modbus_eval="$(<"${modbus_validator_output}")"
+  rm -f "${modbus_validator_output}"
+  modbus_validator_output=""
   eval "${modbus_eval}"
 else
+  modbus_validator_pid=""
   bashio::exit.nok "Modbus TCP options failed atomic validation; endpoint remains redacted"
 fi
 case "${MODBUS_TCP_ENABLED}" in

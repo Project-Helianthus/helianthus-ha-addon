@@ -414,6 +414,7 @@ def run_wrapper(
     fallback_ignore_term: bool = False,
     preexisting_health_state: str | None = None,
     redactor_delay: float = 0,
+    validator_delay: float = 0,
     fail_health_state: str | None = None,
     wrapper_timeout: float | None = None,
     signal_wrapper_after: float | None = None,
@@ -490,6 +491,7 @@ def run_wrapper(
     guard_path = GUARD_PATH
     if (
         redactor_delay
+        or validator_delay
         or fail_health_state is not None
         or hang_redactor_after_drain
         or redactor_exit_after_ready is not None
@@ -505,6 +507,10 @@ import time
 from pathlib import Path
 
 is_redactor = len(sys.argv) > 1 and sys.argv[1] == "redact"
+is_validator = len(sys.argv) > 1 and sys.argv[1] == "validate"
+if is_validator:
+    Path({str(tmp_path / "validator-pid")!r}).write_text(str(os.getpid()), encoding="utf-8")
+    time.sleep({validator_delay!r})
 if is_redactor:
     time.sleep({redactor_delay!r})
 if is_redactor and {redactor_exit_after_ready is not None!r}:
@@ -608,6 +614,8 @@ except SystemExit as error:
             )
         elif signal_wait_for == "fallback_running":
             ready = (tmp_path / "fallback-argv").exists()
+        elif signal_wait_for == "validator_running":
+            ready = (tmp_path / "validator-pid").exists()
         else:
             raise ValueError(f"unknown signal wait target: {signal_wait_for}")
         if ready:
@@ -667,6 +675,30 @@ def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
     assert health["state"] == "DISABLED"
     assert health["enabled"] is False
+
+
+@pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
+def test_signal_during_validation_reaps_validator_and_clears_runtime(
+    tmp_path: Path, wrapper_signal: signal.Signals
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(),
+        validator_delay=30,
+        signal_wrapper_after=0,
+        signal_wrapper=wrapper_signal,
+        signal_wait_for="validator_running",
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode != 0
+    validator_pid = int((tmp_path / "validator-pid").read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(validator_pid, 0)
+    assert not (tmp_path / "modbus-endpoint").exists()
+    assert not (tmp_path / "health.json").exists()
+    assert not (tmp_path / "child-pid").exists()
+    assert not (tmp_path / "fallback-argv").exists()
 
 
 @pytest.mark.parametrize("wrapper_signal", [signal.SIGTERM, signal.SIGINT])
