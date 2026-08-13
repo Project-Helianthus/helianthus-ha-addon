@@ -72,7 +72,7 @@ def validate_artifact(
         except ValueError:
             errors.append("generated_at is not RFC3339")
 
-    if payload.get("evidence_kind") != "github_actions_tree_equivalent_ci_v1":
+    if payload.get("evidence_kind") != "github_actions_exact_commit_ci_v1":
         errors.append("evidence_kind mismatch")
 
     source_tree = str(payload.get("source_tree", "")).strip()
@@ -87,6 +87,8 @@ def validate_artifact(
             errors.append(f"{name} must be a full lowercase SHA")
     if source_tree and tested_tree and source_tree != tested_tree:
         errors.append("tested tree differs from pinned source tree")
+    if tested_ref and tested_ref != source_ref:
+        errors.append("tested_ref differs from pinned source_ref")
 
     workflow = payload.get("workflow_run")
     if not isinstance(workflow, dict):
@@ -96,6 +98,8 @@ def validate_artifact(
             errors.append("workflow_run.id missing or invalid")
         if workflow.get("attempt") != 1:
             errors.append("workflow_run.attempt must be 1")
+        if workflow.get("event") != "push":
+            errors.append("workflow_run.event must be push")
         if workflow.get("head_sha") != tested_ref:
             errors.append("workflow_run.head_sha differs from tested_ref")
         if workflow.get("status") != "completed" or workflow.get("conclusion") != "success":
@@ -174,6 +178,7 @@ def verify_github(payload: dict[str, Any], source_repo: str) -> list[str]:
     expected_run = {
         "id": workflow.get("id"),
         "run_attempt": workflow.get("attempt"),
+        "event": workflow.get("event"),
         "head_sha": workflow.get("head_sha"),
         "status": workflow.get("status"),
         "conclusion": workflow.get("conclusion"),

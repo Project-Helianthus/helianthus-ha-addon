@@ -109,7 +109,7 @@ jobs:
           # fixtures + explicit HELIANTHUS_* env-overrides, so it never
           # touches the runner's /data/.
           python3 -m pip install --quiet --user pytest
-          python3 -m pytest tests/test_runtime_state_wrapper_red.py -q
+          python3 -m pytest tests/test_runtime_state_wrapper_red.py tests/test_gateway_parity_gate.py -q
 
       - name: Validate gateway parity gate artifact
         shell: bash
