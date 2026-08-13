@@ -347,7 +347,8 @@ if unsupported_optional_flag and any(
     for arg in sys.argv[1:]
 ):
     raise SystemExit(64)
-raise SystemExit(0)
+time.sleep(float(os.environ.get("TEST_FALLBACK_SLEEP", "0")))
+raise SystemExit(int(os.environ.get("TEST_FALLBACK_EXIT", "0")))
 '''
     else:
         body = '''
@@ -402,6 +403,8 @@ def run_wrapper(
     current_sleep: float = 0,
     signal_parent: signal.Signals | None = None,
     fallback_unsupported_optional_flag: str | None = None,
+    fallback_exit: int = 0,
+    fallback_sleep: float = 0,
     preexisting_health_state: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
@@ -456,6 +459,8 @@ def run_wrapper(
             "TEST_CHILD_PID_FILE": str(tmp_path / "child-pid"),
             "TEST_CURRENT_EXIT": str(current_exit),
             "TEST_CURRENT_SLEEP": str(current_sleep),
+            "TEST_FALLBACK_EXIT": str(fallback_exit),
+            "TEST_FALLBACK_SLEEP": str(fallback_sleep),
             "TEST_PARENT_SIGNAL": str(signal_parent.value) if signal_parent else "",
             "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(
                 ROOT
@@ -493,17 +498,16 @@ def test_wrapper_retries_three_times_then_runs_previous_binary_without_modbus(
     assert endpoint not in current_argv
     assert endpoint not in current_env
     assert "-modbus-tcp-endpoint-file" in current_argv
-    endpoint_file = tmp_path / "modbus-endpoint"
-    assert endpoint_file.read_text(encoding="utf-8") == endpoint
-    assert stat.S_IMODE(endpoint_file.stat().st_mode) == 0o600
+    assert not (tmp_path / "modbus-endpoint").exists()
     fallback_argv = (tmp_path / "fallback-argv").read_text(encoding="utf-8")
     assert "modbus-tcp" not in fallback_argv
     assert endpoint not in result.stdout + result.stderr
     assert "192.0.2.40" not in result.stdout + result.stderr
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
-    assert health["state"] == "FALLBACK_ACTIVE"
+    assert health["state"] == "FALLBACK_EXITED"
     assert health["binary"] == "fallback"
     assert health["attempt"] == 3
+    assert health["reason"] == "FALLBACK_STARTUP_EXIT"
 
 
 def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
@@ -608,8 +612,25 @@ def test_wrapper_clean_early_exit_still_reaches_bounded_fallback(
     assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
     assert (tmp_path / "fallback-argv").exists()
     health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
-    assert health["state"] == "FALLBACK_ACTIVE"
-    assert health["reason"] == "STARTUP_RETRY_EXHAUSTED"
+    assert health["state"] == "FALLBACK_EXITED"
+    assert health["reason"] == "FALLBACK_STARTUP_EXIT"
+
+
+def test_fallback_exit_after_startup_window_is_recorded_truthfully(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        fallback_exit=23,
+        fallback_sleep=7,
+    )
+
+    assert result.returncode == 23
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "FALLBACK_EXITED"
+    assert health["binary"] == "fallback"
+    assert health["reason"] == "FALLBACK_RUNTIME_EXIT"
 
 
 def test_wrapper_marks_exit_after_bounded_running_window(tmp_path: Path) -> None:

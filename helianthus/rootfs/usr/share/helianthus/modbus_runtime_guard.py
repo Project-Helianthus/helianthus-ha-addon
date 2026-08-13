@@ -29,7 +29,9 @@ _STATES = {
     "CONFIG_VALIDATED",
     "RUNNING",
     "RECOVERY_RETRY",
+    "FALLBACK_STARTING",
     "FALLBACK_ACTIVE",
+    "FALLBACK_EXITED",
     "EXITED_AFTER_STARTUP_WINDOW",
     "STOPPED",
 }
@@ -227,6 +229,11 @@ def _health_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _clear_endpoint_command(args: argparse.Namespace) -> int:
+    clear_endpoint_file(args.endpoint_file)
+    return 0
+
+
 def _redact_command(args: argparse.Namespace) -> int:
     try:
         endpoint = args.endpoint_file.read_text(encoding="utf-8")
@@ -274,6 +281,10 @@ def parser() -> argparse.ArgumentParser:
     health.add_argument("--binary", choices=("current", "fallback"), required=True)
     health.add_argument("--reason", required=True)
     health.set_defaults(handler=_health_command)
+
+    clear_endpoint = commands.add_parser("clear-endpoint")
+    clear_endpoint.add_argument("--endpoint-file", type=Path, required=True)
+    clear_endpoint.set_defaults(handler=_clear_endpoint_command)
 
     redact = commands.add_parser("redact")
     redact.add_argument("--endpoint-file", type=Path, required=True)

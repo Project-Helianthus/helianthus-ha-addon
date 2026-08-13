@@ -6,7 +6,8 @@
   bundle validation and credential-bearing URI rejection before gateway start.
 - Report deterministic redacted Modbus startup health by endpoint fingerprint;
   retry at most three startup failures and then run the previous pinned gateway
-  binary with no Modbus flags.
+  binary with no Modbus flags. Supervise that fallback through the startup
+  window so active and terminal health cannot remain stale.
 - Pin the primary gateway to the reviewed M4-02 merge while retaining the
   prior `0.6.41` gateway commit only as the packaged recovery binary.
 

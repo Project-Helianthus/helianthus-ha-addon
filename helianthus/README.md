@@ -42,7 +42,11 @@ Key options are exposed in `config.json`:
 
 Modbus startup writes `/data/modbus-runtime-health.json` with only a truncated
 endpoint fingerprint. Three failures inside the bounded startup window activate
-the packaged previous gateway binary with all Modbus flags omitted. Set
+the packaged previous gateway binary with all Modbus flags omitted. The endpoint
+file is removed before fallback launch. Health moves through
+`FALLBACK_STARTING` and reaches `FALLBACK_ACTIVE` only after the fallback
+survives the startup window; any later or earlier fallback exit is recorded as
+`FALLBACK_EXITED` instead of leaving a stale active state. Set
 `modbus_tcp_enabled=false` to restore the normal inert path; any retained
 endpoint value is ignored and omitted from arguments and health. Rollback to
 add-on `0.6.41` restores the same previous gateway pin.

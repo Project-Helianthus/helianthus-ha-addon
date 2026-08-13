@@ -846,6 +846,32 @@ modbus_run_current() {
   return "${rc}"
 }
 
+modbus_run_fallback() {
+  local attempt_started elapsed rc
+  modbus_passed_startup_window=false
+  if bashio::var.true "${modbus_stop_requested}"; then
+    return 143
+  fi
+  "${fallback_gateway_bin}" "${modbus_fallback_args[@]}" &
+  modbus_child_pid=$!
+  if bashio::var.true "${modbus_stop_requested}"; then
+    kill -TERM "${modbus_child_pid}" 2>/dev/null || true
+  fi
+  attempt_started=$(date +%s)
+  while kill -0 "${modbus_child_pid}" 2>/dev/null; do
+    elapsed=$(( $(date +%s) - attempt_started ))
+    if [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
+      modbus_passed_startup_window=true
+      modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_WINDOW_PASSED
+      break
+    fi
+    sleep 1
+  done
+  if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
+  modbus_child_pid=""
+  return "${rc}"
+}
+
 attempt=1
 while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
   modbus_write_health CONFIG_VALIDATED "${attempt}" current CONFIG_VALID
@@ -866,6 +892,18 @@ while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
   attempt=$((attempt + 1))
 done
 
-modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
 bashio::log.error "Modbus TCP startup retries exhausted for endpoint_ref=${modbus_endpoint_ref}; starting previous gateway binary with Modbus disabled"
-exec "${fallback_gateway_bin}" "${modbus_fallback_args[@]}"
+python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" || \
+  bashio::exit.nok "Modbus TCP endpoint cleanup failed before recovery fallback"
+modbus_write_health FALLBACK_STARTING "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
+if modbus_run_fallback; then rc=0; else rc=$?; fi
+if bashio::var.true "${modbus_stop_requested}"; then
+  modbus_write_health STOPPED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback SIGNAL
+  exit "${rc}"
+fi
+if bashio::var.true "${modbus_passed_startup_window}"; then
+  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback FALLBACK_RUNTIME_EXIT
+else
+  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback FALLBACK_STARTUP_EXIT
+fi
+exit "${rc}"
