@@ -830,6 +830,12 @@ eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"
 eebus_admin_runtime_dir="/run/helianthus/eebus-admin"
 eebus_admin_owner_file="${eebus_admin_runtime_dir}/owner"
 eebus_admin_ha_file="${eebus_admin_runtime_dir}/ha"
+eebus_admin_clear_runtime_files() {
+  # Fixed-path, non-recursive, and intentionally nonfatal: a malformed
+  # directory or other obstructing node disables only AdminV1. rm unlinks a
+  # symlink itself rather than following it, preserving the no-follow boundary.
+  rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}" 2>/dev/null || true
+}
 eebus_admin_result=""
 if eebus_admin_result=$(python3 "${eebus_admin_helper}" \
   --options "${eebus_options_path}" \
@@ -853,14 +859,14 @@ case "${eebus_admin_status}" in
       fi
     done
     if [ "${#missing_eebus_admin_flags[@]}" -ne 0 ]; then
-      rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}"
+      eebus_admin_clear_runtime_files
       bashio::log.warning "eeBUS admin boundary unavailable reason=capability"
     else
       eebus_admin_owner_username=$(printf '%s' "${eebus_admin_result}" | jq -er '.owner_username' 2>/dev/null || true)
       eebus_admin_origin=$(printf '%s' "${eebus_admin_result}" | jq -er '.origin' 2>/dev/null || true)
       eebus_admin_session_ttl=$(printf '%s' "${eebus_admin_result}" | jq -er '.session_ttl' 2>/dev/null || true)
       if [ -z "${eebus_admin_owner_username}" ] || [ -z "${eebus_admin_origin}" ] || [ -z "${eebus_admin_session_ttl}" ]; then
-        rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}"
+        eebus_admin_clear_runtime_files
         bashio::log.warning "eeBUS admin boundary unavailable reason=helper_output"
       else
         eebus_admin_args=(
@@ -884,11 +890,11 @@ case "${eebus_admin_status}" in
       configuration | runtime_store) ;;
       *) eebus_admin_reason="helper" ;;
     esac
-    rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}"
+    eebus_admin_clear_runtime_files
     bashio::log.warning "eeBUS admin boundary unavailable reason=${eebus_admin_reason}"
     ;;
   *)
-    rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}"
+    eebus_admin_clear_runtime_files
     bashio::log.warning "eeBUS admin boundary unavailable reason=helper"
     ;;
 esac
