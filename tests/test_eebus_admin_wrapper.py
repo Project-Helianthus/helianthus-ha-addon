@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import stat
 import subprocess
 import sys
@@ -270,3 +271,68 @@ def test_wrapper_never_reads_secret_options_and_isolates_fallback_args() -> None
     assert 'modbus_fallback_args+=("${eebus_admin_args[@]}")' not in run
     assert OWNER_SECRET not in run
     assert HA_SECRET not in run
+
+
+def test_authoritative_release_rejects_persistent_gateway_override_before_exec(
+    tmp_path: Path,
+) -> None:
+    run = RUN.read_text(encoding="utf-8")
+    selection_start = run.index('gateway_bin="/usr/local/bin/helianthus-gateway"')
+    fallback_line = 'fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"'
+    selection_end = run.index(fallback_line, selection_start) + len(fallback_line)
+    selection = run[selection_start:selection_end]
+
+    packaged_marker = tmp_path / "packaged-executed"
+    override_marker = tmp_path / "override-executed"
+    packaged = tmp_path / "packaged-gateway"
+    override = tmp_path / "stale-debug-override"
+    fallback = tmp_path / "packaged-fallback"
+    packaged.write_text(
+        "#!/bin/sh\n: > " + shlex.quote(str(packaged_marker)) + "\n",
+        encoding="utf-8",
+    )
+    override.write_text(
+        "#!/bin/sh\n"
+        "if [ \"${1:-}\" = \"--help\" ]; then\n"
+        "  printf '%s\\n' '  -eebus-admin-enabled' '  -eebus-admin-owner-secret-file' >&2\n"
+        "  exit 0\n"
+        "fi\n"
+        ": > "
+        + shlex.quote(str(override_marker))
+        + "\n",
+        encoding="utf-8",
+    )
+    fallback.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    for binary in (packaged, override, fallback):
+        binary.chmod(0o755)
+
+    selection = selection.replace(
+        "/usr/local/bin/helianthus-gateway-fallback", str(fallback)
+    )
+    selection = selection.replace(
+        "/usr/local/bin/helianthus-gateway", str(packaged)
+    )
+    selection = selection.replace("/data/helianthus-gateway", str(override))
+    harness = tmp_path / "select-gateway.sh"
+    harness.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "bashio::log.info() { :; }\n"
+        "bashio::exit.nok() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
+        + selection
+        + "\n"
+        + '"${gateway_bin}"\n',
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(harness)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "override" in result.stderr.lower()
+    assert not override_marker.exists(), "stale/debug override reached execution"
+    assert not packaged_marker.exists(), "wrapper continued after rejecting override"
