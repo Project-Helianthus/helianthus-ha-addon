@@ -700,9 +700,8 @@ bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (produc
 bashio::log.info "v8 classifier mode: ${v8_classifier_mode} (HELIANTHUS_V8_CLASSIFIER_MODE — off=zero-overhead, shadow=canary, enforce=production filtering [addon default since 0.6.23])"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
-if [ -x "/data/helianthus-gateway" ]; then
-  gateway_bin="/data/helianthus-gateway"
-  bashio::log.info "Using gateway binary override from /data/helianthus-gateway"
+if [ -e "/data/helianthus-gateway" ] || [ -L "/data/helianthus-gateway" ]; then
+  bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"
 fi
 fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"
 
@@ -724,8 +723,8 @@ fallback_gateway_supports_flag() {
 
 # Gate `-enable-static-seed-table` on gateway support — the flag is
 # only present in builds containing P3 wiring. Older pinned gateway
-# binaries (or /data/helianthus-gateway overrides) would fail flag
-# parsing at startup. (Codex P1+P2 follow-up on PR #124, 2026-05-08:
+# binaries would fail flag parsing at startup. (Codex P1+P2 follow-up
+# on PR #124, 2026-05-08:
 # this block must run AFTER gateway_bin selection + gateway_supports_flag
 # definition, otherwise the function call resolves to "command not
 # found" and the conditional is always false.)
@@ -733,7 +732,7 @@ static_seed_args=()
 if gateway_supports_flag "enable-static-seed-table"; then
   static_seed_args=(-enable-static-seed-table="${enable_static_seed_table}")
 elif bashio::var.true "${enable_static_seed_table}"; then
-  bashio::log.warning "enable_static_seed_table=true requested but the pinned gateway binary does not support -enable-static-seed-table; flag ignored. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the P3 patch."
+  bashio::log.warning "enable_static_seed_table=true requested but the packaged gateway binary does not support -enable-static-seed-table; flag ignored. Publish an add-on release with a gateway that includes the P3 patch."
 fi
 
 semantic_cache_args=()
@@ -741,7 +740,7 @@ if gateway_supports_flag "semantic-cache-path"; then
   semantic_cache_args=(-semantic-cache-path "/data/semantic_cache.json")
   bashio::log.info "Semantic cache path: /data/semantic_cache.json"
 else
-  bashio::log.warning "Pinned gateway binary does not support -semantic-cache-path; semantic startup cache will remain container-local. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that supports semantic cache persistence."
+  bashio::log.warning "Packaged gateway binary does not support -semantic-cache-path; semantic startup cache will remain container-local. Publish an add-on release with gateway semantic cache persistence support."
 fi
 
 eebus_args=()
@@ -822,6 +821,85 @@ else
   bashio::log.info "eeBUS runtime: disabled"
 fi
 
+# Materialize eeBUS AdminV1 credentials from the protected Supervisor options
+# document without ever copying their values through bash, argv, or the
+# environment. The helper emits only a categorical status and validated
+# non-secret metadata. Any failure disables only the admin boundary.
+eebus_admin_args=()
+eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"
+eebus_admin_runtime_dir="/run/helianthus/eebus-admin"
+eebus_admin_owner_file="${eebus_admin_runtime_dir}/owner"
+eebus_admin_ha_file="${eebus_admin_runtime_dir}/ha"
+eebus_admin_clear_runtime_files() {
+  # Fixed-path, non-recursive, and intentionally nonfatal: a malformed
+  # directory or other obstructing node disables only AdminV1. rm unlinks a
+  # symlink itself rather than following it, preserving the no-follow boundary.
+  rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}" 2>/dev/null || true
+}
+eebus_admin_result=""
+if eebus_admin_result=$(python3 "${eebus_admin_helper}" \
+  --options "${eebus_options_path}" \
+  --runtime-dir "${eebus_admin_runtime_dir}" 2>/dev/null); then
+  eebus_admin_status=$(printf '%s' "${eebus_admin_result}" | jq -er '.status' 2>/dev/null || true)
+else
+  eebus_admin_status="unavailable"
+fi
+case "${eebus_admin_status}" in
+  ready)
+    missing_eebus_admin_flags=()
+    for required_flag in \
+      eebus-admin-enabled \
+      eebus-admin-owner-username \
+      eebus-admin-owner-secret-file \
+      eebus-admin-ha-secret-file \
+      eebus-admin-origin \
+      eebus-admin-session-ttl; do
+      if ! gateway_supports_flag "${required_flag}"; then
+        missing_eebus_admin_flags+=("${required_flag}")
+      fi
+    done
+    if [ "${#missing_eebus_admin_flags[@]}" -ne 0 ]; then
+      eebus_admin_clear_runtime_files
+      bashio::log.warning "eeBUS admin boundary unavailable reason=capability"
+    else
+      eebus_admin_owner_username=$(printf '%s' "${eebus_admin_result}" | jq -er '.owner_username' 2>/dev/null || true)
+      eebus_admin_origin=$(printf '%s' "${eebus_admin_result}" | jq -er '.origin' 2>/dev/null || true)
+      eebus_admin_session_ttl=$(printf '%s' "${eebus_admin_result}" | jq -er '.session_ttl' 2>/dev/null || true)
+      if [ -z "${eebus_admin_owner_username}" ] || [ -z "${eebus_admin_origin}" ] || [ -z "${eebus_admin_session_ttl}" ]; then
+        eebus_admin_clear_runtime_files
+        bashio::log.warning "eeBUS admin boundary unavailable reason=helper_output"
+      else
+        eebus_admin_args=(
+          -eebus-admin-enabled=true
+          -eebus-admin-owner-username "${eebus_admin_owner_username}"
+          -eebus-admin-owner-secret-file "${eebus_admin_owner_file}"
+          -eebus-admin-ha-secret-file "${eebus_admin_ha_file}"
+          -eebus-admin-origin "${eebus_admin_origin}"
+          -eebus-admin-session-ttl "${eebus_admin_session_ttl}"
+        )
+        bashio::log.info "eeBUS admin boundary: ready"
+      fi
+    fi
+    ;;
+  disabled)
+    bashio::log.info "eeBUS admin boundary: disabled"
+    ;;
+  unavailable)
+    eebus_admin_reason=$(printf '%s' "${eebus_admin_result}" | jq -er '.reason' 2>/dev/null || true)
+    case "${eebus_admin_reason}" in
+      configuration | runtime_store) ;;
+      *) eebus_admin_reason="helper" ;;
+    esac
+    eebus_admin_clear_runtime_files
+    bashio::log.warning "eeBUS admin boundary unavailable reason=${eebus_admin_reason}"
+    ;;
+  *)
+    eebus_admin_clear_runtime_files
+    bashio::log.warning "eeBUS admin boundary unavailable reason=helper"
+    ;;
+esac
+unset eebus_admin_result
+
 modbus_args=()
 if bashio::var.true "${modbus_tcp_enabled}"; then
   missing_modbus_flags=()
@@ -866,16 +944,15 @@ else
 fi
 
 # Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
-# version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER,
-# but a `/data/helianthus-gateway` override predating M2 would reject it during
-# flag parsing before the add-on can start. Older overrides still receive
-# `-instance-guid` so identity continuity is preserved; only the new
-# provenance-tagging flag is suppressed. (Codex P2 follow-up on PR #127.)
+# version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER.
+# The compatibility gate preserves identity continuity if a future packaged
+# binary temporarily lacks the provenance-tagging flag. (Codex P2 follow-up
+# on PR #127.)
 instance_guid_source_args=()
 if gateway_supports_flag "instance-guid-source"; then
   instance_guid_source_args=(-instance-guid-source "${instance_guid_source}")
 else
-  bashio::log.warning "Pinned gateway binary does not support -instance-guid-source; identity provenance tag (${instance_guid_source}) will not be propagated. Update gateway version (Dockerfile EBUSGATEWAY_VERSION) or override /data/helianthus-gateway with a build that includes the M2_GATEWAY_LOADER patch."
+  bashio::log.warning "Packaged gateway binary does not support -instance-guid-source; identity provenance tag (${instance_guid_source}) will not be propagated. Publish an add-on release with a gateway that includes the M2_GATEWAY_LOADER patch."
 fi
 
 fallback_static_seed_args=()
@@ -952,6 +1029,7 @@ gateway_common_args+=(
   -instance-guid "${instance_guid}"
 )
 gateway_args=("${gateway_common_args[@]}")
+if [ "${#eebus_admin_args[@]}" -ne 0 ]; then gateway_args+=("${eebus_admin_args[@]}"); fi
 if [ "${#instance_guid_source_args[@]}" -ne 0 ]; then gateway_args+=("${instance_guid_source_args[@]}"); fi
 gateway_args+=(
   -broadcast="${broadcast}"
