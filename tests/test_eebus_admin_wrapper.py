@@ -336,3 +336,84 @@ def test_authoritative_release_rejects_persistent_gateway_override_before_exec(
     assert "override" in result.stderr.lower()
     assert not override_marker.exists(), "stale/debug override reached execution"
     assert not packaged_marker.exists(), "wrapper continued after rejecting override"
+
+
+def test_runtime_store_obstruction_keeps_public_gateway_running_without_admin(
+    tmp_path: Path,
+) -> None:
+    run = RUN.read_text(encoding="utf-8")
+    admin_start = run.index(
+        "# Materialize eeBUS AdminV1 credentials from the protected Supervisor options"
+    )
+    admin_end_marker = "unset eebus_admin_result"
+    admin_end = run.index(admin_end_marker, admin_start) + len(admin_end_marker)
+    admin_block = run[admin_start:admin_end]
+
+    options = tmp_path / "options.json"
+    options.write_text(json.dumps(enabled_options()), encoding="utf-8")
+    runtime = tmp_path / "run" / "eebus-admin"
+    runtime.mkdir(parents=True, mode=0o700)
+    owner_path = runtime / "owner"
+    ha_path = runtime / "ha"
+    owner_path.write_text(OWNER_SECRET, encoding="ascii")
+    ha_path.mkdir()
+
+    argv_path = tmp_path / "gateway-argv"
+    log_path = tmp_path / "wrapper.log"
+    gateway = tmp_path / "packaged-public-gateway"
+    gateway.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$@\" > "
+        + shlex.quote(str(argv_path))
+        + "\n",
+        encoding="utf-8",
+    )
+    gateway.chmod(0o755)
+
+    admin_block = admin_block.replace(
+        'eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"',
+        f"eebus_admin_helper={shlex.quote(str(HELPER))}",
+    )
+    admin_block = admin_block.replace(
+        'eebus_admin_runtime_dir="/run/helianthus/eebus-admin"',
+        f"eebus_admin_runtime_dir={shlex.quote(str(runtime))}",
+    )
+    harness = tmp_path / "runtime-store-wrapper.sh"
+    harness.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f"eebus_options_path={shlex.quote(str(options))}\n"
+        f"wrapper_log={shlex.quote(str(log_path))}\n"
+        "gateway_supports_flag() { return 0; }\n"
+        "bashio::log.info() { printf 'INFO: %s\\n' \"$*\" >> \"${wrapper_log}\"; }\n"
+        "bashio::log.warning() { printf 'WARN: %s\\n' \"$*\" >> \"${wrapper_log}\"; }\n"
+        + admin_block
+        + "\n"
+        + "gateway_args=(-http-addr 127.0.0.1:8080)\n"
+        + 'if [ "${#eebus_admin_args[@]}" -ne 0 ]; then gateway_args+=("${eebus_admin_args[@]}"); fi\n'
+        + f"exec {shlex.quote(str(gateway))} \"${{gateway_args[@]}}\"\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(harness)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    argv = argv_path.read_text(encoding="utf-8").splitlines()
+    logs = log_path.read_text(encoding="utf-8")
+    assert argv == ["-http-addr", "127.0.0.1:8080"]
+    assert "eebus-admin" not in "\n".join(argv)
+    for forbidden in (
+        str(owner_path),
+        str(ha_path),
+        OWNER_SECRET,
+        HA_SECRET,
+    ):
+        assert forbidden not in "\n".join(argv)
+        assert forbidden not in logs
+        assert forbidden not in result.stdout + result.stderr
+    assert "reason=runtime_store" in logs
