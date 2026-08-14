@@ -17,6 +17,7 @@ CONFIG = REPO_ROOT / "helianthus/config.json"
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 RUNTIME_STATE_WRAPPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
 MODBUS_RUNTIME_GUARD = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
+EEBUS_ADMIN_HELPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
 EXPECTED_OPTIONS = {
     "eebus_enabled": False,
@@ -25,6 +26,12 @@ EXPECTED_OPTIONS = {
     "eebus_subnets": "",
     "eebus_discovery_enabled": True,
     "eebus_remote_ski_allowlist": "",
+    "eebus_admin_enabled": False,
+    "eebus_admin_owner_username": "operator",
+    "eebus_admin_origin": "",
+    "eebus_admin_session_ttl": "20m",
+    "eebus_admin_owner_secret": "",
+    "eebus_admin_ha_secret": "",
 }
 
 EXPECTED_SCHEMA = {
@@ -34,6 +41,12 @@ EXPECTED_SCHEMA = {
     "eebus_subnets": "str",
     "eebus_discovery_enabled": "bool",
     "eebus_remote_ski_allowlist": "str",
+    "eebus_admin_enabled": "bool",
+    "eebus_admin_owner_username": "str",
+    "eebus_admin_origin": "str",
+    "eebus_admin_session_ttl": "str",
+    "eebus_admin_owner_secret": "password",
+    "eebus_admin_ha_secret": "password",
 }
 
 REQUIRED_FLAGS = (
@@ -46,9 +59,19 @@ REQUIRED_FLAGS = (
     "eebus-remote-ski-allowlist",
     "eebus-pairing-window-mode",
 )
+REQUIRED_ADMIN_FLAGS = (
+    "eebus-admin-enabled",
+    "eebus-admin-owner-username",
+    "eebus-admin-owner-secret-file",
+    "eebus-admin-ha-secret-file",
+    "eebus-admin-origin",
+    "eebus-admin-session-ttl",
+)
 
 VALID_GUID = "12345678-1234-4234-9234-123456789abc"
 VALID_REMOTE_SKI = "a" * 40
+VALID_OWNER_SECRET = "o" * 32
+VALID_HA_SECRET = "h" * 32
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -108,7 +131,7 @@ def _write_executable(path: Path, content: str) -> None:
 
 
 def _write_gateway_stub(path: Path, *, omit_flag: str | None = None) -> None:
-    flags = [flag for flag in REQUIRED_FLAGS if flag != omit_flag]
+    flags = [flag for flag in REQUIRED_FLAGS + REQUIRED_ADMIN_FLAGS if flag != omit_flag]
     help_text = "Usage of gateway:\n" + "".join(f"  -{flag}\n" for flag in flags)
     help_text += "  -instance-guid-source string\n  -semantic-cache-path string\n"
     script = f'''#!/usr/bin/env python3
@@ -141,6 +164,14 @@ def _write_test_wrapper(path: Path) -> None:
     text = text.replace("/data/helianthus-gateway", "${TEST_GATEWAY_OVERRIDE_BIN}")
     text = text.replace("/data/source_addr.last", "${TEST_LEGACY_SOURCE_ADDR_STATE_FILE}")
     text = text.replace(
+        'eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"',
+        'eebus_admin_helper="${TEST_EEBUS_ADMIN_HELPER}"',
+    )
+    text = text.replace(
+        'eebus_admin_runtime_dir="/run/helianthus/eebus-admin"',
+        'eebus_admin_runtime_dir="${TEST_EEBUS_ADMIN_RUNTIME_DIR}"',
+    )
+    text = text.replace(
         'eebus_options_path="/data/options.json"',
         'eebus_options_path="${TEST_EEBUS_OPTIONS_PATH}"',
     )
@@ -165,6 +196,9 @@ def _run_case(
     stale_schema: bool = False,
     stale_fields: tuple[str, ...] = (),
     options_override: dict[str, object] | None = None,
+    admin_enabled: bool = False,
+    owner_secret: object = VALID_OWNER_SECRET,
+    ha_secret: object = VALID_HA_SECRET,
     omit_flag: str | None = None,
     expect_success: bool = True,
 ) -> tuple[list[str], str, str]:
@@ -186,6 +220,12 @@ def _run_case(
             "eebus_subnets": subnets,
             "eebus_discovery_enabled": discovery,
             "eebus_remote_ski_allowlist": allowlist,
+            "eebus_admin_enabled": admin_enabled,
+            "eebus_admin_owner_username": "operator",
+            "eebus_admin_origin": "http://192.0.2.10:8080",
+            "eebus_admin_session_ttl": "20m",
+            "eebus_admin_owner_secret": owner_secret,
+            "eebus_admin_ha_secret": ha_secret,
         }
         if options_override:
             options.update(options_override)
@@ -230,6 +270,8 @@ def _run_case(
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options_file),
                 "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
                 "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
+                "TEST_EEBUS_ADMIN_HELPER": str(EEBUS_ADMIN_HELPER),
+                "TEST_EEBUS_ADMIN_RUNTIME_DIR": str(tmp / "eebus-admin-runtime"),
             }
         )
         stale_env_keys = {
@@ -385,6 +427,31 @@ def _check_runtime_cases() -> None:
         argv, stderr, _ = _run_case(enabled=True, omit_flag=missing_flag, expect_success=False)
         _assert(argv == [], f"gateway missing {missing_flag} reached execution")
         _assert("does not support the complete eeBUS runtime flag set" in stderr, "unsupported gateway error is unclear")
+
+    admin_argv, admin_diagnostics, _ = _run_case(enabled=True, admin_enabled=True)
+    _assert("-eebus-admin-enabled=true" in admin_argv, "ready AdminV1 omitted enablement")
+    _assert(_value(admin_argv, "-eebus-admin-owner-username") == "operator", "owner username changed")
+    _assert(_value(admin_argv, "-eebus-admin-origin") == "http://192.0.2.10:8080", "owner origin changed")
+    _assert(_value(admin_argv, "-eebus-admin-session-ttl") == "20m", "session TTL changed")
+    _assert(VALID_OWNER_SECRET not in "\n".join(admin_argv) + admin_diagnostics, "owner secret leaked")
+    _assert(VALID_HA_SECRET not in "\n".join(admin_argv) + admin_diagnostics, "HA secret leaked")
+
+    invalid_admin_argv, invalid_admin_diagnostics, _ = _run_case(
+        enabled=True,
+        admin_enabled=True,
+        owner_secret="short",
+    )
+    _assert(not any(arg.startswith("-eebus-admin-") for arg in invalid_admin_argv), "invalid AdminV1 reached gateway")
+    _assert("reason=configuration" in invalid_admin_diagnostics, "invalid AdminV1 reason is not categorical")
+
+    old_gateway_argv, old_gateway_diagnostics, _ = _run_case(
+        enabled=True,
+        admin_enabled=True,
+        omit_flag="eebus-admin-origin",
+    )
+    _assert("-eebus-enabled=true" in old_gateway_argv, "old gateway lost raw eeBUS runtime")
+    _assert(not any(arg.startswith("-eebus-admin-") for arg in old_gateway_argv), "partial AdminV1 flags reached old gateway")
+    _assert("reason=capability" in old_gateway_diagnostics, "old gateway degradation is not categorical")
 
 
 def main() -> int:

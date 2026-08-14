@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.43 (2026-08-14)
+
+- Pin the reviewed post-M9 gateway merge and propagate this add-on release
+  version through the runtime and Portal from the single `config.json` source.
+- Add disabled-by-default eeBUS AdminV1 deployment options. Materialize the
+  two distinct Supervisor password inputs as atomic protected runtime files;
+  never place credential values in argv, environment, logs, or evidence.
+- Degrade invalid or unavailable AdminV1 provisioning independently while
+  preserving GraphQL, MCP, eBUS, and raw eeBUS operation. Keep the prior
+  gateway as the Modbus recovery binary and omit every AdminV1 flag from its
+  fallback arguments.
+
 ## 0.6.42 (2026-08-13)
 
 - Add disabled-by-default, read-only Modbus TCP sidecar options with atomic

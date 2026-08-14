@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.42",
+  "version": "0.6.43",
   "slug": "helianthus",
   "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [
@@ -54,6 +54,12 @@
     "eebus_subnets": "",
     "eebus_discovery_enabled": true,
     "eebus_remote_ski_allowlist": "",
+    "eebus_admin_enabled": false,
+    "eebus_admin_owner_username": "operator",
+    "eebus_admin_origin": "",
+    "eebus_admin_session_ttl": "20m",
+    "eebus_admin_owner_secret": "",
+    "eebus_admin_ha_secret": "",
     "modbus_tcp_enabled": false,
     "modbus_tcp_endpoint": "",
     "modbus_tcp_dial_timeout": "5s"
@@ -94,6 +100,12 @@
     "eebus_subnets": "str",
     "eebus_discovery_enabled": "bool",
     "eebus_remote_ski_allowlist": "str",
+    "eebus_admin_enabled": "bool",
+    "eebus_admin_owner_username": "str",
+    "eebus_admin_origin": "str",
+    "eebus_admin_session_ttl": "str",
+    "eebus_admin_owner_secret": "password",
+    "eebus_admin_ha_secret": "password",
     "modbus_tcp_enabled": "bool",
     "modbus_tcp_endpoint": "password",
     "modbus_tcp_dial_timeout": "str"

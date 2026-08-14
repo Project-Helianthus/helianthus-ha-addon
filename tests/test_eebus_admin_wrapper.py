@@ -205,6 +205,33 @@ def test_symlinked_runtime_target_fails_closed_without_partial_output(tmp_path: 
     assert_no_runtime_credentials(runtime)
 
 
+def test_symlinked_options_document_is_rejected_without_following_it(tmp_path: Path) -> None:
+    assert HELPER.is_file()
+    protected = tmp_path / "protected-options.json"
+    protected.write_text(json.dumps(enabled_options()), encoding="utf-8")
+    options = tmp_path / "options.json"
+    options.symlink_to(protected)
+    runtime = tmp_path / "run" / "eebus-admin"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(HELPER),
+            "--options",
+            str(options),
+            "--runtime-dir",
+            str(runtime),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={"PATH": os.environ.get("PATH", "")},
+    )
+
+    assert parsed_status(result) == {"status": "unavailable", "reason": "configuration"}
+    assert protected.read_text(encoding="utf-8") == json.dumps(enabled_options())
+    assert_no_runtime_credentials(runtime)
+
+
 def test_rotation_replaces_both_credentials_without_leaking_old_or_new(tmp_path: Path) -> None:
     first, runtime = run_helper(tmp_path, enabled_options())
     assert parsed_status(first)["status"] == "ready"
@@ -239,7 +266,7 @@ def test_wrapper_never_reads_secret_options_and_isolates_fallback_args() -> None
     assert "-eebus-admin-session-ttl" in run
     assert "gateway_args+=(\"${eebus_admin_args[@]}\")" in run
     assert "gateway_common_args+=(\"${eebus_admin_args[@]}\")" not in run
-    fallback_section = run.split('modbus_fallback_args=("${gateway_common_args[@]}")', 1)[1]
-    assert "eebus_admin_args" not in fallback_section
+    assert 'modbus_fallback_args=("${gateway_common_args[@]}")' in run
+    assert 'modbus_fallback_args+=("${eebus_admin_args[@]}")' not in run
     assert OWNER_SECRET not in run
     assert HA_SECRET not in run

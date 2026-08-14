@@ -52,6 +52,7 @@ python3 scripts/check_source_addr_wrapper.py
 
 echo "==> persistent eeBUS wrapper wiring"
 python3 scripts/check_eebus_wrapper.py
+python3 -m pytest tests/test_eebus_admin_wrapper.py -q
 
 echo "==> Modbus TCP add-on configuration and recovery"
 python3 -m pytest tests/test_modbus_runtime_guard.py -q

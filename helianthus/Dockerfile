@@ -2,12 +2,14 @@
 
 ARG BUILD_FROM=ghcr.io/home-assistant/base:3.20
 ARG VRCEXPLORER_VERSION=v0.5.1
+ARG BUILD_VERSION
 
 FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
-ARG EBUSGATEWAY_VERSION=035e2b5cf703d68f75b809c45d2b1342696c07ef
-ARG EBUSGATEWAY_FALLBACK_VERSION=2af7e9e0c1342e7ea2961c859dd73021879cbffa
+ARG BUILD_VERSION
+ARG EBUSGATEWAY_VERSION=78130598d7420b7d04b35bee8aa86fc0fb3f1d39
+ARG EBUSGATEWAY_FALLBACK_VERSION=035e2b5cf703d68f75b809c45d2b1342696c07ef
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
@@ -28,17 +30,22 @@ RUN --mount=type=secret,id=github_token \
     cd /src; \
     git checkout --detach "${EBUSGATEWAY_VERSION}"; \
     test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_VERSION}"; \
+    test -n "${BUILD_VERSION}"; \
     test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
     if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
       GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
-      go build -trimpath -buildvcs=true -o /out/gateway ./cmd/gateway; \
+      go build -trimpath -buildvcs=true \
+      -ldflags "-X main.buildVersion=${BUILD_VERSION} -X main.buildID=${EBUSGATEWAY_VERSION}" \
+      -o /out/gateway ./cmd/gateway; \
     git checkout --detach "${EBUSGATEWAY_FALLBACK_VERSION}"; \
     test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_FALLBACK_VERSION}"; \
     test -z "$(git status --porcelain=v1 --untracked-files=all)"; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
       GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
-      go build -trimpath -buildvcs=true -o /out/gateway-fallback ./cmd/gateway; \
+      go build -trimpath -buildvcs=true \
+      -ldflags "-X main.buildVersion=${BUILD_VERSION} -X main.buildID=${EBUSGATEWAY_FALLBACK_VERSION}" \
+      -o /out/gateway-fallback ./cmd/gateway; \
     if [ -n "${github_token_value}" ]; then \
       sh /usr/local/bin/verify-no-secret "${github_token_value}" /root /src /out /tmp /go; \
     fi

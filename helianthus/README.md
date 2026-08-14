@@ -36,6 +36,12 @@ Key options are exposed in `config.json`:
 - `subscription_path`: GraphQL subscriptions endpoint path
 - `mcp_path`: MCP endpoint path
 - `mdns`: enable/disable mDNS advertisement
+- `eebus_admin_enabled`: opt in to the authenticated local eeBUS operator boundary (default `false`; requires `eebus_enabled=true`)
+- `eebus_admin_owner_username`: bounded Portal owner username
+- `eebus_admin_origin`: exact `http` or `https` origin used for same-origin Portal and CSRF checks
+- `eebus_admin_session_ttl`: owner-session duration up to 24 hours
+- `eebus_admin_owner_secret`: Portal owner credential, stored by Supervisor as a password option
+- `eebus_admin_ha_secret`: distinct Home Assistant machine credential, stored by Supervisor as a password option
 - `modbus_tcp_enabled`: opt in to the read-only Modbus TCP sidecar (default `false`)
 - `modbus_tcp_endpoint`: one `tcp://host:port` endpoint; Supervisor treats it as a password field and embedded credentials are rejected
 - `modbus_tcp_dial_timeout`: bounded `ms` or `s` dial timeout from 100 ms through 30 s
@@ -52,6 +58,18 @@ health-write failure terminates and reaps the child before restart. Set
 `modbus_tcp_enabled=false` to restore the normal inert path; any retained
 endpoint value is ignored and omitted from arguments and health. Rollback to
 add-on `0.6.41` restores the same previous gateway pin.
+
+When eeBUS AdminV1 is enabled, the wrapper reads both credentials directly
+from the protected Supervisor options document and atomically materializes
+them as fixed regular `0600` files below `/run/helianthus/eebus-admin` (directory
+mode `0700`). Credential values never pass through shell variables, process
+arguments, environment variables, or logs. A missing, malformed, equal, or
+partially writable credential bundle disables only AdminV1; GraphQL, MCP,
+eBUS, and the raw eeBUS runtime continue. Enter the same HA machine credential
+once through the Helianthus integration config/reconfigure/reauth flow. Rotate
+it by updating the add-on password option and then completing HA reauth; a
+temporary AdminV1-only authentication failure does not unload primary HA
+entities.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
