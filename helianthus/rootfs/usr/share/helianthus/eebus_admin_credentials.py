@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 SECRET_MIN = 32
 SECRET_MAX = 256
+OPTIONS_MAX_BYTES = 64 * 1024
 TTL_RE = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m|h)$")
 TTL_MULTIPLIER = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
 
@@ -64,13 +65,28 @@ def _clear_files(runtime_dir: Path) -> bool:
 
 
 def _load_options(path: Path) -> dict[str, Any]:
+    descriptor = -1
     try:
-        info = path.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        flags = os.O_RDONLY
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > OPTIONS_MAX_BYTES:
             raise ConfigurationError("options")
-        value = json.loads(path.read_text(encoding="utf-8"))
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            raw = handle.read(OPTIONS_MAX_BYTES + 1)
+        if len(raw) > OPTIONS_MAX_BYTES:
+            raise ConfigurationError("options")
+        value = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError("options") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
     if not isinstance(value, dict):
         raise ConfigurationError("options")
     return value
