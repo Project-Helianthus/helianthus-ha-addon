@@ -65,7 +65,7 @@ def test_wrapper_has_no_eebus_admin_materializer_and_rejects_persistent_override
     assert override_guard in run
     assert refusal in run
     assert run.index(override_guard) < run.index('exec "${gateway_bin}"')
-    assert run.index(override_guard) < run.index('exec "${fallback_gateway_bin}"')
+    assert run.index(override_guard) < run.index('fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"')
     assert 'gateway_bin="/data/helianthus-gateway"' not in run
     assert 'fallback_gateway_bin="/data/helianthus-gateway"' not in run
 

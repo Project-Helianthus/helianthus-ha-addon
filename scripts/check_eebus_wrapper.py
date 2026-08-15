@@ -55,7 +55,7 @@ def main() -> int:
     refusal = 'bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"'
     assert override_guard in run and refusal in run, "persistent gateway override must fail closed"
     assert run.index(override_guard) < run.index('exec "${gateway_bin}"'), "override guard must run before primary exec"
-    assert run.index(override_guard) < run.index('exec "${fallback_gateway_bin}"'), "override guard must run before fallback exec"
+    assert run.index(override_guard) < run.index('fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"'), "override guard must run before fallback selection"
     assert 'gateway_bin="/data/helianthus-gateway"' not in run, "override must never select the persistent binary"
     assert 'fallback_gateway_bin="/data/helianthus-gateway"' not in run, "fallback must never select the persistent binary"
     print("eeBUS wrapper removal contract passed.")

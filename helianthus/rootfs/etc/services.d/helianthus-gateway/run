@@ -700,6 +700,9 @@ bashio::log.info "Static seed table: enabled=${enable_static_seed_table} (produc
 bashio::log.info "v8 classifier mode: ${v8_classifier_mode} (HELIANTHUS_V8_CLASSIFIER_MODE — off=zero-overhead, shadow=canary, enforce=production filtering [addon default since 0.6.23])"
 
 gateway_bin="/usr/local/bin/helianthus-gateway"
+if [ -e "/data/helianthus-gateway" ] || [ -L "/data/helianthus-gateway" ]; then
+  bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"
+fi
 fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"
 
 binary_supports_flag() {
