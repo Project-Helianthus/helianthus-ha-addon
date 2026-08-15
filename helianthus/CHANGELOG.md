@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.46 (2026-08-15)
+
+- Pin the consolidated gateway to
+  `53fe86d1beb656c8453a6213127ddddef83c887b`, carrying the eeBUS retry-ready
+  reopen correction and `eebusreg v0.1.33`.
+- Preserve the credential-free eeBUS wrapper and all existing runtime options.
+  Keep the Modbus-capable primary gateway and its isolated fallback behavior;
+  Modbus remains disabled by default.
+
 ## 0.6.45 (2026-08-15)
 
 - Pin the consolidated gateway to reviewed merge
