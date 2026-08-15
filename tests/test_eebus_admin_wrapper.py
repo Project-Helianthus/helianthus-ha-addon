@@ -2,418 +2,150 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import stat
 import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
 DOCKERFILE = ROOT / "helianthus/Dockerfile"
-RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
-HELPER = (
-    ROOT
-    / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
-)
-BUILD_WORKFLOW = ROOT / ".github/workflows/build.yml"
+WORKFLOW = ROOT / ".github/workflows/build.yml"
 PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
+RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
+HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-CURRENT_GATEWAY = "78130598d7420b7d04b35bee8aa86fc0fb3f1d39"
-FALLBACK_GATEWAY = "035e2b5cf703d68f75b809c45d2b1342696c07ef"
-CURRENT_TREE = "f3a829785224e4b19b0534fb1d4034a78efe411a"
-OWNER_SECRET = "owner-0123456789abcdef0123456789ab"
-HA_SECRET = "ha-machine-0123456789abcdef0123456"
-
-
-def enabled_options(**overrides: object) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "eebus_enabled": True,
-        "eebus_admin_enabled": True,
-        "eebus_admin_owner_username": "operator",
-        "eebus_admin_origin": "http://192.0.2.10:8080",
-        "eebus_admin_session_ttl": "20m",
-        "eebus_admin_owner_secret": OWNER_SECRET,
-        "eebus_admin_ha_secret": HA_SECRET,
-    }
-    payload.update(overrides)
-    return payload
-
-
-def run_helper(tmp_path: Path, payload: object) -> tuple[subprocess.CompletedProcess[str], Path]:
-    assert HELPER.is_file(), "eeBUS AdminV1 credential materializer is missing"
-    options = tmp_path / "options.json"
-    options.write_text(json.dumps(payload), encoding="utf-8")
-    runtime = tmp_path / "run" / "eebus-admin"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(HELPER),
-            "--options",
-            str(options),
-            "--runtime-dir",
-            str(runtime),
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-        env={"PATH": os.environ.get("PATH", "")},
-    )
-    return result, runtime
+RELEASE = "0.6.44"
+GATEWAY = "dadba65ea77e197c6e542a98a554b09f2016cb16"
+REMOVED_OPTIONS = (
+    "eebus_admin_enabled",
+    "eebus_admin_owner_username",
+    "eebus_admin_origin",
+    "eebus_admin_session_ttl",
+    "eebus_admin_owner_secret",
+    "eebus_admin_ha_secret",
+)
+REMOVED_WRAPPER_TERMS = (
+    "eebus_admin",
+    "eebus-admin",
+    "eebus_admin_credentials.py",
+    "/run/helianthus/eebus-admin",
+)
 
 
-def parsed_status(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
-    assert result.returncode == 0, result.stderr
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert isinstance(payload, dict)
-    return payload
-
-
-def assert_no_runtime_credentials(runtime: Path) -> None:
-    assert not (runtime / "owner").exists()
-    assert not (runtime / "ha").exists()
-
-
-def test_release_pin_and_build_version_have_one_authority() -> None:
+def test_release_pin_is_0644_and_gateway_provenance_is_exact() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
-    workflow = BUILD_WORKFLOW.read_text(encoding="utf-8")
+    workflow = WORKFLOW.read_text(encoding="utf-8")
     parity = json.loads(PARITY.read_text(encoding="utf-8"))
 
-    assert config["version"] == "0.6.43"
-    assert f"ARG EBUSGATEWAY_VERSION={CURRENT_GATEWAY}" in dockerfile
-    assert f"ARG EBUSGATEWAY_FALLBACK_VERSION={FALLBACK_GATEWAY}" in dockerfile
-    assert "ARG BUILD_VERSION" in dockerfile
-    assert "main.buildVersion=${BUILD_VERSION}" in dockerfile
-    assert "main.buildID=${EBUSGATEWAY_VERSION}" in dockerfile
-    assert "main.buildID=${EBUSGATEWAY_FALLBACK_VERSION}" in dockerfile
-    assert f"EBUSGATEWAY_VERSION={CURRENT_GATEWAY}" in workflow
-    assert f"EBUSGATEWAY_FALLBACK_VERSION={FALLBACK_GATEWAY}" in workflow
-    assert "BUILD_VERSION=${{ steps.addon.outputs.version }}" in workflow
-    assert parity["source_ref"] == CURRENT_GATEWAY
-    assert parity["tested_ref"] == CURRENT_GATEWAY
-    assert parity["source_tree"] == CURRENT_TREE
-    assert parity["tested_tree"] == CURRENT_TREE
-    assert parity["workflow_run"]["id"] == 31792320140
+    assert config["version"] == RELEASE
+    assert f"ARG EBUSGATEWAY_VERSION={GATEWAY}" in dockerfile
+    assert f"EBUSGATEWAY_VERSION={GATEWAY}" in workflow
+    assert parity["source_ref"] == GATEWAY
+    assert parity["tested_ref"] == GATEWAY
+    assert parity["workflow_run"]["head_sha"] == GATEWAY
 
 
-def test_admin_schema_is_disabled_by_default_and_secrets_are_passwords() -> None:
+def test_config_has_no_eebus_admin_schema_or_options() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
-    options = config["options"]
-    schema = config["schema"]
-
-    assert options["eebus_admin_enabled"] is False
-    assert options["eebus_admin_owner_username"] == "operator"
-    assert options["eebus_admin_origin"] == ""
-    assert options["eebus_admin_session_ttl"] == "20m"
-    assert options["eebus_admin_owner_secret"] == ""
-    assert options["eebus_admin_ha_secret"] == ""
-    assert schema["eebus_admin_enabled"] == "bool"
-    assert schema["eebus_admin_owner_username"] == "str"
-    assert schema["eebus_admin_origin"] == "str"
-    assert schema["eebus_admin_session_ttl"] == "str"
-    assert schema["eebus_admin_owner_secret"] == "password"
-    assert schema["eebus_admin_ha_secret"] == "password"
+    for name in REMOVED_OPTIONS:
+        assert name not in config["options"]
+        assert name not in config["schema"]
 
 
-def test_disabled_or_eebus_disabled_clears_stale_runtime_files(tmp_path: Path) -> None:
-    for payload in (
-        enabled_options(eebus_admin_enabled=False),
-        enabled_options(eebus_enabled=False),
-    ):
-        stale_dir = tmp_path / "run" / "eebus-admin"
-        stale_dir.mkdir(parents=True, exist_ok=True)
-        (stale_dir / "owner").write_text("stale-owner", encoding="utf-8")
-        (stale_dir / "ha").write_text("stale-ha", encoding="utf-8")
-        result, runtime = run_helper(tmp_path, payload)
-        status_payload = parsed_status(result)
-        assert status_payload == {"status": "disabled"}
-        assert_no_runtime_credentials(runtime)
-
-
-def test_valid_bundle_materializes_only_two_atomic_private_files(tmp_path: Path) -> None:
-    result, runtime = run_helper(tmp_path, enabled_options())
-    payload = parsed_status(result)
-
-    assert payload == {
-        "status": "ready",
-        "owner_username": "operator",
-        "origin": "http://192.0.2.10:8080",
-        "session_ttl": "20m",
-    }
-    assert stat.S_IMODE(runtime.stat().st_mode) == 0o700
-    assert sorted(path.name for path in runtime.iterdir()) == ["ha", "owner"]
-    assert (runtime / "owner").read_text(encoding="ascii") == OWNER_SECRET
-    assert (runtime / "ha").read_text(encoding="ascii") == HA_SECRET
-    assert stat.S_IMODE((runtime / "owner").stat().st_mode) == 0o600
-    assert stat.S_IMODE((runtime / "ha").stat().st_mode) == 0o600
-    assert OWNER_SECRET not in result.stdout + result.stderr
-    assert HA_SECRET not in result.stdout + result.stderr
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"eebus_admin_owner_secret": "short"},
-        {"eebus_admin_ha_secret": "x" * 257},
-        {"eebus_admin_owner_secret": HA_SECRET},
-        {"eebus_admin_owner_secret": "x" * 31 + " "},
-        {"eebus_admin_ha_secret": "x" * 31 + "\n"},
-        {"eebus_admin_ha_secret": "x" * 31 + "é"},
-        {"eebus_admin_owner_secret": 42},
-        {"eebus_admin_origin": "https://user@example.test"},
-        {"eebus_admin_origin": "https://example.test/path"},
-        {"eebus_admin_session_ttl": "25h"},
-        {"eebus_admin_owner_username": "bad:user"},
-    ],
-)
-def test_invalid_bundle_is_categorical_and_removes_both_files(
-    tmp_path: Path, overrides: dict[str, object]
-) -> None:
-    result, runtime = run_helper(tmp_path, enabled_options(**overrides))
-    payload = parsed_status(result)
-
-    assert payload == {"status": "unavailable", "reason": "configuration"}
-    assert_no_runtime_credentials(runtime)
-    rendered = result.stdout + result.stderr
-    assert OWNER_SECRET not in rendered
-    assert HA_SECRET not in rendered
-    for value in overrides.values():
-        if isinstance(value, str):
-            assert value not in rendered
-
-
-def test_symlinked_runtime_target_fails_closed_without_partial_output(tmp_path: Path) -> None:
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    sentinel = outside / "owner"
-    sentinel.write_text("do-not-touch", encoding="utf-8")
-    runtime = tmp_path / "run" / "eebus-admin"
-    runtime.mkdir(parents=True)
-    (runtime / "owner").symlink_to(sentinel)
-    (runtime / "ha").write_text("stale-ha", encoding="utf-8")
-
-    result, returned_runtime = run_helper(tmp_path, enabled_options())
-    payload = parsed_status(result)
-
-    assert returned_runtime == runtime
-    assert payload == {"status": "unavailable", "reason": "runtime_store"}
-    assert sentinel.read_text(encoding="utf-8") == "do-not-touch"
-    assert_no_runtime_credentials(runtime)
-
-
-def test_symlinked_options_document_is_rejected_without_following_it(tmp_path: Path) -> None:
-    assert HELPER.is_file()
-    protected = tmp_path / "protected-options.json"
-    protected.write_text(json.dumps(enabled_options()), encoding="utf-8")
-    options = tmp_path / "options.json"
-    options.symlink_to(protected)
-    runtime = tmp_path / "run" / "eebus-admin"
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(HELPER),
-            "--options",
-            str(options),
-            "--runtime-dir",
-            str(runtime),
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-        env={"PATH": os.environ.get("PATH", "")},
-    )
-
-    assert parsed_status(result) == {"status": "unavailable", "reason": "configuration"}
-    assert protected.read_text(encoding="utf-8") == json.dumps(enabled_options())
-    assert_no_runtime_credentials(runtime)
-
-
-def test_rotation_replaces_both_credentials_without_leaking_old_or_new(tmp_path: Path) -> None:
-    first, runtime = run_helper(tmp_path, enabled_options())
-    assert parsed_status(first)["status"] == "ready"
-    rotated_owner = "rotated-owner-0123456789abcdef0123"
-    rotated_ha = "rotated-ha-0123456789abcdef012345"
-
-    second, runtime = run_helper(
-        tmp_path,
-        enabled_options(
-            eebus_admin_owner_secret=rotated_owner,
-            eebus_admin_ha_secret=rotated_ha,
-        ),
-    )
-    assert parsed_status(second)["status"] == "ready"
-    assert (runtime / "owner").read_text(encoding="ascii") == rotated_owner
-    assert (runtime / "ha").read_text(encoding="ascii") == rotated_ha
-    rendered = first.stdout + first.stderr + second.stdout + second.stderr
-    for secret in (OWNER_SECRET, HA_SECRET, rotated_owner, rotated_ha):
-        assert secret not in rendered
-
-
-def test_wrapper_never_reads_secret_options_and_isolates_fallback_args() -> None:
+def test_wrapper_has_no_eebus_admin_materializer_or_persistent_override() -> None:
     run = RUN.read_text(encoding="utf-8")
 
-    assert "eebus_admin_credentials.py" in run
-    assert "bashio::config 'eebus_admin_owner_secret'" not in run
-    assert "bashio::config 'eebus_admin_ha_secret'" not in run
-    assert "export EEBUS_ADMIN" not in run
-    assert "-eebus-admin-owner-secret-file" in run
-    assert "-eebus-admin-ha-secret-file" in run
-    assert "-eebus-admin-origin" in run
-    assert "-eebus-admin-session-ttl" in run
-    assert "gateway_args+=(\"${eebus_admin_args[@]}\")" in run
-    assert "gateway_common_args+=(\"${eebus_admin_args[@]}\")" not in run
-    assert 'modbus_fallback_args=("${gateway_common_args[@]}")' in run
-    assert 'modbus_fallback_args+=("${eebus_admin_args[@]}")' not in run
-    assert OWNER_SECRET not in run
-    assert HA_SECRET not in run
+    assert not HELPER.exists()
+    for term in REMOVED_WRAPPER_TERMS:
+        assert term not in run
+    assert "/data/helianthus-gateway" not in run
 
 
-def test_authoritative_release_rejects_persistent_gateway_override_before_exec(
+def test_eebus_runtime_keeps_pairing_without_admin_argv_logs_or_environment(
     tmp_path: Path,
 ) -> None:
-    run = RUN.read_text(encoding="utf-8")
-    selection_start = run.index('gateway_bin="/usr/local/bin/helianthus-gateway"')
-    fallback_line = 'fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"'
-    selection_end = run.index(fallback_line, selection_start) + len(fallback_line)
-    selection = run[selection_start:selection_end]
-
-    packaged_marker = tmp_path / "packaged-executed"
-    override_marker = tmp_path / "override-executed"
-    packaged = tmp_path / "packaged-gateway"
-    override = tmp_path / "stale-debug-override"
-    fallback = tmp_path / "packaged-fallback"
-    packaged.write_text(
-        "#!/bin/sh\n: > " + shlex.quote(str(packaged_marker)) + "\n",
-        encoding="utf-8",
-    )
-    override.write_text(
-        "#!/bin/sh\n"
-        "if [ \"${1:-}\" = \"--help\" ]; then\n"
-        "  printf '%s\\n' '  -eebus-admin-enabled' '  -eebus-admin-owner-secret-file' >&2\n"
-        "  exit 0\n"
-        "fi\n"
-        ": > "
-        + shlex.quote(str(override_marker))
-        + "\n",
-        encoding="utf-8",
-    )
-    fallback.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    for binary in (packaged, override, fallback):
-        binary.chmod(0o755)
-
-    selection = selection.replace(
-        "/usr/local/bin/helianthus-gateway-fallback", str(fallback)
-    )
-    selection = selection.replace(
-        "/usr/local/bin/helianthus-gateway", str(packaged)
-    )
-    selection = selection.replace("/data/helianthus-gateway", str(override))
-    harness = tmp_path / "select-gateway.sh"
-    harness.write_text(
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        "bashio::log.info() { :; }\n"
-        "bashio::exit.nok() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
-        + selection
-        + "\n"
-        + '"${gateway_bin}"\n',
-        encoding="utf-8",
-    )
-
-    result = subprocess.run(
-        ["bash", str(harness)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode != 0
-    assert "override" in result.stderr.lower()
-    assert not override_marker.exists(), "stale/debug override reached execution"
-    assert not packaged_marker.exists(), "wrapper continued after rejecting override"
-
-
-def test_runtime_store_obstruction_keeps_public_gateway_running_without_admin(
-    tmp_path: Path,
-) -> None:
-    run = RUN.read_text(encoding="utf-8")
-    admin_start = run.index(
-        "# Materialize eeBUS AdminV1 credentials from the protected Supervisor options"
-    )
-    admin_end_marker = "unset eebus_admin_result"
-    admin_end = run.index(admin_end_marker, admin_start) + len(admin_end_marker)
-    admin_block = run[admin_start:admin_end]
-
+    wrapper = tmp_path / "run-under-test.sh"
+    gateway = tmp_path / "gateway.py"
+    helper = tmp_path / "legacy-helper.py"
+    argv = tmp_path / "argv"
+    log = tmp_path / "log"
+    runtime = tmp_path / "runtime"
+    interface_id = tmp_path / "interface-id"
     options = tmp_path / "options.json"
-    options.write_text(json.dumps(enabled_options()), encoding="utf-8")
-    runtime = tmp_path / "run" / "eebus-admin"
-    runtime.mkdir(parents=True, mode=0o700)
-    owner_path = runtime / "owner"
-    ha_path = runtime / "ha"
-    owner_path.write_text(OWNER_SECRET, encoding="ascii")
-    ha_path.mkdir()
-
-    argv_path = tmp_path / "gateway-argv"
-    log_path = tmp_path / "wrapper.log"
-    gateway = tmp_path / "packaged-public-gateway"
+    options.write_text("{}", encoding="utf-8")
+    interface_id.write_text("001122334455\n", encoding="utf-8")
+    helper.write_text(
+        "#!/usr/bin/env python3\nprint('{\"status\": \"ready\", \"owner_username\": \"operator\", \"origin\": \"http://192.0.2.10\", \"session_ttl\": \"20m\"}')\n",
+        encoding="utf-8",
+    )
+    helper.chmod(helper.stat().st_mode | stat.S_IXUSR)
     gateway.write_text(
-        "#!/usr/bin/env bash\n"
-        "printf '%s\\n' \"$@\" > "
-        + shlex.quote(str(argv_path))
-        + "\n",
+        "#!/usr/bin/env python3\nimport os, pathlib, sys\n"
+        "if '--help' in sys.argv:\n"
+        "    sys.stderr.write('\\n'.join('-' + value for value in ('eebus-enabled', 'eebus-listen-port', 'eebus-interfaces', 'eebus-subnets', 'eebus-state-root', 'eebus-discovery-enabled', 'eebus-remote-ski-allowlist', 'eebus-pairing-window-mode', 'instance-guid-source', 'semantic-cache-path')) + '\\n')\n"
+        "    raise SystemExit(0)\n"
+        "pathlib.Path(os.environ['TEST_ARGV']).write_text('\\n'.join(sys.argv[1:]), encoding='utf-8')\n",
         encoding="utf-8",
     )
-    gateway.chmod(0o755)
+    gateway.chmod(gateway.stat().st_mode | stat.S_IXUSR)
 
-    admin_block = admin_block.replace(
-        'eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"',
-        f"eebus_admin_helper={shlex.quote(str(HELPER))}",
-    )
-    admin_block = admin_block.replace(
-        'eebus_admin_runtime_dir="/run/helianthus/eebus-admin"',
-        f"eebus_admin_runtime_dir={shlex.quote(str(runtime))}",
-    )
-    harness = tmp_path / "runtime-store-wrapper.sh"
-    harness.write_text(
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        f"eebus_options_path={shlex.quote(str(options))}\n"
-        f"wrapper_log={shlex.quote(str(log_path))}\n"
-        "gateway_supports_flag() { return 0; }\n"
-        "bashio::log.info() { printf 'INFO: %s\\n' \"$*\" >> \"${wrapper_log}\"; }\n"
-        "bashio::log.warning() { printf 'WARN: %s\\n' \"$*\" >> \"${wrapper_log}\"; }\n"
-        + admin_block
-        + "\n"
-        + "gateway_args=(-http-addr 127.0.0.1:8080)\n"
-        + 'if [ "${#eebus_admin_args[@]}" -ne 0 ]; then gateway_args+=("${eebus_admin_args[@]}"); fi\n'
-        + f"exec {shlex.quote(str(gateway))} \"${{gateway_args[@]}}\"\n",
-        encoding="utf-8",
-    )
+    prelude = r'''
+bashio::config() {
+  case "$1" in
+    transport) printf '%s\n' enh ;; network) printf '%s\n' tcp ;;
+    address) printf '%s\n' 203.0.113.10:9999 ;; proxy_profile) printf '%s\n' disabled ;;
+    host) printf '%s\n' 127.0.0.1 ;; port|http_port) printf '%s\n' 8080 ;;
+    path|graphql_path|subscription_path) printf '%s\n' /graphql ;; mcp_path) printf '%s\n' /mcp ;;
+    mdns|broadcast|observe_first_enabled|passive_state_direct_apply|eebus_enabled|eebus_discovery_enabled) printf '%s\n' true ;;
+    passive_config_direct_apply|enable_static_seed_table|adapter_direct_enabled|modbus_tcp_enabled) printf '%s\n' false ;;
+    mdns_instance) printf '%s\n' helianthus ;; source_addr) printf '%s\n' auto ;;
+    scan_request_timeout) printf '%s\n' 400ms ;; read_timeout|write_timeout|dial_timeout|modbus_tcp_dial_timeout) printf '%s\n' 5s ;;
+    proxy_listen_addr) printf '%s\n' 0.0.0.0:19001 ;; external_write_policy) printf '%s\n' record_only ;;
+    v8_classifier_mode) printf '%s\n' enforce ;; eebus_listen_port) printf '%s\n' 4712 ;;
+    eebus_interface) printf '%s\n' lo ;; eebus_subnets) printf '%s\n' 192.0.2.0/24 ;;
+    eebus_remote_ski_allowlist|adapter_direct_address|modbus_tcp_endpoint) printf '\n' ;;
+    *) printf '\n' ;;
+  esac
+}
+bashio::var.true() { case "$1" in true|1|yes|on) return 0 ;; *) return 1 ;; esac; }
+bashio::log.info() { printf 'INFO: %s\n' "$*" >> "$TEST_LOG"; }
+bashio::log.warning() { printf 'WARN: %s\n' "$*" >> "$TEST_LOG"; }
+bashio::log.error() { printf 'ERROR: %s\n' "$*" >> "$TEST_LOG"; }
+bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
+'''
+    text = RUN.read_text(encoding="utf-8")
+    text = text.replace("/usr/local/bin/helianthus-gateway", "${TEST_GATEWAY}")
+    text = text.replace("/data/helianthus-gateway", "${TEST_OVERRIDE}")
+    text = text.replace("/data/source_addr.last", "${TEST_SOURCE_STATE}")
+    text = text.replace("/etc/machine-id", "${TEST_MACHINE_ID}")
+    text = text.replace('interface_id_path="/sys/class/net/${eebus_interface}/address"', 'interface_id_path="${TEST_INTERFACE_ID_PATH}"')
+    text = text.replace('eebus_options_path="/data/options.json"', 'eebus_options_path="${TEST_EEBUS_OPTIONS}"')
+    text = text.replace("/usr/share/helianthus/eebus_admin_credentials.py", "${TEST_LEGACY_HELPER}")
+    text = text.replace("/run/helianthus/eebus-admin", "${TEST_LEGACY_RUNTIME}")
+    wrapper.write_text(prelude + "\n" + text, encoding="utf-8")
 
-    result = subprocess.run(
-        ["bash", str(harness)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
+    env = os.environ | {
+        "TEST_ARGV": str(argv), "TEST_LOG": str(log), "TEST_GATEWAY": str(gateway),
+        "TEST_OVERRIDE": str(tmp_path / "missing-override"), "TEST_SOURCE_STATE": str(tmp_path / "source-state"),
+        "TEST_LEGACY_HELPER": str(helper), "TEST_LEGACY_RUNTIME": str(runtime),
+        "TEST_INTERFACE_ID_PATH": str(interface_id),
+        "TEST_MACHINE_ID": str(tmp_path / "machine-id"),
+        "TEST_EEBUS_OPTIONS": str(options),
+        "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"),
+        "HELIANTHUS_RUNTIME_STATE_PATH": str(tmp_path / "runtime-state.json"),
+        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
+        "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
+        "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"),
+        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options), "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health"),
+        "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "endpoint"),
+    }
+    result = subprocess.run(["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False)
     assert result.returncode == 0, result.stderr
-    argv = argv_path.read_text(encoding="utf-8").splitlines()
-    logs = log_path.read_text(encoding="utf-8")
-    assert argv == ["-http-addr", "127.0.0.1:8080"]
-    assert "eebus-admin" not in "\n".join(argv)
-    for forbidden in (
-        str(owner_path),
-        str(ha_path),
-        OWNER_SECRET,
-        HA_SECRET,
-    ):
-        assert forbidden not in "\n".join(argv)
-        assert forbidden not in logs
-        assert forbidden not in result.stdout + result.stderr
-    assert "reason=runtime_store" in logs
+    rendered = "\n".join((argv.read_text(encoding="utf-8"), log.read_text(encoding="utf-8"), result.stdout, result.stderr))
+    assert "-eebus-enabled=true" in rendered
+    assert "-eebus-pairing-window-mode" in rendered
+    for term in REMOVED_WRAPPER_TERMS:
+        assert term not in rendered
+    assert "eeBUS admin" not in rendered
