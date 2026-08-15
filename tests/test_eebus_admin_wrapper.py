@@ -16,7 +16,7 @@ RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
 RELEASE = "0.6.45"
-GATEWAY = "bacd578d22686f751f6d4123ecebd68e43209509"
+GATEWAY = "b47cb2112cd365dfa7d5c3580ffc01da461cf1bd"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
@@ -33,7 +33,7 @@ REMOVED_WRAPPER_TERMS = (
 )
 
 
-def test_release_pin_is_0644_and_gateway_provenance_is_exact() -> None:
+def test_release_pin_is_0645_and_gateway_provenance_is_exact() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
