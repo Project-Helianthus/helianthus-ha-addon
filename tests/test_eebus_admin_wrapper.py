@@ -54,13 +54,20 @@ def test_config_has_no_eebus_admin_schema_or_options() -> None:
         assert name not in config["schema"]
 
 
-def test_wrapper_has_no_eebus_admin_materializer_or_persistent_override() -> None:
+def test_wrapper_has_no_eebus_admin_materializer_and_rejects_persistent_override() -> None:
     run = RUN.read_text(encoding="utf-8")
 
     assert not HELPER.exists()
     for term in REMOVED_WRAPPER_TERMS:
         assert term not in run
-    assert "/data/helianthus-gateway" not in run
+    override_guard = 'if [ -e "/data/helianthus-gateway" ] || [ -L "/data/helianthus-gateway" ]; then'
+    refusal = 'bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"'
+    assert override_guard in run
+    assert refusal in run
+    assert run.index(override_guard) < run.index('exec "${gateway_bin}"')
+    assert run.index(override_guard) < run.index('exec "${fallback_gateway_bin}"')
+    assert 'gateway_bin="/data/helianthus-gateway"' not in run
+    assert 'fallback_gateway_bin="/data/helianthus-gateway"' not in run
 
 
 def test_eebus_runtime_keeps_pairing_without_admin_argv_logs_or_environment(
