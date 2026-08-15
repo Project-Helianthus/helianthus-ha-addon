@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.45 (2026-08-15)
+
+- Pin the consolidated gateway to reviewed merge
+  `b47cb2112cd365dfa7d5c3580ffc01da461cf1bd`, including eeBUS RETRY_READY
+  recovery and the SunSpec qualification-retention path backed by
+  `helianthus-modbusreg v0.2.1`.
+- Retain the canonical SunSpec qualification observation atomically before a
+  GO result so the existing MCP reader can return deterministic sanitized
+  replay; qualification fails closed to STOP if construction, serialization,
+  or retention fails.
+- Keep the packaged Modbus recovery binary pinned to
+  `035e2b5cf703d68f75b809c45d2b1342696c07ef`, preserve disabled-by-default
+  Modbus configuration, and keep all eeBUS-specific credential provisioning
+  removed.
+
 ## 0.6.44 (2026-08-15)
 
 - Pin the primary gateway to reviewed commit

@@ -59,9 +59,10 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.44` removes eeBUS-specific credential options while preserving the
-raw eeBUS runtime with pairing closed by default. Generic Portal and Home
-Assistant authentication are unchanged.
+Release `0.6.45` packages the consolidated gateway with eeBUS RETRY_READY
+recovery and canonical retained SunSpec qualification observations. It keeps
+eeBUS-specific credential options removed, generic Portal and Home Assistant
+authentication unchanged, and Modbus disabled by default.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 
