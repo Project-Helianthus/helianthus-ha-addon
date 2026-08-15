@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.47 (2026-08-15)
+
+- Pin the consolidated gateway to
+  `225f3d96fee3422bc565870f946af19fac42d471`, carrying bounded FM5 startup
+  convergence and correct endpoint ownership in Modbus startup redaction.
+- Require the configured HTTP listener and any adapter-direct proxy listener
+  to accept bounded TCP connections before publishing `RUNNING` or
+  `FALLBACK_ACTIVE`. Readiness failure terminates and reaps the child before
+  retry or terminal fallback state.
+- Preserve the credential-free eeBUS wrapper and disabled-by-default Modbus
+  configuration. Deployment and live qualification remain separate actions.
+
 ## 0.6.46 (2026-08-15)
 
 - Pin the consolidated gateway to

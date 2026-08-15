@@ -55,11 +55,12 @@ health-write failure terminates and reaps the child before restart. Set
 endpoint value is ignored and omitted from arguments and health. Rollback to
 add-on `0.6.41` restores the same previous gateway pin.
 
-Release `0.6.46` packages the consolidated gateway with the eeBUS retry-ready
-reopen correction and `eebusreg v0.1.33`. All eeBUS-specific credential
-provisioning remains removed. Generic Portal and Home Assistant authentication
-remain outside this add-on option surface, and the read-only Modbus runtime
-remains disabled unless explicitly enabled.
+Release `0.6.47` packages the consolidated gateway with bounded FM5 startup
+convergence and correct endpoint ownership in startup redaction. Before an
+active Modbus state is published, the configured HTTP listener and any
+adapter-direct proxy listener must accept bounded TCP connections. All
+eeBUS-specific credential provisioning remains removed, and the read-only
+Modbus runtime remains disabled unless explicitly enabled.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
