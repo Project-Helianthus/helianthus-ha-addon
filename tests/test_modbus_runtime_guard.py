@@ -354,6 +354,20 @@ def test_readiness_probe_requires_every_declared_local_listener() -> None:
             capture_output=True,
             check=False,
         )
+        hostname = subprocess.run(
+            [
+                sys.executable,
+                str(GUARD_PATH),
+                "probe-readiness",
+                "--listener",
+                f"localhost:{ready_port}",
+                "--timeout-ms",
+                "200",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
 
     assert ready.returncode == 0, ready.stderr
     assert ready.stdout == ""
@@ -361,6 +375,8 @@ def test_readiness_probe_requires_every_declared_local_listener() -> None:
     assert incomplete.returncode != 0
     assert incomplete.stdout == ""
     assert incomplete.stderr == ""
+    assert hostname.returncode != 0
+    assert "localhost" not in hostname.stdout + hostname.stderr
 
 
 def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> None:
