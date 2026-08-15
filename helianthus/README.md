@@ -55,11 +55,11 @@ health-write failure terminates and reaps the child before restart. Set
 endpoint value is ignored and omitted from arguments and health. Rollback to
 add-on `0.6.41` restores the same previous gateway pin.
 
-Release `0.6.45` packages the consolidated gateway with eeBUS RETRY_READY
-recovery and canonical retained SunSpec qualification observations. All
-eeBUS-specific credential provisioning remains removed. Generic Portal and
-Home Assistant authentication remain outside this add-on option surface, and
-the read-only Modbus runtime remains disabled unless explicitly enabled.
+Release `0.6.46` packages the consolidated gateway with the eeBUS retry-ready
+reopen correction and `eebusreg v0.1.33`. All eeBUS-specific credential
+provisioning remains removed. Generic Portal and Home Assistant authentication
+remain outside this add-on option surface, and the read-only Modbus runtime
+remains disabled unless explicitly enabled.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
