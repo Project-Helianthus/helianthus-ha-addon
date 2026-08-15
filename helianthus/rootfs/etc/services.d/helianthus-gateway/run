@@ -997,6 +997,19 @@ if [ "${#fallback_proxy_listen_args[@]}" -ne 0 ]; then modbus_fallback_args+=("$
 
 modbus_passed_startup_window=false
 
+modbus_runtime_ready() {
+  local readiness_args
+  readiness_args=(
+    probe-readiness
+    --listener "${http_addr}"
+    --timeout-ms 250
+  )
+  if [ "${#proxy_listen_args[@]}" -ne 0 ]; then
+    readiness_args+=(--listener "${proxy_listen_addr}")
+  fi
+  python3 "${modbus_guard}" "${readiness_args[@]}" >/dev/null 2>&1
+}
+
 modbus_run_current() {
   local attempt_started elapsed rc ready_checks
   modbus_passed_startup_window=false
@@ -1069,6 +1082,12 @@ modbus_run_current() {
     fi
     elapsed=$(( $(date +%s) - attempt_started ))
     if ! bashio::var.true "${modbus_passed_startup_window}" && [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
+      if ! modbus_runtime_ready; then
+        modbus_runtime_failure_reason=RUNTIME_NOT_READY
+        modbus_terminate_child
+        modbus_cleanup_redactors || true
+        return 124
+      fi
       modbus_passed_startup_window=true
       modbus_write_health RUNNING "${attempt}" current STARTUP_WINDOW_PASSED
     fi
@@ -1087,6 +1106,7 @@ modbus_run_current() {
 modbus_run_fallback() {
   local attempt_started elapsed rc
   modbus_passed_startup_window=false
+  modbus_runtime_failure_reason=""
   if bashio::var.true "${modbus_stop_requested}"; then
     return 143
   fi
@@ -1101,6 +1121,11 @@ modbus_run_fallback() {
   while kill -0 "${modbus_child_pid}" 2>/dev/null; do
     elapsed=$(( $(date +%s) - attempt_started ))
     if [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
+      if ! modbus_runtime_ready; then
+        modbus_runtime_failure_reason=FALLBACK_RUNTIME_NOT_READY
+        modbus_terminate_child
+        return 124
+      fi
       modbus_passed_startup_window=true
       modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_WINDOW_PASSED
       break
@@ -1148,6 +1173,6 @@ fi
 if bashio::var.true "${modbus_passed_startup_window}"; then
   modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback FALLBACK_RUNTIME_EXIT
 else
-  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback FALLBACK_STARTUP_EXIT
+  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback "${modbus_runtime_failure_reason:-FALLBACK_STARTUP_EXIT}"
 fi
 exit "${rc}"
