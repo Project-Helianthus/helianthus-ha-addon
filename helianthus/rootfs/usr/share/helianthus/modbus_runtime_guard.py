@@ -12,6 +12,7 @@ import math
 import os
 import re
 import shlex
+import socket
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from urllib.parse import urlsplit
 CONTRACT = "helianthus.modbus-addon-health.v1"
 MAX_DIAL_TIMEOUT_MS = 30_000
 MIN_DIAL_TIMEOUT_MS = 100
+MIN_READINESS_TIMEOUT_MS = 10
+MAX_READINESS_TIMEOUT_MS = 2_000
 _DURATION_RE = re.compile(r"^([1-9][0-9]*)(ms|s)$")
 _HOST_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _STATES = {
@@ -194,6 +197,46 @@ def clear_health_file(path: Path) -> None:
         path.unlink()
 
 
+def _readiness_target(value: str) -> tuple[str, int]:
+    if not value or value != value.strip() or "://" in value:
+        raise ConfigError("invalid listener")
+    candidate = "0.0.0.0" + value if value.startswith(":") else value
+    try:
+        parsed = urlsplit("tcp://" + candidate)
+        port = parsed.port
+    except ValueError as error:
+        raise ConfigError("invalid listener") from error
+    host = parsed.hostname or ""
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or not host
+        or port is None
+        or not 1 <= port <= 65535
+        or not _valid_host(host)
+    ):
+        raise ConfigError("invalid listener")
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+    elif host == "::":
+        host = "::1"
+    return host, port
+
+
+def _probe_readiness_command(args: argparse.Namespace) -> int:
+    if not MIN_READINESS_TIMEOUT_MS <= args.timeout_ms <= MAX_READINESS_TIMEOUT_MS:
+        raise ConfigError("invalid readiness timeout")
+    timeout = args.timeout_ms / 1000
+    for listener in args.listener:
+        target = _readiness_target(listener)
+        try:
+            with socket.create_connection(target, timeout=timeout):
+                pass
+        except OSError:
+            return 1
+    return 0
+
+
 def _shell_assignment(name: str, value: str) -> str:
     return f"{name}={shlex.quote(value)}"
 
@@ -305,6 +348,11 @@ def parser() -> argparse.ArgumentParser:
     clear_runtime.add_argument("--endpoint-file", type=Path, required=True)
     clear_runtime.add_argument("--health", type=Path, required=True)
     clear_runtime.set_defaults(handler=_clear_runtime_command)
+
+    readiness = commands.add_parser("probe-readiness")
+    readiness.add_argument("--listener", action="append", required=True)
+    readiness.add_argument("--timeout-ms", type=int, default=250)
+    readiness.set_defaults(handler=_probe_readiness_command)
 
     redact = commands.add_parser("redact")
     redact.add_argument("--endpoint-file", type=Path, required=True)

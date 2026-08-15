@@ -39,7 +39,9 @@ bashio::config() {
     subscription_path) printf '%s\n' "/graphql/subscriptions" ;;
     mcp_path) printf '%s\n' "/mcp" ;;
     mdns|broadcast|observe_first_enabled|passive_state_direct_apply) printf '%s\n' "true" ;;
-    passive_config_direct_apply|enable_static_seed_table|adapter_direct_enabled|eebus_enabled) printf '%s\n' "false" ;;
+    passive_config_direct_apply|enable_static_seed_table|eebus_enabled) printf '%s\n' "false" ;;
+    adapter_direct_enabled) printf '%s\n' "${TEST_ADAPTER_DIRECT_ENABLED:-false}" ;;
+    adapter_direct_address) printf '%s\n' "192.0.2.80:9999" ;;
     eebus_discovery_enabled) printf '%s\n' "true" ;;
     mdns_instance) printf '%s\n' "helianthus" ;;
     source_addr) printf '%s\n' "auto" ;;
@@ -444,7 +446,7 @@ import time
 from pathlib import Path
 
 if "--help" in sys.argv:
-    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint-file string\\n  -modbus-tcp-dial-timeout duration\\n{optional_help_text}")
+    sys.stderr.write("Usage of gateway:\\n  -modbus-tcp-enabled\\n  -modbus-tcp-endpoint-file string\\n  -modbus-tcp-dial-timeout duration\\n  -proxy-listen string\\n{optional_help_text}")
     raise SystemExit(0)
 {body}
 '''
@@ -478,8 +480,9 @@ def run_wrapper(
     startup_delay_before_gateway_launch: float = 0,
     record_health_calls: bool = False,
     registration_delay_target: str | None = None,
-    readiness_result: bool = True,
+    readiness_result: bool | None = True,
     startup_window_seconds_override: int | None = None,
+    adapter_direct_enabled: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -576,7 +579,7 @@ def run_wrapper(
         or redactor_exit_after_ready is not None
         or record_health_calls
         or registration_delay_target is not None
-        or not readiness_result
+        or readiness_result is not None
     ):
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
@@ -590,7 +593,9 @@ from pathlib import Path
 is_redactor = len(sys.argv) > 1 and sys.argv[1] == "redact"
 is_validator = len(sys.argv) > 1 and sys.argv[1] == "validate"
 is_readiness_probe = len(sys.argv) > 1 and sys.argv[1] == "probe-readiness"
-if is_readiness_probe:
+if is_readiness_probe and {readiness_result is not None!r}:
+    with Path({str(tmp_path / "readiness-calls")!r}).open("a", encoding="utf-8") as handle:
+        handle.write("\\n".join(sys.argv[2:]) + "\\nCALL\\n")
     raise SystemExit(0 if {readiness_result!r} else 1)
 if is_validator:
     Path({str(tmp_path / "validator-pid")!r}).write_text(str(os.getpid()), encoding="utf-8")
@@ -653,6 +658,7 @@ except SystemExit as error:
             "TEST_FALLBACK_EXIT": str(fallback_exit),
             "TEST_FALLBACK_SLEEP": str(fallback_sleep),
             "TEST_PARENT_SIGNAL": str(signal_parent.value) if signal_parent else "",
+            "TEST_ADAPTER_DIRECT_ENABLED": "true" if adapter_direct_enabled else "false",
             "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(
                 ROOT
                 / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
@@ -774,6 +780,30 @@ def test_listener_readiness_failure_never_publishes_running_and_reaps_binaries(
         pid = int(pid_file.read_text(encoding="utf-8"))
         with pytest.raises(ProcessLookupError):
             os.kill(pid, 0)
+
+
+def test_adapter_direct_requires_http_and_proxy_listener_readiness(tmp_path: Path) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        current_exit=0,
+        current_sleep=2,
+        startup_window_seconds_override=1,
+        adapter_direct_enabled=True,
+        wrapper_timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    readiness_calls = (tmp_path / "readiness-calls").read_text(encoding="utf-8")
+    assert readiness_calls.splitlines() == [
+        "--listener",
+        "0.0.0.0:8080",
+        "--timeout-ms",
+        "250",
+        "--listener",
+        "0.0.0.0:19001",
+        "CALL",
+    ]
 
 
 def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
