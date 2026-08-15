@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.44 (2026-08-15)
+
+- Pin the primary gateway to reviewed commit
+  `dadba65ea77e197c6e542a98a554b09f2016cb16` while retaining the existing
+  Modbus recovery binary pin unchanged.
+- Remove eeBUS AdminV1 credential provisioning completely: no Supervisor
+  options, runtime credential materializer, credential paths, authentication
+  flags, or AdminV1 wrapper logging remain in the add-on.
+- Preserve raw eeBUS runtime configuration and its closed pairing-window
+  default, alongside the existing generic Portal/Home Assistant authentication
+  and Modbus endpoint-file/redaction/recovery behavior.
+
 ## 0.6.43 (2026-08-14)
 
 - Pin the reviewed post-M9 gateway merge and propagate this add-on release
