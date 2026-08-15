@@ -22,7 +22,7 @@ GUARD_PATH = (
 RUN_PATH = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 DOCKERFILE_PATH = ROOT / "helianthus/Dockerfile"
 CONFIG_PATH = ROOT / "helianthus/config.json"
-CURRENT_GATEWAY = "53fe86d1beb656c8453a6213127ddddef83c887b"
+CURRENT_GATEWAY = "225f3d96fee3422bc565870f946af19fac42d471"
 FALLBACK_GATEWAY = "035e2b5cf703d68f75b809c45d2b1342696c07ef"
 
 
