@@ -213,14 +213,17 @@ def _readiness_target(value: str) -> tuple[str, int]:
         or not host
         or port is None
         or not 1 <= port <= 65535
-        or not _valid_host(host)
     ):
         raise ConfigError("invalid listener")
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-    elif host == "::":
-        host = "::1"
-    return host, port
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as error:
+        raise ConfigError("listener host must be numeric") from error
+    if address == ipaddress.ip_address("0.0.0.0"):
+        address = ipaddress.ip_address("127.0.0.1")
+    elif address == ipaddress.ip_address("::"):
+        address = ipaddress.ip_address("::1")
+    return str(address), port
 
 
 def _probe_readiness_command(args: argparse.Namespace) -> int:
