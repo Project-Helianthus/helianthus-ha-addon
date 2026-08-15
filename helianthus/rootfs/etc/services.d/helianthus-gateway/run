@@ -821,85 +821,6 @@ else
   bashio::log.info "eeBUS runtime: disabled"
 fi
 
-# Materialize eeBUS AdminV1 credentials from the protected Supervisor options
-# document without ever copying their values through bash, argv, or the
-# environment. The helper emits only a categorical status and validated
-# non-secret metadata. Any failure disables only the admin boundary.
-eebus_admin_args=()
-eebus_admin_helper="/usr/share/helianthus/eebus_admin_credentials.py"
-eebus_admin_runtime_dir="/run/helianthus/eebus-admin"
-eebus_admin_owner_file="${eebus_admin_runtime_dir}/owner"
-eebus_admin_ha_file="${eebus_admin_runtime_dir}/ha"
-eebus_admin_clear_runtime_files() {
-  # Fixed-path, non-recursive, and intentionally nonfatal: a malformed
-  # directory or other obstructing node disables only AdminV1. rm unlinks a
-  # symlink itself rather than following it, preserving the no-follow boundary.
-  rm -f "${eebus_admin_owner_file}" "${eebus_admin_ha_file}" 2>/dev/null || true
-}
-eebus_admin_result=""
-if eebus_admin_result=$(python3 "${eebus_admin_helper}" \
-  --options "${eebus_options_path}" \
-  --runtime-dir "${eebus_admin_runtime_dir}" 2>/dev/null); then
-  eebus_admin_status=$(printf '%s' "${eebus_admin_result}" | jq -er '.status' 2>/dev/null || true)
-else
-  eebus_admin_status="unavailable"
-fi
-case "${eebus_admin_status}" in
-  ready)
-    missing_eebus_admin_flags=()
-    for required_flag in \
-      eebus-admin-enabled \
-      eebus-admin-owner-username \
-      eebus-admin-owner-secret-file \
-      eebus-admin-ha-secret-file \
-      eebus-admin-origin \
-      eebus-admin-session-ttl; do
-      if ! gateway_supports_flag "${required_flag}"; then
-        missing_eebus_admin_flags+=("${required_flag}")
-      fi
-    done
-    if [ "${#missing_eebus_admin_flags[@]}" -ne 0 ]; then
-      eebus_admin_clear_runtime_files
-      bashio::log.warning "eeBUS admin boundary unavailable reason=capability"
-    else
-      eebus_admin_owner_username=$(printf '%s' "${eebus_admin_result}" | jq -er '.owner_username' 2>/dev/null || true)
-      eebus_admin_origin=$(printf '%s' "${eebus_admin_result}" | jq -er '.origin' 2>/dev/null || true)
-      eebus_admin_session_ttl=$(printf '%s' "${eebus_admin_result}" | jq -er '.session_ttl' 2>/dev/null || true)
-      if [ -z "${eebus_admin_owner_username}" ] || [ -z "${eebus_admin_origin}" ] || [ -z "${eebus_admin_session_ttl}" ]; then
-        eebus_admin_clear_runtime_files
-        bashio::log.warning "eeBUS admin boundary unavailable reason=helper_output"
-      else
-        eebus_admin_args=(
-          -eebus-admin-enabled=true
-          -eebus-admin-owner-username "${eebus_admin_owner_username}"
-          -eebus-admin-owner-secret-file "${eebus_admin_owner_file}"
-          -eebus-admin-ha-secret-file "${eebus_admin_ha_file}"
-          -eebus-admin-origin "${eebus_admin_origin}"
-          -eebus-admin-session-ttl "${eebus_admin_session_ttl}"
-        )
-        bashio::log.info "eeBUS admin boundary: ready"
-      fi
-    fi
-    ;;
-  disabled)
-    bashio::log.info "eeBUS admin boundary: disabled"
-    ;;
-  unavailable)
-    eebus_admin_reason=$(printf '%s' "${eebus_admin_result}" | jq -er '.reason' 2>/dev/null || true)
-    case "${eebus_admin_reason}" in
-      configuration | runtime_store) ;;
-      *) eebus_admin_reason="helper" ;;
-    esac
-    eebus_admin_clear_runtime_files
-    bashio::log.warning "eeBUS admin boundary unavailable reason=${eebus_admin_reason}"
-    ;;
-  *)
-    eebus_admin_clear_runtime_files
-    bashio::log.warning "eeBUS admin boundary unavailable reason=helper"
-    ;;
-esac
-unset eebus_admin_result
-
 modbus_args=()
 if bashio::var.true "${modbus_tcp_enabled}"; then
   missing_modbus_flags=()
@@ -1029,7 +950,6 @@ gateway_common_args+=(
   -instance-guid "${instance_guid}"
 )
 gateway_args=("${gateway_common_args[@]}")
-if [ "${#eebus_admin_args[@]}" -ne 0 ]; then gateway_args+=("${eebus_admin_args[@]}"); fi
 if [ "${#instance_guid_source_args[@]}" -ne 0 ]; then gateway_args+=("${instance_guid_source_args[@]}"); fi
 gateway_args+=(
   -broadcast="${broadcast}"

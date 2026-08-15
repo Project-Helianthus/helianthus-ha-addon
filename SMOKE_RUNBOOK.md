@@ -36,6 +36,11 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
+For release `0.6.44`, do not supply any eeBUS-specific credential options:
+they have been removed. Raw eeBUS runtime configuration remains available and
+starts with a closed pairing window; generic Portal and Home Assistant
+authentication are unchanged.
+
 3) Open add-on **Configuration** and paste the configuration payload below.
 
 ## Add-on configuration (copy/paste)
