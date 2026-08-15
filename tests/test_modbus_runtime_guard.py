@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -311,6 +312,55 @@ def test_health_is_atomic_private_deterministic_and_redacted(tmp_path: Path) -> 
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_readiness_probe_requires_every_declared_local_listener() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        ready_port = listener.getsockname()[1]
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unused:
+            unused.bind(("127.0.0.1", 0))
+            missing_port = unused.getsockname()[1]
+
+        ready = subprocess.run(
+            [
+                sys.executable,
+                str(GUARD_PATH),
+                "probe-readiness",
+                "--listener",
+                f"0.0.0.0:{ready_port}",
+                "--timeout-ms",
+                "200",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        incomplete = subprocess.run(
+            [
+                sys.executable,
+                str(GUARD_PATH),
+                "probe-readiness",
+                "--listener",
+                f"0.0.0.0:{ready_port}",
+                "--listener",
+                f"127.0.0.1:{missing_port}",
+                "--timeout-ms",
+                "200",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    assert ready.returncode == 0, ready.stderr
+    assert ready.stdout == ""
+    assert ready.stderr == ""
+    assert incomplete.returncode != 0
+    assert incomplete.stdout == ""
+    assert incomplete.stderr == ""
+
+
 def test_image_and_wrapper_wire_current_plus_fallback_without_modbus_leak() -> None:
     dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
     run = RUN_PATH.read_text(encoding="utf-8")
@@ -428,6 +478,8 @@ def run_wrapper(
     startup_delay_before_gateway_launch: float = 0,
     record_health_calls: bool = False,
     registration_delay_target: str | None = None,
+    readiness_result: bool = True,
+    startup_window_seconds_override: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     current = tmp_path / "gateway-current"
     fallback = tmp_path / "gateway-fallback"
@@ -446,6 +498,12 @@ def run_wrapper(
     run = run.replace("/usr/local/bin/helianthus-gateway", "${TEST_CURRENT_GATEWAY_BIN}")
     run = run.replace("/data/helianthus-gateway", "${TEST_OVERRIDE_GATEWAY_BIN}")
     run = run.replace("/data/source_addr.last", "${TEST_SOURCE_STATE_FILE}")
+    if startup_window_seconds_override is not None:
+        run = run.replace(
+            'modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"',
+            f"modbus_startup_window_seconds={startup_window_seconds_override}",
+            1,
+        )
     if startup_delay_before_disabled_launch:
         run = run.replace(
             'if ! bashio::var.true "${modbus_tcp_enabled}"; then',
@@ -518,6 +576,7 @@ def run_wrapper(
         or redactor_exit_after_ready is not None
         or record_health_calls
         or registration_delay_target is not None
+        or not readiness_result
     ):
         guard_path = tmp_path / "guard-proxy.py"
         guard_path.write_text(
@@ -530,6 +589,9 @@ from pathlib import Path
 
 is_redactor = len(sys.argv) > 1 and sys.argv[1] == "redact"
 is_validator = len(sys.argv) > 1 and sys.argv[1] == "validate"
+is_readiness_probe = len(sys.argv) > 1 and sys.argv[1] == "probe-readiness"
+if is_readiness_probe:
+    raise SystemExit(0 if {readiness_result!r} else 1)
 if is_validator:
     Path({str(tmp_path / "validator-pid")!r}).write_text(str(os.getpid()), encoding="utf-8")
     time.sleep({validator_delay!r})
@@ -683,6 +745,35 @@ def test_wrapper_retries_three_times_then_runs_previous_binary_without_modbus(
     assert health["binary"] == "fallback"
     assert health["attempt"] == 3
     assert health["reason"] == "FALLBACK_STARTUP_EXIT"
+
+
+def test_listener_readiness_failure_never_publishes_running_and_reaps_binaries(
+    tmp_path: Path,
+) -> None:
+    result = run_wrapper(
+        tmp_path,
+        enabled_options(modbus_tcp_dial_timeout="100ms"),
+        current_sleep=3,
+        fallback_sleep=3,
+        readiness_result=False,
+        startup_window_seconds_override=1,
+        record_health_calls=True,
+        wrapper_timeout=15,
+    )
+
+    assert result.returncode != 0
+    assert (tmp_path / "current-count").read_text(encoding="utf-8") == "3"
+    health_calls = (tmp_path / "health-calls").read_text(encoding="utf-8").splitlines()
+    assert "RUNNING" not in health_calls
+    assert "FALLBACK_ACTIVE" not in health_calls
+    health = json.loads((tmp_path / "health.json").read_text(encoding="utf-8"))
+    assert health["state"] == "FALLBACK_EXITED"
+    assert health["reason"] == "FALLBACK_RUNTIME_NOT_READY"
+    assert not (tmp_path / "modbus-endpoint").exists()
+    for pid_file in (tmp_path / "child-pid", tmp_path / "fallback-pid"):
+        pid = int(pid_file.read_text(encoding="utf-8"))
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
 
 
 def test_wrapper_disabled_path_runs_current_once_without_modbus_or_fallback(
