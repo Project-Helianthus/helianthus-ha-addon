@@ -15,8 +15,8 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.47"
-GATEWAY = "225f3d96fee3422bc565870f946af19fac42d471"
+RELEASE = "0.6.48"
+GATEWAY = "7f1cbea90e0b189486febc656632e9e7430c8500"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
@@ -40,7 +40,7 @@ def main() -> int:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     run = RUN.read_text(encoding="utf-8")
 
-    assert config["version"] == RELEASE, "config.json must be the 0.6.47 release authority"
+    assert config["version"] == RELEASE, "config.json must be the 0.6.48 release authority"
     assert f"ARG EBUSGATEWAY_VERSION={GATEWAY}" in dockerfile, "Dockerfile primary gateway pin drifted"
     assert f"EBUSGATEWAY_VERSION={GATEWAY}" in workflow, "workflow primary gateway pin drifted"
     for key in ("source_ref", "tested_ref"):
@@ -55,9 +55,8 @@ def main() -> int:
     refusal = 'bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"'
     assert override_guard in run and refusal in run, "persistent gateway override must fail closed"
     assert run.index(override_guard) < run.index('exec "${gateway_bin}"'), "override guard must run before primary exec"
-    assert run.index(override_guard) < run.index('fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"'), "override guard must run before fallback selection"
     assert 'gateway_bin="/data/helianthus-gateway"' not in run, "override must never select the persistent binary"
-    assert 'fallback_gateway_bin="/data/helianthus-gateway"' not in run, "fallback must never select the persistent binary"
+    assert "fallback_gateway_bin" not in run, "wrapper must not retain a fallback gateway path"
     print("eeBUS wrapper removal contract passed.")
     return 0
 

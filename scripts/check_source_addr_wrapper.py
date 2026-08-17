@@ -21,7 +21,7 @@ TOP_README = REPO_ROOT / "README.md"
 ADDON_README = REPO_ROOT / "helianthus/README.md"
 
 VALID_INSTANCE_GUID = "12345678-1234-4234-9234-123456789abc"
-REQUIRED_GATEWAY_VERSION = "225f3d96fee3422bc565870f946af19fac42d471"
+REQUIRED_GATEWAY_VERSION = "7f1cbea90e0b189486febc656632e9e7430c8500"
 
 BASHIO_PRELUDE = r'''
 bashio::config() {
@@ -208,7 +208,6 @@ def _run_wrapper_case(
                 "HELIANTHUS_MIGRATION_MARKER_PATH": str(legacy_marker_file),
                 "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(tmp / "missing-options.json"),
-                "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp / "modbus-health.json"),
                 "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
             },
         )

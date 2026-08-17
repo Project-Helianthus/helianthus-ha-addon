@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+legacy_modbus_health_file="/data/modbus-runtime-health.json"
+if ! rm -f -- "${legacy_modbus_health_file}"; then
+  bashio::exit.nok "Unable to remove retired Modbus runtime health record"
+fi
+
 transport=$(bashio::config 'transport')
 network=$(bashio::config 'network')
 address=$(bashio::config 'address')
@@ -55,83 +60,50 @@ v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 # endpoint or any rejected credential material.
 modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
-modbus_health_file="${HELIANTHUS_MODBUS_HEALTH_FILE:-/data/modbus-runtime-health.json}"
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
-modbus_validator_pid=""
-modbus_validator_output=""
-modbus_validation_stop_requested=false
-
-modbus_terminate_validator() {
-  local remaining
-  if [ -z "${modbus_validator_pid}" ]; then
-    return 0
+modbus_eval_file=""
+modbus_endpoint_staging=""
+modbus_pre_exec_signal=""
+cleanup_modbus_pre_exec() {
+  rm -f -- "${modbus_endpoint_file}" || true
+  if [ -n "${modbus_eval_file}" ]; then
+    rm -f -- "${modbus_eval_file}" || true
   fi
-  kill -TERM "${modbus_validator_pid}" 2>/dev/null || true
-  remaining=50
-  while kill -0 "${modbus_validator_pid}" 2>/dev/null && [ "${remaining}" -gt 0 ]; do
-    sleep 0.1
-    remaining=$((remaining - 1))
-  done
-  if kill -0 "${modbus_validator_pid}" 2>/dev/null; then
-    kill -KILL "${modbus_validator_pid}" 2>/dev/null || true
+  if [ -n "${modbus_endpoint_staging}" ]; then
+    rm -f -- "${modbus_endpoint_staging}" || true
   fi
-  wait "${modbus_validator_pid}" 2>/dev/null || true
-  modbus_validator_pid=""
 }
-
-modbus_validation_cleanup() {
-  if [ "${BASH_SUBSHELL:-0}" -ne 0 ]; then
-    return 0
-  fi
-  modbus_terminate_validator
-  if [ -n "${modbus_validator_output}" ]; then
-    rm -f "${modbus_validator_output}"
-    modbus_validator_output=""
-  fi
-  python3 "${modbus_guard}" clear-runtime \
-    --endpoint-file "${modbus_endpoint_file}" \
-    --health "${modbus_health_file}" >/dev/null 2>&1 || true
+abort_modbus_pre_exec_on_signal() {
+  case "${modbus_pre_exec_signal}" in
+    TERM) exit 143 ;;
+    INT) exit 130 ;;
+  esac
 }
-
-modbus_validation_signal() {
-  trap - TERM INT
-  modbus_validation_cleanup
-  exit 143
-}
-
-modbus_validation_defer_signal() {
-  modbus_validation_stop_requested=true
-}
-
-trap modbus_validation_signal TERM INT
-trap modbus_validation_cleanup EXIT
+trap cleanup_modbus_pre_exec EXIT
+trap 'modbus_pre_exec_signal=TERM' TERM
+trap 'modbus_pre_exec_signal=INT' INT
 
 MODBUS_TCP_ENABLED=""
+MODBUS_TCP_ENDPOINT=""
 MODBUS_TCP_DIAL_TIMEOUT=""
-MODBUS_STARTUP_WINDOW_SECONDS=""
-MODBUS_ENDPOINT_REF=""
-modbus_validator_output=$(mktemp "${TMPDIR:-/tmp}/helianthus-modbus-validate.XXXXXX") || \
-  bashio::exit.nok "Modbus TCP validation setup failed"
-chmod 0600 "${modbus_validator_output}" || \
-  bashio::exit.nok "Modbus TCP validation setup failed"
-trap modbus_validation_defer_signal TERM INT
-python3 "${modbus_guard}" validate \
-  --options "${modbus_options_path}" \
-  --endpoint-file "${modbus_endpoint_file}" \
-  --health "${modbus_health_file}" > "${modbus_validator_output}" &
-modbus_validator_pid=$!
-trap modbus_validation_signal TERM INT
-if bashio::var.true "${modbus_validation_stop_requested}"; then
-  modbus_validation_signal
+if ! rm -f -- "${modbus_endpoint_file}"; then
+  bashio::exit.nok "Unable to remove stale Modbus endpoint material"
 fi
-if wait "${modbus_validator_pid}"; then
-  modbus_validator_pid=""
-  modbus_eval="$(<"${modbus_validator_output}")"
-  rm -f "${modbus_validator_output}"
-  modbus_validator_output=""
+modbus_eval_file=$(mktemp /tmp/helianthus-modbus-validate.XXXXXX) || \
+  bashio::exit.nok "Unable to create the Modbus validation result file"
+chmod 0600 "${modbus_eval_file}" || \
+  bashio::exit.nok "Unable to protect the Modbus validation result file"
+modbus_validation_status=0
+python3 "${modbus_guard}" validate \
+  --options "${modbus_options_path}" > "${modbus_eval_file}" || \
+  modbus_validation_status=$?
+abort_modbus_pre_exec_on_signal
+if [ "${modbus_validation_status}" -eq 0 ]; then
+  modbus_eval=$(<"${modbus_eval_file}")
+  rm -f -- "${modbus_eval_file}"
+  modbus_eval_file=""
   eval "${modbus_eval}"
 else
-  modbus_validator_pid=""
   bashio::exit.nok "Modbus TCP options failed atomic validation; endpoint remains redacted"
 fi
 case "${MODBUS_TCP_ENABLED}" in
@@ -140,141 +112,30 @@ case "${MODBUS_TCP_ENABLED}" in
 esac
 modbus_tcp_enabled="${MODBUS_TCP_ENABLED}"
 modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
-modbus_startup_window_seconds="${MODBUS_STARTUP_WINDOW_SECONDS}"
-modbus_endpoint_ref="${MODBUS_ENDPOINT_REF}"
-MODBUS_RECOVERY_MAX_ATTEMPTS=3
-MODBUS_REDACTOR_DRAIN_SECONDS="${HELIANTHUS_MODBUS_REDACTOR_DRAIN_SECONDS:-5}"
-if ! [[ "${MODBUS_REDACTOR_DRAIN_SECONDS}" =~ ^[1-9][0-9]*$ ]] || [ "${MODBUS_REDACTOR_DRAIN_SECONDS}" -gt 10 ]; then
-  bashio::exit.nok "Modbus TCP redactor drain bound is invalid"
+if [ "${modbus_tcp_enabled}" = "true" ]; then
+  modbus_endpoint_dir="${modbus_endpoint_file%/*}"
+  if [ "${modbus_endpoint_dir}" = "${modbus_endpoint_file}" ]; then
+    bashio::exit.nok "Modbus endpoint file must include a parent directory"
+  fi
+  mkdir -p -- "${modbus_endpoint_dir}"
+  abort_modbus_pre_exec_on_signal
+  chmod 0700 "${modbus_endpoint_dir}"
+  abort_modbus_pre_exec_on_signal
+  modbus_endpoint_staging="${modbus_endpoint_file}.tmp.$$"
+  rm -f -- "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
+  umask 077
+  printf '%s' "${MODBUS_TCP_ENDPOINT}" > "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
+  chmod 0600 "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
+  mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"
+  abort_modbus_pre_exec_on_signal
 fi
-modbus_child_pid=""
-modbus_redactor_pids=()
-modbus_redact_dir=""
-modbus_stop_requested=false
-modbus_runtime_failure_reason=""
-modbus_active_attempt=0
-modbus_active_binary=current
-
-modbus_terminate_child() {
-  local remaining
-  if [ -z "${modbus_child_pid}" ]; then
-    return 0
-  fi
-  kill -TERM "${modbus_child_pid}" 2>/dev/null || true
-  remaining=50
-  while kill -0 "${modbus_child_pid}" 2>/dev/null && [ "${remaining}" -gt 0 ]; do
-    sleep 0.1
-    remaining=$((remaining - 1))
-  done
-  if kill -0 "${modbus_child_pid}" 2>/dev/null; then
-    kill -KILL "${modbus_child_pid}" 2>/dev/null || true
-  fi
-  wait "${modbus_child_pid}" 2>/dev/null || true
-  modbus_child_pid=""
-}
-
-modbus_cleanup_redactors() {
-  local pid status watchdog rc
-  status=0
-  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
-    for pid in "${modbus_redactor_pids[@]}"; do
-      (
-        trap - TERM INT EXIT
-        sleep "${MODBUS_REDACTOR_DRAIN_SECONDS}"
-        kill -TERM "${pid}" 2>/dev/null || exit 0
-        sleep 1
-        kill -KILL "${pid}" 2>/dev/null || true
-      ) &
-      watchdog=$!
-      while true; do
-        if wait "${pid}"; then rc=0; else rc=$?; fi
-        if ! kill -0 "${pid}" 2>/dev/null; then
-          break
-        fi
-      done
-      kill -TERM "${watchdog}" 2>/dev/null || true
-      wait "${watchdog}" 2>/dev/null || true
-      if [ "${rc}" -ne 0 ]; then
-        status=1
-      fi
-    done
-  fi
-  modbus_redactor_pids=()
-  if [ -n "${modbus_redact_dir}" ]; then
-    rm -f \
-      "${modbus_redact_dir}/stdout" \
-      "${modbus_redact_dir}/stderr" \
-      "${modbus_redact_dir}/stdout.ready" \
-      "${modbus_redact_dir}/stderr.ready"
-    rmdir "${modbus_redact_dir}" 2>/dev/null || status=1
-    modbus_redact_dir=""
-  fi
-  return "${status}"
-}
-
-modbus_abort_redactors() {
-  local pid
-  if [ "${#modbus_redactor_pids[@]}" -ne 0 ]; then
-    for pid in "${modbus_redactor_pids[@]}"; do
-      kill -TERM "${pid}" 2>/dev/null || true
-    done
-  fi
-  modbus_cleanup_redactors || true
-}
-
-modbus_fail_closed() {
-  modbus_terminate_child
-  modbus_abort_redactors
-  python3 "${modbus_guard}" clear-runtime \
-    --endpoint-file "${modbus_endpoint_file}" \
-    --health "${modbus_health_file}" >/dev/null 2>&1 || true
-  bashio::exit.nok "$1"
-}
-
-modbus_write_health() {
-  local state attempt binary reason
-  state="$1"
-  attempt="$2"
-  binary="$3"
-  reason="$4"
-  if ! python3 "${modbus_guard}" health \
-    --health "${modbus_health_file}" \
-    --enabled "${modbus_tcp_enabled}" \
-    --endpoint-ref "${modbus_endpoint_ref}" \
-    --state "${state}" \
-    --attempt "${attempt}" \
-    --max-attempts "${MODBUS_RECOVERY_MAX_ATTEMPTS}" \
-    --binary "${binary}" \
-    --reason "${reason}"; then
-    modbus_fail_closed "Modbus TCP health update failed"
-  fi
-}
-
-modbus_forward_signal() {
-  trap - TERM INT
-  modbus_stop_requested=true
-  modbus_terminate_child
-  modbus_abort_redactors
-  modbus_write_health STOPPED "${modbus_active_attempt}" "${modbus_active_binary}" SIGNAL
-  exit 143
-}
-
-modbus_defer_signal() {
-  modbus_stop_requested=true
-}
-
-modbus_exit_cleanup() {
-  if [ "${BASH_SUBSHELL:-0}" -ne 0 ]; then
-    return 0
-  fi
-  modbus_terminate_child
-  modbus_abort_redactors
-  python3 "${modbus_guard}" clear-endpoint \
-    --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
-}
-
-trap modbus_forward_signal TERM INT
-trap modbus_exit_cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+abort_modbus_pre_exec_on_signal
+unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_pre_exec_signal
 
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain
@@ -703,8 +564,6 @@ gateway_bin="/usr/local/bin/helianthus-gateway"
 if [ -e "/data/helianthus-gateway" ] || [ -L "/data/helianthus-gateway" ]; then
   bashio::exit.nok "Persistent gateway binary override is not supported by this authoritative release; remove /data/helianthus-gateway before startup"
 fi
-fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"
-
 binary_supports_flag() {
   local binary flag output
   binary="$1"
@@ -715,10 +574,6 @@ binary_supports_flag() {
 
 gateway_supports_flag() {
   binary_supports_flag "${gateway_bin}" "$1"
-}
-
-fallback_gateway_supports_flag() {
-  binary_supports_flag "${fallback_gateway_bin}" "$1"
 }
 
 # Gate `-enable-static-seed-table` on gateway support — the flag is
@@ -832,34 +687,12 @@ if bashio::var.true "${modbus_tcp_enabled}"; then
   if [ "${#missing_modbus_flags[@]}" -ne 0 ]; then
     bashio::exit.nok "gateway does not support the complete Modbus TCP runtime flag set"
   fi
-  if [ ! -x "${fallback_gateway_bin}" ]; then
-    bashio::exit.nok "Modbus TCP recovery binary is unavailable"
-  fi
-  if [ "${#eebus_args[@]}" -ne 0 ]; then
-    missing_fallback_eebus_flags=()
-    for required_flag in \
-      eebus-enabled \
-      eebus-listen-port \
-      eebus-interfaces \
-      eebus-subnets \
-      eebus-state-root \
-      eebus-discovery-enabled \
-      eebus-remote-ski-allowlist \
-      eebus-pairing-window-mode; do
-      if ! fallback_gateway_supports_flag "${required_flag}"; then
-        missing_fallback_eebus_flags+=("${required_flag}")
-      fi
-    done
-    if [ "${#missing_fallback_eebus_flags[@]}" -ne 0 ]; then
-      bashio::exit.nok "Modbus TCP recovery binary does not support the complete eeBUS runtime flag set"
-    fi
-  fi
   modbus_args=(
     -modbus-tcp-enabled=true
     -modbus-tcp-endpoint-file "${modbus_endpoint_file}"
     -modbus-tcp-dial-timeout "${modbus_tcp_dial_timeout}"
   )
-  bashio::log.info "Modbus TCP runtime: enabled endpoint_ref=${modbus_endpoint_ref} recovery_attempts=${MODBUS_RECOVERY_MAX_ATTEMPTS}"
+  bashio::log.info "Modbus TCP runtime: enabled"
 else
   bashio::log.info "Modbus TCP runtime: disabled"
 fi
@@ -874,29 +707,6 @@ if gateway_supports_flag "instance-guid-source"; then
   instance_guid_source_args=(-instance-guid-source "${instance_guid_source}")
 else
   bashio::log.warning "Packaged gateway binary does not support -instance-guid-source; identity provenance tag (${instance_guid_source}) will not be propagated. Publish an add-on release with a gateway that includes the M2_GATEWAY_LOADER patch."
-fi
-
-fallback_static_seed_args=()
-fallback_semantic_cache_args=()
-fallback_instance_guid_source_args=()
-fallback_proxy_listen_args=()
-if bashio::var.true "${modbus_tcp_enabled}"; then
-  if fallback_gateway_supports_flag "enable-static-seed-table"; then
-    fallback_static_seed_args=(-enable-static-seed-table="${enable_static_seed_table}")
-  fi
-  if fallback_gateway_supports_flag "semantic-cache-path"; then
-    fallback_semantic_cache_args=(-semantic-cache-path "/data/semantic_cache.json")
-  fi
-  if fallback_gateway_supports_flag "instance-guid-source"; then
-    fallback_instance_guid_source_args=(-instance-guid-source "${instance_guid_source}")
-  fi
-  if [ "${#proxy_listen_args[@]}" -ne 0 ]; then
-    if fallback_gateway_supports_flag "proxy-listen"; then
-      fallback_proxy_listen_args=("${proxy_listen_args[@]}")
-    else
-      bashio::exit.nok "Modbus TCP recovery binary cannot preserve the configured adapter-direct proxy listener"
-    fi
-  fi
 fi
 
 source_addr_normalized=$(printf '%s' "${source_addr}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
@@ -920,9 +730,6 @@ elif [ "${effective_transport}" = "ebusd-tcp" ]; then
   fi
   source_addr_args=(-source-addr "${source_addr_intent}")
 elif gateway_supports_flag "startup-source-override" && gateway_supports_flag "startup-source-override-validate"; then
-  if bashio::var.true "${modbus_tcp_enabled}" && { ! fallback_gateway_supports_flag "startup-source-override" || ! fallback_gateway_supports_flag "startup-source-override-validate"; }; then
-    bashio::exit.nok "Modbus TCP recovery binary cannot preserve explicit source address validation"
-  fi
   bashio::log.info "source_addr=${source_addr_intent}; using validate-only gateway startup source override"
   if [ -f "${legacy_source_addr_last_file}" ]; then
     bashio::log.info "Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; explicit source_addr does not rewrite it"
@@ -965,214 +772,8 @@ if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[
 if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
 if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
 
-if ! bashio::var.true "${modbus_tcp_enabled}"; then
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_write_health STOPPED 0 current SIGNAL
-    exit 143
-  fi
-  modbus_write_health DISABLED 0 current EXPLICIT_DISABLE
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_write_health STOPPED 0 current SIGNAL
-    exit 143
-  fi
-  exec "${gateway_bin}" "${gateway_args[@]}"
+if bashio::var.true "${modbus_tcp_enabled}"; then
+  gateway_args+=("${modbus_args[@]}")
 fi
 
-modbus_current_args=("${gateway_args[@]}" "${modbus_args[@]}")
-modbus_fallback_args=("${gateway_common_args[@]}")
-if [ "${#fallback_instance_guid_source_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_instance_guid_source_args[@]}"); fi
-modbus_fallback_args+=(
-  -broadcast="${broadcast}"
-  -read-timeout "${read_timeout}"
-  -write-timeout "${write_timeout}"
-  -dial-timeout "${dial_timeout}"
-  -observe-first-enabled="${observe_first_enabled}"
-  -passive-state-direct-apply="${passive_state_direct_apply}"
-  -passive-config-direct-apply="${passive_config_direct_apply}"
-  -external-write-policy "${external_write_policy}"
-)
-if [ "${#fallback_static_seed_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_static_seed_args[@]}"); fi
-if [ "${#fallback_semantic_cache_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_semantic_cache_args[@]}"); fi
-if [ "${#fallback_proxy_listen_args[@]}" -ne 0 ]; then modbus_fallback_args+=("${fallback_proxy_listen_args[@]}"); fi
-
-modbus_passed_startup_window=false
-
-modbus_runtime_ready() {
-  local readiness_args
-  readiness_args=(
-    probe-readiness
-    --listener "${http_addr}"
-    --timeout-ms 250
-  )
-  if [ "${#proxy_listen_args[@]}" -ne 0 ]; then
-    readiness_args+=(--listener "${proxy_listen_addr}")
-  fi
-  python3 "${modbus_guard}" "${readiness_args[@]}" >/dev/null 2>&1
-}
-
-modbus_run_current() {
-  local attempt_started elapsed rc ready_checks
-  modbus_passed_startup_window=false
-  modbus_runtime_failure_reason=""
-  if bashio::var.true "${modbus_stop_requested}"; then
-    return 143
-  fi
-  modbus_redact_dir=$(mktemp -d "${modbus_endpoint_file%/*}/.modbus-redact.XXXXXX") || \
-    modbus_fail_closed "Modbus TCP redaction setup failed"
-  chmod 0700 "${modbus_redact_dir}" || \
-    modbus_fail_closed "Modbus TCP redaction setup failed"
-  mkfifo "${modbus_redact_dir}/stdout" "${modbus_redact_dir}/stderr" || \
-    modbus_fail_closed "Modbus TCP redaction setup failed"
-  chmod 0600 "${modbus_redact_dir}/stdout" "${modbus_redact_dir}/stderr" || \
-    modbus_fail_closed "Modbus TCP redaction setup failed"
-  trap modbus_defer_signal TERM INT
-  python3 "${modbus_guard}" redact \
-    --endpoint-file "${modbus_endpoint_file}" \
-    --input-fifo "${modbus_redact_dir}/stdout" \
-    --ready-file "${modbus_redact_dir}/stdout.ready" &
-  modbus_redactor_pids+=("$!")
-  trap modbus_forward_signal TERM INT
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_forward_signal
-  fi
-  trap modbus_defer_signal TERM INT
-  python3 "${modbus_guard}" redact \
-    --endpoint-file "${modbus_endpoint_file}" \
-    --input-fifo "${modbus_redact_dir}/stderr" \
-    --ready-file "${modbus_redact_dir}/stderr.ready" >&2 &
-  modbus_redactor_pids+=("$!")
-  trap modbus_forward_signal TERM INT
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_forward_signal
-  fi
-  ready_checks=100
-  while { [ ! -f "${modbus_redact_dir}/stdout.ready" ] || [ ! -f "${modbus_redact_dir}/stderr.ready" ]; } && [ "${ready_checks}" -gt 0 ]; do
-    if bashio::var.true "${modbus_stop_requested}"; then
-      modbus_fail_closed "Modbus TCP startup stopped before gateway launch"
-    fi
-    if ! kill -0 "${modbus_redactor_pids[0]}" 2>/dev/null || ! kill -0 "${modbus_redactor_pids[1]}" 2>/dev/null; then
-      modbus_fail_closed "Modbus TCP redaction setup failed"
-    fi
-    sleep 0.05 || true
-    ready_checks=$((ready_checks - 1))
-  done
-  if [ "${ready_checks}" -eq 0 ]; then
-    modbus_fail_closed "Modbus TCP redaction setup timed out"
-  fi
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_fail_closed "Modbus TCP startup stopped before gateway launch"
-  fi
-  trap modbus_defer_signal TERM INT
-  "${gateway_bin}" "${modbus_current_args[@]}" \
-    > "${modbus_redact_dir}/stdout" \
-    2> "${modbus_redact_dir}/stderr" &
-  modbus_child_pid=$!
-  trap modbus_forward_signal TERM INT
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_forward_signal
-  fi
-  attempt_started=$(date +%s)
-  while kill -0 "${modbus_child_pid}" 2>/dev/null; do
-    if ! kill -0 "${modbus_redactor_pids[0]}" 2>/dev/null || ! kill -0 "${modbus_redactor_pids[1]}" 2>/dev/null; then
-      modbus_runtime_failure_reason=REDACTOR_EXIT
-      modbus_terminate_child
-      python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
-      modbus_cleanup_redactors || true
-      return 125
-    fi
-    elapsed=$(( $(date +%s) - attempt_started ))
-    if ! bashio::var.true "${modbus_passed_startup_window}" && [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
-      if ! modbus_runtime_ready; then
-        modbus_runtime_failure_reason=RUNTIME_NOT_READY
-        modbus_terminate_child
-        modbus_cleanup_redactors || true
-        return 124
-      fi
-      modbus_passed_startup_window=true
-      modbus_write_health RUNNING "${attempt}" current STARTUP_WINDOW_PASSED
-    fi
-    sleep 1
-  done
-  if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
-  modbus_child_pid=""
-  if ! modbus_cleanup_redactors; then
-    modbus_runtime_failure_reason=REDACTOR_EXIT
-    python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" >/dev/null 2>&1 || true
-    return 125
-  fi
-  return "${rc}"
-}
-
-modbus_run_fallback() {
-  local attempt_started elapsed rc
-  modbus_passed_startup_window=false
-  modbus_runtime_failure_reason=""
-  if bashio::var.true "${modbus_stop_requested}"; then
-    return 143
-  fi
-  trap modbus_defer_signal TERM INT
-  "${fallback_gateway_bin}" "${modbus_fallback_args[@]}" &
-  modbus_child_pid=$!
-  trap modbus_forward_signal TERM INT
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_forward_signal
-  fi
-  attempt_started=$(date +%s)
-  while kill -0 "${modbus_child_pid}" 2>/dev/null; do
-    elapsed=$(( $(date +%s) - attempt_started ))
-    if [ "${elapsed}" -ge "${modbus_startup_window_seconds}" ]; then
-      if ! modbus_runtime_ready; then
-        modbus_runtime_failure_reason=FALLBACK_RUNTIME_NOT_READY
-        modbus_terminate_child
-        return 124
-      fi
-      modbus_passed_startup_window=true
-      modbus_write_health FALLBACK_ACTIVE "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_WINDOW_PASSED
-      break
-    fi
-    sleep 1
-  done
-  if wait "${modbus_child_pid}"; then rc=0; else rc=$?; fi
-  modbus_child_pid=""
-  return "${rc}"
-}
-
-attempt=1
-while [ "${attempt}" -le "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; do
-  modbus_active_attempt="${attempt}"
-  modbus_active_binary=current
-  modbus_write_health CONFIG_VALIDATED "${attempt}" current CONFIG_VALID
-  if modbus_run_current; then rc=0; else rc=$?; fi
-  if bashio::var.true "${modbus_stop_requested}"; then
-    modbus_write_health STOPPED "${attempt}" current SIGNAL
-    exit "${rc}"
-  fi
-  if bashio::var.true "${modbus_passed_startup_window}"; then
-    modbus_write_health EXITED_AFTER_STARTUP_WINDOW "${attempt}" current "${modbus_runtime_failure_reason:-RUNTIME_EXIT}"
-    exit "${rc}"
-  fi
-  if [ "${attempt}" -lt "${MODBUS_RECOVERY_MAX_ATTEMPTS}" ]; then
-    modbus_write_health RECOVERY_RETRY "${attempt}" current "${modbus_runtime_failure_reason:-STARTUP_EXIT}"
-    bashio::log.warning "Modbus TCP startup failed for endpoint_ref=${modbus_endpoint_ref}; bounded retry ${attempt}/${MODBUS_RECOVERY_MAX_ATTEMPTS}"
-    sleep "${attempt}"
-  fi
-  attempt=$((attempt + 1))
-done
-
-bashio::log.error "Modbus TCP startup retries exhausted for endpoint_ref=${modbus_endpoint_ref}; starting previous gateway binary with Modbus disabled"
-python3 "${modbus_guard}" clear-endpoint --endpoint-file "${modbus_endpoint_file}" || \
-  bashio::exit.nok "Modbus TCP endpoint cleanup failed before recovery fallback"
-modbus_active_attempt="${MODBUS_RECOVERY_MAX_ATTEMPTS}"
-modbus_active_binary=fallback
-modbus_write_health FALLBACK_STARTING "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback STARTUP_RETRY_EXHAUSTED
-if modbus_run_fallback; then rc=0; else rc=$?; fi
-if bashio::var.true "${modbus_stop_requested}"; then
-  modbus_write_health STOPPED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback SIGNAL
-  exit "${rc}"
-fi
-if bashio::var.true "${modbus_passed_startup_window}"; then
-  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback FALLBACK_RUNTIME_EXIT
-else
-  modbus_write_health FALLBACK_EXITED "${MODBUS_RECOVERY_MAX_ATTEMPTS}" fallback "${modbus_runtime_failure_reason:-FALLBACK_STARTUP_EXIT}"
-fi
-exit "${rc}"
+exec "${gateway_bin}" "${gateway_args[@]}"

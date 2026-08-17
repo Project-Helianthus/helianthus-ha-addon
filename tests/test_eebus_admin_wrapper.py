@@ -15,8 +15,8 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.47"
-GATEWAY = "225f3d96fee3422bc565870f946af19fac42d471"
+RELEASE = "0.6.48"
+GATEWAY = "7f1cbea90e0b189486febc656632e9e7430c8500"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
@@ -33,7 +33,7 @@ REMOVED_WRAPPER_TERMS = (
 )
 
 
-def test_release_pin_is_0647_and_gateway_provenance_is_exact() -> None:
+def test_release_pin_is_0648_and_gateway_provenance_is_exact() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -65,9 +65,8 @@ def test_wrapper_has_no_eebus_admin_materializer_and_rejects_persistent_override
     assert override_guard in run
     assert refusal in run
     assert run.index(override_guard) < run.index('exec "${gateway_bin}"')
-    assert run.index(override_guard) < run.index('fallback_gateway_bin="/usr/local/bin/helianthus-gateway-fallback"')
     assert 'gateway_bin="/data/helianthus-gateway"' not in run
-    assert 'fallback_gateway_bin="/data/helianthus-gateway"' not in run
+    assert "fallback_gateway_bin" not in run
 
 
 def test_eebus_runtime_keeps_pairing_without_admin_argv_logs_or_environment(
@@ -145,7 +144,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
         "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
         "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"),
-        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options), "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health"),
+        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "endpoint"),
     }
     result = subprocess.run(["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False)

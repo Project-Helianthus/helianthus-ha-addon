@@ -1,43 +1,23 @@
 #!/usr/bin/env python3
-"""Validate and report the add-on's bounded Modbus TCP runtime configuration."""
+"""Validate the add-on's Modbus TCP configuration."""
 
 from __future__ import annotations
 
 import argparse
-import contextlib
-import hashlib
 import ipaddress
 import json
-import math
-import os
 import re
 import shlex
-import socket
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
 
-CONTRACT = "helianthus.modbus-addon-health.v1"
 MAX_DIAL_TIMEOUT_MS = 30_000
 MIN_DIAL_TIMEOUT_MS = 100
-MIN_READINESS_TIMEOUT_MS = 10
-MAX_READINESS_TIMEOUT_MS = 2_000
 _DURATION_RE = re.compile(r"^([1-9][0-9]*)(ms|s)$")
 _HOST_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
-_STATES = {
-    "DISABLED",
-    "CONFIG_VALIDATED",
-    "RUNNING",
-    "RECOVERY_RETRY",
-    "FALLBACK_STARTING",
-    "FALLBACK_ACTIVE",
-    "FALLBACK_EXITED",
-    "EXITED_AFTER_STARTUP_WINDOW",
-    "STOPPED",
-}
 
 
 class ConfigError(ValueError):
@@ -49,8 +29,6 @@ class Config:
     enabled: bool
     endpoint: str
     dial_timeout: str
-    startup_window_seconds: int
-    endpoint_ref: str
 
 
 def _duration_milliseconds(value: str) -> int:
@@ -76,7 +54,7 @@ def _valid_host(host: str) -> bool:
     return bool(labels) and all(_HOST_LABEL_RE.fullmatch(label) for label in labels)
 
 
-def _validate_endpoint(endpoint: str) -> str:
+def _validate_endpoint(endpoint: str) -> None:
     if not endpoint or endpoint != endpoint.strip() or any(ord(char) < 32 for char in endpoint):
         raise ConfigError("invalid endpoint")
     try:
@@ -97,7 +75,6 @@ def _validate_endpoint(endpoint: str) -> str:
         or not _valid_host(parsed.hostname)
     ):
         raise ConfigError("invalid endpoint")
-    return parsed.netloc
 
 
 def load_config(path: Path) -> Config:
@@ -112,132 +89,15 @@ def load_config(path: Path) -> Config:
     if type(enabled) is not bool:
         raise ConfigError("invalid enabled option type")
     if not enabled:
-        return Config(False, "", "", 0, "")
+        return Config(False, "", "")
 
     endpoint = payload.get("modbus_tcp_endpoint", "")
     dial_timeout = payload.get("modbus_tcp_dial_timeout", "5s")
     if not isinstance(endpoint, str) or not isinstance(dial_timeout, str):
         raise ConfigError("invalid active option type")
-    timeout_ms = _duration_milliseconds(dial_timeout)
+    _duration_milliseconds(dial_timeout)
     _validate_endpoint(endpoint)
-    endpoint_ref = "sha256:" + hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
-    startup_window = max(5, min(40, math.ceil(timeout_ms / 1000) + 5))
-    return Config(True, endpoint, dial_timeout, startup_window, endpoint_ref)
-
-
-def write_health(
-    path: Path,
-    config: Config,
-    *,
-    state: str,
-    attempt: int,
-    max_attempts: int,
-    binary: str,
-    reason: str,
-) -> None:
-    if state not in _STATES or binary not in {"current", "fallback"}:
-        raise ValueError("invalid health state")
-    if not 0 <= attempt <= max_attempts or max_attempts <= 0:
-        raise ValueError("invalid attempt counters")
-    payload = {
-        "attempt": attempt,
-        "binary": binary,
-        "contract": CONTRACT,
-        "enabled": config.enabled,
-        "endpoint_ref": config.endpoint_ref or None,
-        "max_attempts": max_attempts,
-        "reason": reason,
-        "state": state,
-    }
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(temporary)
-
-
-def write_endpoint_file(path: Path, config: Config) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not config.enabled:
-        with contextlib.suppress(FileNotFoundError):
-            path.unlink()
-        return
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(config.endpoint)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(temporary)
-
-
-def clear_endpoint_file(path: Path) -> None:
-    with contextlib.suppress(FileNotFoundError):
-        path.unlink()
-
-
-def clear_health_file(path: Path) -> None:
-    with contextlib.suppress(FileNotFoundError):
-        path.unlink()
-
-
-def _readiness_target(value: str) -> tuple[str, int]:
-    if not value or value != value.strip() or "://" in value:
-        raise ConfigError("invalid listener")
-    candidate = "0.0.0.0" + value if value.startswith(":") else value
-    try:
-        parsed = urlsplit("tcp://" + candidate)
-        port = parsed.port
-    except ValueError as error:
-        raise ConfigError("invalid listener") from error
-    host = parsed.hostname or ""
-    if (
-        parsed.username is not None
-        or parsed.password is not None
-        or not host
-        or port is None
-        or not 1 <= port <= 65535
-    ):
-        raise ConfigError("invalid listener")
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError as error:
-        raise ConfigError("listener host must be numeric") from error
-    if address == ipaddress.ip_address("0.0.0.0"):
-        address = ipaddress.ip_address("127.0.0.1")
-    elif address == ipaddress.ip_address("::"):
-        address = ipaddress.ip_address("::1")
-    return str(address), port
-
-
-def _probe_readiness_command(args: argparse.Namespace) -> int:
-    if not MIN_READINESS_TIMEOUT_MS <= args.timeout_ms <= MAX_READINESS_TIMEOUT_MS:
-        raise ConfigError("invalid readiness timeout")
-    timeout = args.timeout_ms / 1000
-    for listener in args.listener:
-        target = _readiness_target(listener)
-        try:
-            with socket.create_connection(target, timeout=timeout):
-                pass
-        except OSError:
-            return 1
-    return 0
+    return Config(True, endpoint, dial_timeout)
 
 
 def _shell_assignment(name: str, value: str) -> str:
@@ -245,81 +105,10 @@ def _shell_assignment(name: str, value: str) -> str:
 
 
 def _validate_command(args: argparse.Namespace) -> int:
-    clear_health_file(args.health)
-    clear_endpoint_file(args.endpoint_file)
     config = load_config(args.options)
-    write_endpoint_file(args.endpoint_file, config)
     print(_shell_assignment("MODBUS_TCP_ENABLED", str(config.enabled).lower()))
+    print(_shell_assignment("MODBUS_TCP_ENDPOINT", config.endpoint))
     print(_shell_assignment("MODBUS_TCP_DIAL_TIMEOUT", config.dial_timeout))
-    print(_shell_assignment("MODBUS_STARTUP_WINDOW_SECONDS", str(config.startup_window_seconds)))
-    print(_shell_assignment("MODBUS_ENDPOINT_REF", config.endpoint_ref))
-    return 0
-
-
-def _health_command(args: argparse.Namespace) -> int:
-    enabled = args.enabled == "true"
-    if enabled:
-        if re.fullmatch(r"sha256:[0-9a-f]{16}", args.endpoint_ref) is None:
-            raise ConfigError("invalid endpoint reference")
-    elif args.endpoint_ref:
-        raise ConfigError("disabled health contains an endpoint reference")
-    write_health(
-        args.health,
-        Config(enabled, "", "", 0, args.endpoint_ref),
-        state=args.state,
-        attempt=args.attempt,
-        max_attempts=args.max_attempts,
-        binary=args.binary,
-        reason=args.reason,
-    )
-    return 0
-
-
-def _clear_endpoint_command(args: argparse.Namespace) -> int:
-    clear_endpoint_file(args.endpoint_file)
-    return 0
-
-
-def _clear_runtime_command(args: argparse.Namespace) -> int:
-    clear_endpoint_file(args.endpoint_file)
-    clear_health_file(args.health)
-    return 0
-
-
-def _redact_command(args: argparse.Namespace) -> int:
-    try:
-        endpoint = args.endpoint_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        endpoint = ""
-    values: list[str] = []
-    if endpoint:
-        values.append(endpoint)
-        try:
-            parsed = urlsplit(endpoint)
-            netloc = parsed.netloc
-            hostname = parsed.hostname or ""
-        except ValueError:
-            netloc = ""
-            hostname = ""
-        if netloc:
-            values.append(netloc)
-        if hostname:
-            values.append(hostname)
-    values = sorted(set(values), key=len, reverse=True)
-    if args.ready_file is not None:
-        args.ready_file.write_text("ready\n", encoding="utf-8")
-        args.ready_file.chmod(0o600)
-    stream = (
-        args.input_fifo.open("r", encoding="utf-8")
-        if args.input_fifo is not None
-        else contextlib.nullcontext(sys.stdin)
-    )
-    with stream as input_stream:
-        for line in input_stream:
-            for value in values:
-                line = line.replace(value, "[REDACTED_MODBUS_ENDPOINT]")
-            sys.stdout.write(line)
-            sys.stdout.flush()
     return 0
 
 
@@ -328,40 +117,7 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate")
     validate.add_argument("--options", type=Path, required=True)
-    validate.add_argument("--endpoint-file", type=Path, required=True)
-    validate.add_argument("--health", type=Path, required=True)
     validate.set_defaults(handler=_validate_command)
-
-    health = commands.add_parser("health")
-    health.add_argument("--health", type=Path, required=True)
-    health.add_argument("--enabled", choices=("true", "false"), required=True)
-    health.add_argument("--endpoint-ref", default="")
-    health.add_argument("--state", choices=sorted(_STATES), required=True)
-    health.add_argument("--attempt", type=int, required=True)
-    health.add_argument("--max-attempts", type=int, required=True)
-    health.add_argument("--binary", choices=("current", "fallback"), required=True)
-    health.add_argument("--reason", required=True)
-    health.set_defaults(handler=_health_command)
-
-    clear_endpoint = commands.add_parser("clear-endpoint")
-    clear_endpoint.add_argument("--endpoint-file", type=Path, required=True)
-    clear_endpoint.set_defaults(handler=_clear_endpoint_command)
-
-    clear_runtime = commands.add_parser("clear-runtime")
-    clear_runtime.add_argument("--endpoint-file", type=Path, required=True)
-    clear_runtime.add_argument("--health", type=Path, required=True)
-    clear_runtime.set_defaults(handler=_clear_runtime_command)
-
-    readiness = commands.add_parser("probe-readiness")
-    readiness.add_argument("--listener", action="append", required=True)
-    readiness.add_argument("--timeout-ms", type=int, default=250)
-    readiness.set_defaults(handler=_probe_readiness_command)
-
-    redact = commands.add_parser("redact")
-    redact.add_argument("--endpoint-file", type=Path, required=True)
-    redact.add_argument("--input-fifo", type=Path)
-    redact.add_argument("--ready-file", type=Path)
-    redact.set_defaults(handler=_redact_command)
     return result
 
 

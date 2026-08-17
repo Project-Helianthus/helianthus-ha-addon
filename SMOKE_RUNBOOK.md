@@ -36,10 +36,10 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.47`, do not supply any eeBUS-specific credential options:
+For release `0.6.48`, do not supply any eeBUS-specific credential options:
 they remain removed. The consolidated runtime includes bounded FM5 startup
-convergence, correct endpoint ownership in startup redaction, and listener
-readiness checks before an active Modbus health state. Modbus remains opt-in.
+convergence and source-owned endpoint sanitization. Modbus remains opt-in and
+uses the same direct gateway process lifecycle as the disabled configuration.
 
 3) Open add-on **Configuration** and paste the configuration payload below.
 
