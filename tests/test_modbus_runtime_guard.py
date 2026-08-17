@@ -132,6 +132,7 @@ def test_endpoint_file_is_atomic_private_and_disabled_launch_removes_it(
     tmp_path: Path,
 ) -> None:
     endpoint_file = tmp_path / "run" / "modbus-endpoint"
+    endpoint_file.parent.mkdir(mode=0o755)
     enabled = run_validate(write_options(tmp_path, enabled_options()), endpoint_file)
 
     assert enabled.returncode == 0, enabled.stderr

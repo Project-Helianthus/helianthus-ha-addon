@@ -105,6 +105,7 @@ def load_config(path: Path) -> Config:
 
 def write_endpoint_file(path: Path, config: Config) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
     if not config.enabled:
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
