@@ -59,13 +59,12 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.50` packages the same consolidated gateway as 0.6.49 and fixes
-Supervisor option compatibility: pre-selector configurations remain saveable,
-and the non-secret Modbus TCP endpoint is displayed as text. The gateway keeps
-bounded FM5 startup convergence, source-owned endpoint sanitization, and
-protocol-local Modbus startup failure. Enabled and disabled Modbus
-configurations use the same direct gateway `exec` lifecycle; Modbus remains
-disabled by default.
+Release `0.6.51` packages the gateway with owner-atomic Modbus MCP recovery:
+one retryable transport reset can trigger one reconnect and one retry without
+a second caller quota admission or stale-generation provenance. Provider
+errors remain endpoint-free. The release preserves the 0.6.50 Supervisor
+option compatibility, direct gateway `exec` lifecycle, and
+disabled-by-default Modbus configuration.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 

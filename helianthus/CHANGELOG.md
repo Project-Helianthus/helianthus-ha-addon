@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.6.51 (2026-08-17)
+
+- Pin the gateway to `6f4aaa7a08eeffb655e5da0f6f6c2053e399a45b`,
+  where raw Modbus MCP reads recover one retryable transport reset through one
+  owner-atomic reconnect and retry under the original bounded deadline.
+- Keep the caller quota admission and immutable request stable across recovery,
+  and return provenance only from the recovered connection generation.
+- Emit static endpoint-free Modbus provider errors while preserving the 0.6.50
+  Supervisor schema, single-process wrapper, and disabled-by-default Modbus
+  configuration.
+
 ## 0.6.50 (2026-08-17)
 
 - Keep `adapter_direct_protocol` truly optional in the Supervisor schema so

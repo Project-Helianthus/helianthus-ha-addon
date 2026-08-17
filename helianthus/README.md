@@ -52,12 +52,12 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.50` packages the same consolidated gateway as 0.6.49 with an
-upgrade-safe optional adapter protocol selector and a visible, non-secret
-Modbus endpoint field. It retains bounded FM5 startup convergence,
-source-owned endpoint sanitization, and protocol-local Modbus startup failure.
-All eeBUS-specific credential provisioning remains removed, and the read-only
-Modbus runtime remains disabled unless explicitly enabled.
+Release `0.6.51` pins the gateway with one owner-atomic reconnect and retry for
+a retryable raw Modbus MCP transport loss. The retry stays within the original
+bounded operation and caller quota admission, returns only recovered-generation
+provenance, and exposes static endpoint-free provider errors. The 0.6.50 option
+schema, single-process wrapper, and disabled-by-default Modbus behavior remain
+unchanged.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
