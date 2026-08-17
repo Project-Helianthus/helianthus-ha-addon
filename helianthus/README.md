@@ -21,7 +21,8 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 Key options are exposed in `config.json`:
 
 - `adapter_direct_enabled`: connect through the gateway adapter-direct path
-- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (e.g. `enh://<host>:<port>`)
+- `adapter_direct_protocol`: explicit physical adapter protocol, `enh` or `ens` (default `enh`)
+- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (`<host>:<port>`)
 - `proxy_listen_addr`: gateway-embedded adaptermux proxy listener address (default `0.0.0.0:19001`)
 - `transport`: `enh`, `ens`, `udp-plain`, or `ebusd-tcp`
 - `network`: `tcp`, `udp`, or `unix`
@@ -51,7 +52,7 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.48` packages the consolidated gateway with bounded FM5 startup
+Release `0.6.49` packages the consolidated gateway with bounded FM5 startup
 convergence, source-owned endpoint sanitization, and protocol-local Modbus
 startup failure. All
 eeBUS-specific credential provisioning remains removed, and the read-only
@@ -78,8 +79,21 @@ Stable instance GUID persistence:
 - Removing `/data/instance_guid` or reinstalling without restoring `/data` creates a new Helianthus instance identity.
 
 For embedded adaptermux proxy mode, set `adapter_direct_enabled=true`,
-`adapter_direct_address=<adapter-endpoint>`, and `proxy_listen_addr=<listen-host:port>`.
-Leave `proxy_profile=disabled` unless intentionally connecting the gateway to an external proxy endpoint.
+`adapter_direct_protocol=enh|ens`, `adapter_direct_address=<adapter-endpoint>`,
+and `proxy_listen_addr=<listen-host:port>`. ENH emits
+`adapter-direct://HOST:PORT`; ENS emits `adapter-direct-ens://HOST:PORT`.
+Keep `proxy_profile=disabled`: adapter-direct and an external proxy endpoint are
+mutually exclusive configurations. The gateway-integrated proxy listener is
+preserved for both adapter protocols.
+
+For upgrade compatibility only, when persisted options do not yet contain
+`adapter_direct_protocol`, the wrapper recognizes the exact old adapter-direct
+shape `proxy_profile=enh|ens` with an empty `proxy_endpoint`, migrates it to the
+matching adapter-direct protocol, and disables the effective proxy profile.
+Once the typed key is persisted it remains authoritative even if the stale
+profile remains. Save `adapter_direct_protocol` explicitly and reset
+`proxy_profile=disabled` after upgrading. Adapter-direct plus a populated
+external `proxy_endpoint` is rejected.
 
 ## Debugging tools
 

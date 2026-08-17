@@ -59,7 +59,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.48` packages the consolidated gateway with bounded FM5 startup
+Release `0.6.49` packages the consolidated gateway with bounded FM5 startup
 convergence, source-owned endpoint sanitization, and protocol-local Modbus
 startup failure. Enabled and disabled Modbus configurations use the same direct
 gateway `exec` lifecycle; Modbus remains disabled by default.
@@ -89,7 +89,8 @@ modbus_tcp_dial_timeout: 5s
 
 ```yaml
 adapter_direct_enabled: true
-adapter_direct_address: enh://203.0.113.10:9999
+adapter_direct_protocol: enh
+adapter_direct_address: 203.0.113.10:9999
 proxy_listen_addr: 0.0.0.0:19001
 transport: enh
 network: tcp
@@ -105,6 +106,23 @@ modbus_tcp_enabled: false
 modbus_tcp_endpoint: ""
 modbus_tcp_dial_timeout: 5s
 ```
+
+`adapter_direct_protocol` is the sole ENH/ENS selector for the physical adapter:
+`enh` emits `adapter-direct://HOST:PORT`, while `ens` emits
+`adapter-direct-ens://HOST:PORT`. Keep `proxy_profile=disabled` in
+adapter-direct mode; `proxy_profile` is reserved for an external proxy endpoint.
+The integrated proxy listener remains available through `proxy_listen_addr` for
+both adapter protocols.
+
+Upgrade compatibility is deterministic: when persisted options do not yet
+contain `adapter_direct_protocol`, a pre-selector adapter-direct configuration
+with `proxy_profile=enh|ens` and an empty `proxy_endpoint` is migrated at
+startup to the matching adapter-direct protocol, then treated as
+`proxy_profile=disabled`. Once the typed key is persisted, it is authoritative
+even if a stale empty-endpoint profile remains. Save the explicit
+`adapter_direct_protocol` and `proxy_profile=disabled` values after upgrading.
+A populated `proxy_endpoint` is a real external-proxy configuration and remains
+invalid with adapter-direct.
 
 ### 5) Post-start operator smoke checks
 

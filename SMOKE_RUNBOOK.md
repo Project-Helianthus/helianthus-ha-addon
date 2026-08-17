@@ -19,12 +19,27 @@ the embedded gateway adaptermux proxy topology, and produces deterministic pass/
 ## Embedded adaptermux proxy topology
 
 - Point the Helianthus add-on at the physical adapter with `adapter_direct_enabled=true`.
+- Select the physical adapter protocol explicitly with `adapter_direct_protocol=enh|ens`.
 - Use `proxy_listen_addr` to expose the gateway-embedded adaptermux proxy for other clients.
 - Keep `proxy_profile=disabled`; the add-on no longer starts or wires a standalone adapter-proxy.
 - Example values:
-  - adapter direct address: `enh://203.0.113.10:9999`
+  - adapter direct protocol: `enh`
+  - adapter direct address: `203.0.113.10:9999`
   - proxy listener: `0.0.0.0:19001`
   - effective transport marker: `Transport: adapter-direct (tcp adapter-direct://203.0.113.10:9999)`
+
+For ENS, keep the same address and listener, set
+`adapter_direct_protocol=ens`, and expect
+`Transport: adapter-direct (tcp adapter-direct-ens://203.0.113.10:9999)`.
+
+An upgraded pre-selector configuration whose persisted options do not yet
+contain `adapter_direct_protocol` may still contain `proxy_profile=enh|ens`
+with an empty `proxy_endpoint`. Startup must log the legacy migration, emit the
+matching adapter-direct URI, report `Proxy profile: disabled`, and preserve
+`-proxy-listen`. Once the typed key exists, verify that it wins over any stale
+empty-endpoint profile. Save the explicit `adapter_direct_protocol` and
+`proxy_profile=disabled` options afterward. If `proxy_endpoint` is populated,
+startup must reject the mixed configuration.
 
 ## Install and start add-on
 
@@ -36,7 +51,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.48`, do not supply any eeBUS-specific credential options:
+For release `0.6.49`, do not supply any eeBUS-specific credential options:
 they remain removed. The consolidated runtime includes bounded FM5 startup
 convergence and source-owned endpoint sanitization. Modbus remains opt-in and
 uses the same direct gateway process lifecycle as the disabled configuration.

@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.48",
+  "version": "0.6.49",
   "slug": "helianthus",
   "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [
@@ -20,6 +20,7 @@
   "image": "ghcr.io/project-helianthus/helianthus-ha-addon",
   "options": {
     "adapter_direct_enabled": true,
+    "adapter_direct_protocol": "enh",
     "adapter_direct_address": "",
     "proxy_listen_addr": "0.0.0.0:19001",
     "transport": "enh",
@@ -60,6 +61,7 @@
   },
   "schema": {
     "adapter_direct_enabled": "bool",
+    "adapter_direct_protocol": "list(enh|ens)",
     "adapter_direct_address": "str",
     "proxy_listen_addr": "str",
     "transport": "list(enh|ens|udp-plain|ebusd-tcp)",

@@ -28,8 +28,16 @@ read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
+adapter_direct_protocol=$(bashio::config 'adapter_direct_protocol' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
 proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)
+addon_options_path="${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"
+adapter_direct_protocol_persisted=false
+if [ -f "${addon_options_path}" ] && command -v jq >/dev/null 2>&1 && \
+  jq -e 'type == "object" and has("adapter_direct_protocol") and .adapter_direct_protocol != null' \
+    "${addon_options_path}" >/dev/null 2>&1; then
+  adapter_direct_protocol_persisted=true
+fi
 # F-1 defensive fallback (EBUSD-VERIFICATION-2026-05-10.md): HA Supervisor's
 # /addons/self/options/config endpoint has been observed silently returning
 # empty for proxy_listen_addr despite the value being correctly stored in
@@ -343,6 +351,14 @@ fi
 if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
   adapter_direct_address=""
 fi
+adapter_direct_protocol=$(printf '%s' "${adapter_direct_protocol}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if [ -z "${adapter_direct_protocol}" ] || [ "${adapter_direct_protocol}" = "null" ]; then
+  adapter_direct_protocol="enh"
+fi
+case "${adapter_direct_protocol}" in
+  enh | ens) ;;
+  *) bashio::exit.nok "adapter_direct_protocol must be one of: enh, ens" ;;
+esac
 if [ "${proxy_listen_addr}" = "null" ]; then
   proxy_listen_addr="0.0.0.0:19001"
 fi
@@ -410,22 +426,40 @@ effective_address="${address}"
 
 proxy_profile=$(printf '%s' "${proxy_profile}" | tr '[:upper:]' '[:lower:]')
 proxy_endpoint_trimmed=$(printf '%s' "${proxy_endpoint}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if bashio::var.true "${adapter_direct_enabled}" && [ -n "${proxy_endpoint_trimmed}" ]; then
+  bashio::exit.nok "adapter_direct_enabled=true requires proxy_endpoint to be empty"
+fi
 
 case "${proxy_profile}" in
   "" | disabled)
     proxy_profile="disabled"
     ;;
   enh | ens)
-    if [ -z "${proxy_endpoint_trimmed}" ] && ! bashio::var.true "${adapter_direct_enabled}"; then
-      bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
-    fi
-    if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
-      effective_address="${proxy_endpoint_trimmed}"
+    if bashio::var.true "${adapter_direct_enabled}"; then
+      # Compatibility migration for pre-selector installs. The old wrapper
+      # used proxy_profile as the accidental adapter-direct ENS/ENH selector;
+      # those configurations have no persisted selector or proxy endpoint.
+      # Once the typed key is persisted it remains authoritative, even while a
+      # stale legacy profile still exists.
+      if [ "${adapter_direct_protocol_persisted}" = true ]; then
+        bashio::log.warning "Ignoring stale adapter-direct proxy_profile=${proxy_profile}; adapter_direct_protocol=${adapter_direct_protocol} is explicitly persisted; save proxy_profile=disabled in add-on options"
+      else
+        bashio::log.warning "Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options"
+        adapter_direct_protocol="${proxy_profile}"
+      fi
+      proxy_profile="disabled"
     else
-      effective_address="${proxy_profile}://${proxy_endpoint_trimmed}"
+      if [ -z "${proxy_endpoint_trimmed}" ]; then
+        bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
+      fi
+      if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
+        effective_address="${proxy_endpoint_trimmed}"
+      else
+        effective_address="${proxy_profile}://${proxy_endpoint_trimmed}"
+      fi
+      effective_transport="${proxy_profile}"
+      effective_network="tcp"
     fi
-    effective_transport="${proxy_profile}"
-    effective_network="tcp"
     ;;
   *)
     bashio::exit.nok "proxy_profile must be one of: disabled, enh, ens"
@@ -443,16 +477,13 @@ fi
 # adapter-direct mode: override transport to adapter-direct:// URI
 if bashio::var.true "${adapter_direct_enabled}"; then
   # Strip whitespace, then strip any scheme prefix (ens://, enh://, adapter-direct://)
-  # so the user can paste any URI format and we normalize to plain host:port.
+  # for compatibility. The typed adapter_direct_protocol option remains the
+  # only authority for selecting ENH versus ENS.
   adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s|^[a-zA-Z][-a-zA-Z0-9]*://||')
   if [ -z "${adapter_direct_address_trimmed}" ]; then
     bashio::exit.nok "adapter_direct_address is required when adapter_direct_enabled=true"
   fi
-  if [ "${proxy_profile}" != "disabled" ]; then
-    bashio::log.warning "adapter_direct_enabled=true overrides proxy_profile=${proxy_profile}; adapter-direct takes precedence"
-  fi
-  # Use adapter-direct-ens:// if proxy_profile is ens, otherwise adapter-direct:// (ENH default)
-  if [ "${proxy_profile}" = "ens" ]; then
+  if [ "${adapter_direct_protocol}" = "ens" ]; then
     effective_address="adapter-direct-ens://${adapter_direct_address_trimmed}"
   else
     effective_address="adapter-direct://${adapter_direct_address_trimmed}"
@@ -544,7 +575,7 @@ bashio::log.info "Proxy profile: ${proxy_profile}"
 bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
 proxy_listen_args=()
 if bashio::var.true "${adapter_direct_enabled}"; then
-  bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} address=${adapter_direct_address}"
+  bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} protocol=${adapter_direct_protocol} address=${adapter_direct_address}"
   if [ -n "${proxy_listen_addr}" ]; then
     proxy_listen_args=(-proxy-listen "${proxy_listen_addr}")
     bashio::log.info "Proxy listener: ${proxy_listen_addr}"
