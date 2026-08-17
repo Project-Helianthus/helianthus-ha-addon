@@ -19,12 +19,18 @@ the embedded gateway adaptermux proxy topology, and produces deterministic pass/
 ## Embedded adaptermux proxy topology
 
 - Point the Helianthus add-on at the physical adapter with `adapter_direct_enabled=true`.
+- Select the physical adapter protocol explicitly with `adapter_direct_protocol=enh|ens`.
 - Use `proxy_listen_addr` to expose the gateway-embedded adaptermux proxy for other clients.
 - Keep `proxy_profile=disabled`; the add-on no longer starts or wires a standalone adapter-proxy.
 - Example values:
-  - adapter direct address: `enh://203.0.113.10:9999`
+  - adapter direct protocol: `enh`
+  - adapter direct address: `203.0.113.10:9999`
   - proxy listener: `0.0.0.0:19001`
   - effective transport marker: `Transport: adapter-direct (tcp adapter-direct://203.0.113.10:9999)`
+
+For ENS, keep the same address and listener, set
+`adapter_direct_protocol=ens`, and expect
+`Transport: adapter-direct (tcp adapter-direct-ens://203.0.113.10:9999)`.
 
 ## Install and start add-on
 

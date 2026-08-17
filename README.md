@@ -89,7 +89,8 @@ modbus_tcp_dial_timeout: 5s
 
 ```yaml
 adapter_direct_enabled: true
-adapter_direct_address: enh://203.0.113.10:9999
+adapter_direct_protocol: enh
+adapter_direct_address: 203.0.113.10:9999
 proxy_listen_addr: 0.0.0.0:19001
 transport: enh
 network: tcp
@@ -105,6 +106,13 @@ modbus_tcp_enabled: false
 modbus_tcp_endpoint: ""
 modbus_tcp_dial_timeout: 5s
 ```
+
+`adapter_direct_protocol` is the sole ENH/ENS selector for the physical adapter:
+`enh` emits `adapter-direct://HOST:PORT`, while `ens` emits
+`adapter-direct-ens://HOST:PORT`. Keep `proxy_profile=disabled` in
+adapter-direct mode; `proxy_profile` is reserved for an external proxy endpoint.
+The integrated proxy listener remains available through `proxy_listen_addr` for
+both adapter protocols.
 
 ### 5) Post-start operator smoke checks
 

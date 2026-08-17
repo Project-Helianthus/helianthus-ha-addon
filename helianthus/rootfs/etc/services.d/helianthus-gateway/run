@@ -28,6 +28,7 @@ read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
+adapter_direct_protocol=$(bashio::config 'adapter_direct_protocol' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
 proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)
 # F-1 defensive fallback (EBUSD-VERIFICATION-2026-05-10.md): HA Supervisor's
@@ -343,6 +344,14 @@ fi
 if [ -z "${adapter_direct_address}" ] || [ "${adapter_direct_address}" = "null" ]; then
   adapter_direct_address=""
 fi
+adapter_direct_protocol=$(printf '%s' "${adapter_direct_protocol}" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if [ -z "${adapter_direct_protocol}" ] || [ "${adapter_direct_protocol}" = "null" ]; then
+  adapter_direct_protocol="enh"
+fi
+case "${adapter_direct_protocol}" in
+  enh | ens) ;;
+  *) bashio::exit.nok "adapter_direct_protocol must be one of: enh, ens" ;;
+esac
 if [ "${proxy_listen_addr}" = "null" ]; then
   proxy_listen_addr="0.0.0.0:19001"
 fi
@@ -416,7 +425,10 @@ case "${proxy_profile}" in
     proxy_profile="disabled"
     ;;
   enh | ens)
-    if [ -z "${proxy_endpoint_trimmed}" ] && ! bashio::var.true "${adapter_direct_enabled}"; then
+    if bashio::var.true "${adapter_direct_enabled}"; then
+      bashio::exit.nok "adapter_direct_enabled=true requires proxy_profile=disabled"
+    fi
+    if [ -z "${proxy_endpoint_trimmed}" ]; then
       bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
     fi
     if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
@@ -443,16 +455,13 @@ fi
 # adapter-direct mode: override transport to adapter-direct:// URI
 if bashio::var.true "${adapter_direct_enabled}"; then
   # Strip whitespace, then strip any scheme prefix (ens://, enh://, adapter-direct://)
-  # so the user can paste any URI format and we normalize to plain host:port.
+  # for compatibility. The typed adapter_direct_protocol option remains the
+  # only authority for selecting ENH versus ENS.
   adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s|^[a-zA-Z][-a-zA-Z0-9]*://||')
   if [ -z "${adapter_direct_address_trimmed}" ]; then
     bashio::exit.nok "adapter_direct_address is required when adapter_direct_enabled=true"
   fi
-  if [ "${proxy_profile}" != "disabled" ]; then
-    bashio::log.warning "adapter_direct_enabled=true overrides proxy_profile=${proxy_profile}; adapter-direct takes precedence"
-  fi
-  # Use adapter-direct-ens:// if proxy_profile is ens, otherwise adapter-direct:// (ENH default)
-  if [ "${proxy_profile}" = "ens" ]; then
+  if [ "${adapter_direct_protocol}" = "ens" ]; then
     effective_address="adapter-direct-ens://${adapter_direct_address_trimmed}"
   else
     effective_address="adapter-direct://${adapter_direct_address_trimmed}"
@@ -544,7 +553,7 @@ bashio::log.info "Proxy profile: ${proxy_profile}"
 bashio::log.info "Proxy endpoint: ${proxy_endpoint_marker}"
 proxy_listen_args=()
 if bashio::var.true "${adapter_direct_enabled}"; then
-  bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} address=${adapter_direct_address}"
+  bashio::log.info "Adapter-direct: enabled=${adapter_direct_enabled} protocol=${adapter_direct_protocol} address=${adapter_direct_address}"
   if [ -n "${proxy_listen_addr}" ]; then
     proxy_listen_args=(-proxy-listen "${proxy_listen_addr}")
     bashio::log.info "Proxy listener: ${proxy_listen_addr}"

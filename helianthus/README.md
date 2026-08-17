@@ -21,7 +21,8 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 Key options are exposed in `config.json`:
 
 - `adapter_direct_enabled`: connect through the gateway adapter-direct path
-- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (e.g. `enh://<host>:<port>`)
+- `adapter_direct_protocol`: explicit physical adapter protocol, `enh` or `ens` (default `enh`)
+- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (`<host>:<port>`)
 - `proxy_listen_addr`: gateway-embedded adaptermux proxy listener address (default `0.0.0.0:19001`)
 - `transport`: `enh`, `ens`, `udp-plain`, or `ebusd-tcp`
 - `network`: `tcp`, `udp`, or `unix`
@@ -78,8 +79,12 @@ Stable instance GUID persistence:
 - Removing `/data/instance_guid` or reinstalling without restoring `/data` creates a new Helianthus instance identity.
 
 For embedded adaptermux proxy mode, set `adapter_direct_enabled=true`,
-`adapter_direct_address=<adapter-endpoint>`, and `proxy_listen_addr=<listen-host:port>`.
-Leave `proxy_profile=disabled` unless intentionally connecting the gateway to an external proxy endpoint.
+`adapter_direct_protocol=enh|ens`, `adapter_direct_address=<adapter-endpoint>`,
+and `proxy_listen_addr=<listen-host:port>`. ENH emits
+`adapter-direct://HOST:PORT`; ENS emits `adapter-direct-ens://HOST:PORT`.
+Keep `proxy_profile=disabled`: adapter-direct and an external proxy endpoint are
+mutually exclusive configurations. The gateway-integrated proxy listener is
+preserved for both adapter protocols.
 
 ## Debugging tools
 
