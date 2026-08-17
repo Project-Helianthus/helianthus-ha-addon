@@ -48,6 +48,8 @@ and directly `exec`s the packaged gateway. It does not supervise a separate
 gateway child, post-process logs, probe listeners, retry the complete gateway,
 or launch a previous binary. Modbus reconnect and availability remain
 protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
+Upgrade startup removes the retired Modbus health record. Any failure before
+the final `exec` also removes the protected endpoint file.
 
 Release `0.6.48` packages the consolidated gateway with bounded FM5 startup
 convergence, source-owned endpoint sanitization, and protocol-local Modbus

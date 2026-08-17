@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+legacy_modbus_health_file="/data/modbus-runtime-health.json"
+if ! rm -f -- "${legacy_modbus_health_file}"; then
+  bashio::exit.nok "Unable to remove retired Modbus runtime health record"
+fi
+
 transport=$(bashio::config 'transport')
 network=$(bashio::config 'network')
 address=$(bashio::config 'address')
@@ -56,6 +61,10 @@ v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
+cleanup_modbus_pre_exec() {
+  rm -f -- "${modbus_endpoint_file}" || true
+}
+trap cleanup_modbus_pre_exec EXIT
 
 MODBUS_TCP_ENABLED=""
 MODBUS_TCP_DIAL_TIMEOUT=""

@@ -90,3 +90,18 @@ def test_current_operator_docs_match_release_authority() -> None:
     assert f"Release `{version}` packages" in root_readme
     assert f"For release `{version}`" in smoke
     assert "active Modbus runtime state" not in root_readme
+
+
+def test_pre_exec_cleanup_retires_health_and_removes_unconsumed_endpoint() -> None:
+    run = RUN.read_text(encoding="utf-8")
+
+    assert 'legacy_modbus_health_file="/data/modbus-runtime-health.json"' in run
+    assert 'rm -f -- "${legacy_modbus_health_file}"' in run
+    assert run.index('rm -f -- "${legacy_modbus_health_file}"') < run.index(
+        "transport=$(bashio::config 'transport')"
+    )
+    assert "trap cleanup_modbus_pre_exec EXIT" in run
+    assert 'rm -f -- "${modbus_endpoint_file}"' in run
+    assert run.index("trap cleanup_modbus_pre_exec EXIT") < run.index(
+        'exec "${gateway_bin}" "${gateway_args[@]}"'
+    )
