@@ -32,6 +32,13 @@ For ENS, keep the same address and listener, set
 `adapter_direct_protocol=ens`, and expect
 `Transport: adapter-direct (tcp adapter-direct-ens://203.0.113.10:9999)`.
 
+An upgraded pre-selector configuration may still contain
+`proxy_profile=enh|ens` with an empty `proxy_endpoint`. Startup must log the
+legacy migration, emit the matching adapter-direct URI, report
+`Proxy profile: disabled`, and preserve `-proxy-listen`. Save the explicit
+`adapter_direct_protocol` and `proxy_profile=disabled` options afterward. If
+`proxy_endpoint` is populated, startup must reject the mixed configuration.
+
 ## Install and start add-on
 
 1) Add repository:

@@ -426,18 +426,29 @@ case "${proxy_profile}" in
     ;;
   enh | ens)
     if bashio::var.true "${adapter_direct_enabled}"; then
-      bashio::exit.nok "adapter_direct_enabled=true requires proxy_profile=disabled"
-    fi
-    if [ -z "${proxy_endpoint_trimmed}" ]; then
-      bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
-    fi
-    if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
-      effective_address="${proxy_endpoint_trimmed}"
+      # Compatibility migration for pre-selector installs. The old wrapper
+      # used proxy_profile as the accidental adapter-direct ENS/ENH selector;
+      # those configurations have no proxy endpoint. Consume that exact legacy
+      # shape, then disable the effective proxy profile so normal adapter-direct
+      # routing remains owned solely by adapter_direct_protocol.
+      if [ -n "${proxy_endpoint_trimmed}" ]; then
+        bashio::exit.nok "adapter_direct_enabled=true requires proxy_profile=disabled"
+      fi
+      bashio::log.warning "Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options"
+      adapter_direct_protocol="${proxy_profile}"
+      proxy_profile="disabled"
     else
-      effective_address="${proxy_profile}://${proxy_endpoint_trimmed}"
+      if [ -z "${proxy_endpoint_trimmed}" ]; then
+        bashio::exit.nok "proxy_endpoint is required when proxy_profile=${proxy_profile}"
+      fi
+      if [[ "${proxy_endpoint_trimmed}" == *"://"* ]]; then
+        effective_address="${proxy_endpoint_trimmed}"
+      else
+        effective_address="${proxy_profile}://${proxy_endpoint_trimmed}"
+      fi
+      effective_transport="${proxy_profile}"
+      effective_network="tcp"
     fi
-    effective_transport="${proxy_profile}"
-    effective_network="tcp"
     ;;
   *)
     bashio::exit.nok "proxy_profile must be one of: disabled, enh, ens"

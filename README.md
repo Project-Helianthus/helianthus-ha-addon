@@ -114,6 +114,13 @@ adapter-direct mode; `proxy_profile` is reserved for an external proxy endpoint.
 The integrated proxy listener remains available through `proxy_listen_addr` for
 both adapter protocols.
 
+Upgrade compatibility is deterministic: a pre-selector adapter-direct
+configuration with `proxy_profile=enh|ens` and an empty `proxy_endpoint` is
+migrated at startup to the matching adapter-direct protocol, then treated as
+`proxy_profile=disabled`. Save the explicit `adapter_direct_protocol` and
+`proxy_profile=disabled` values after upgrading. A populated `proxy_endpoint`
+is a real external-proxy configuration and remains invalid with adapter-direct.
+
 ### 5) Post-start operator smoke checks
 
 ```bash
