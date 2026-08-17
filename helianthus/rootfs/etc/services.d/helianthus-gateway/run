@@ -419,6 +419,9 @@ effective_address="${address}"
 
 proxy_profile=$(printf '%s' "${proxy_profile}" | tr '[:upper:]' '[:lower:]')
 proxy_endpoint_trimmed=$(printf '%s' "${proxy_endpoint}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+if bashio::var.true "${adapter_direct_enabled}" && [ -n "${proxy_endpoint_trimmed}" ]; then
+  bashio::exit.nok "adapter_direct_enabled=true requires proxy_endpoint to be empty"
+fi
 
 case "${proxy_profile}" in
   "" | disabled)
@@ -431,9 +434,6 @@ case "${proxy_profile}" in
       # those configurations have no proxy endpoint. Consume that exact legacy
       # shape, then disable the effective proxy profile so normal adapter-direct
       # routing remains owned solely by adapter_direct_protocol.
-      if [ -n "${proxy_endpoint_trimmed}" ]; then
-        bashio::exit.nok "adapter_direct_enabled=true requires proxy_profile=disabled"
-      fi
       bashio::log.warning "Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options"
       adapter_direct_protocol="${proxy_profile}"
       proxy_profile="disabled"

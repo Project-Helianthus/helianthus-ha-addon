@@ -341,7 +341,7 @@ def _check_adapter_direct_protocol_contract() -> None:
         )
         _assert(conflict_argv == [], "adapter-direct/proxy conflict must fail before gateway exec")
         _assert(
-            "adapter_direct_enabled=true requires proxy_profile=disabled" in conflict_stderr,
+            "adapter_direct_enabled=true requires proxy_endpoint to be empty" in conflict_stderr,
             "adapter-direct/proxy conflict must explain the mutually exclusive configuration",
         )
 
