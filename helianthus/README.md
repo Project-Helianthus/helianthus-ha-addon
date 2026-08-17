@@ -49,8 +49,9 @@ gateway child, post-process logs, probe listeners, retry the complete gateway,
 or launch a previous binary. Modbus reconnect and availability remain
 protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 
-Release `0.6.47` packages the consolidated gateway with bounded FM5 startup
-convergence and source-owned endpoint sanitization. All
+Release `0.6.48` packages the consolidated gateway with bounded FM5 startup
+convergence, source-owned endpoint sanitization, and protocol-local Modbus
+startup failure. All
 eeBUS-specific credential provisioning remains removed, and the read-only
 Modbus runtime remains disabled unless explicitly enabled.
 

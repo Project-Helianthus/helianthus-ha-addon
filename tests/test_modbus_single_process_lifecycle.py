@@ -6,6 +6,7 @@ RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 GUARD = ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 DOCKERFILE = ROOT / "helianthus/Dockerfile"
 README = ROOT / "helianthus/README.md"
+CHANGELOG = ROOT / "helianthus/CHANGELOG.md"
 
 
 def test_enabled_and_disabled_modbus_share_one_direct_exec_lifecycle() -> None:
@@ -65,3 +66,13 @@ def test_readme_matches_fail_closed_gateway_override_policy() -> None:
     assert "remove that file or symlink before startup" in normalized_readme
     assert "Persistent gateway binary override is not supported" in run
     assert "/data/helianthus-gateway` overrides" not in readme
+
+
+def test_release_history_keeps_0647_immutable_and_records_0648() -> None:
+    changelog = CHANGELOG.read_text(encoding="utf-8")
+    release_0648 = changelog.split("## 0.6.48", 1)[1].split("## 0.6.47", 1)[0]
+    release_0647 = changelog.split("## 0.6.47", 1)[1].split("## 0.6.46", 1)[0]
+
+    assert "7f1cbea90e0b189486febc656632e9e7430c8500" in release_0648
+    assert "225f3d96fee3422bc565870f946af19fac42d471" in release_0647
+    assert "7f1cbea90e0b189486febc656632e9e7430c8500" not in release_0647
