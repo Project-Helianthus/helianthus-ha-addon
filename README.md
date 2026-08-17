@@ -59,10 +59,13 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.49` packages the consolidated gateway with bounded FM5 startup
-convergence, source-owned endpoint sanitization, and protocol-local Modbus
-startup failure. Enabled and disabled Modbus configurations use the same direct
-gateway `exec` lifecycle; Modbus remains disabled by default.
+Release `0.6.50` packages the same consolidated gateway as 0.6.49 and fixes
+Supervisor option compatibility: pre-selector configurations remain saveable,
+and the non-secret Modbus TCP endpoint is displayed as text. The gateway keeps
+bounded FM5 startup convergence, source-owned endpoint sanitization, and
+protocol-local Modbus startup failure. Enabled and disabled Modbus
+configurations use the same direct gateway `exec` lifecycle; Modbus remains
+disabled by default.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 
@@ -114,13 +117,16 @@ adapter-direct mode; `proxy_profile` is reserved for an external proxy endpoint.
 The integrated proxy listener remains available through `proxy_listen_addr` for
 both adapter protocols.
 
-Upgrade compatibility is deterministic: when persisted options do not yet
+Upgrade compatibility is deterministic: `adapter_direct_protocol` is optional
+at the Supervisor schema boundary so persisted options created before 0.6.49
+remain saveable. When persisted options do not yet
 contain `adapter_direct_protocol`, a pre-selector adapter-direct configuration
 with `proxy_profile=enh|ens` and an empty `proxy_endpoint` is migrated at
 startup to the matching adapter-direct protocol, then treated as
 `proxy_profile=disabled`. Once the typed key is persisted, it is authoritative
 even if a stale empty-endpoint profile remains. Save the explicit
-`adapter_direct_protocol` and `proxy_profile=disabled` values after upgrading.
+`adapter_direct_protocol` and `proxy_profile=disabled` values when selecting a
+protocol explicitly.
 A populated `proxy_endpoint` is a real external-proxy configuration and remains
 invalid with adapter-direct.
 

@@ -260,12 +260,12 @@ def _argv_value(argv: list[str], flag: str) -> str:
 def _check_adapter_direct_protocol_contract() -> None:
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     _assert(
-        config["options"].get("adapter_direct_protocol") == "enh",
-        "adapter_direct_protocol must default to enh",
+        "adapter_direct_protocol" not in config["options"],
+        "adapter_direct_protocol must remain absent from defaults for upgrade compatibility",
     )
     _assert(
-        config["schema"].get("adapter_direct_protocol") == "list(enh|ens)",
-        "adapter_direct_protocol must be typed as list(enh|ens)",
+        config["schema"].get("adapter_direct_protocol") == "list(enh|ens)?",
+        "adapter_direct_protocol must be typed as optional list(enh|ens)",
     )
 
     cases = (

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.50 (2026-08-17)
+
+- Keep `adapter_direct_protocol` truly optional in the Supervisor schema so
+  persisted configurations created before 0.6.49 can still be edited and
+  saved. The existing wrapper fallback remains authoritative when the key is
+  absent, while explicit `enh` and `ens` values remain supported.
+- Render `modbus_tcp_endpoint` as ordinary text routing configuration instead
+  of a password. Runtime validation still rejects embedded credentials and
+  continues to redact endpoint values from errors and logs.
+- Retain the exact 0.6.49 gateway pin and runtime behavior; this release changes
+  only add-on option schema, documentation, and regression coverage.
+
 ## 0.6.49 (2026-08-17)
 
 - Add the typed `adapter_direct_protocol` selector with a compatible `enh`
