@@ -12,7 +12,7 @@
 ## 0.6.47 (2026-08-15)
 
 - Pin the consolidated gateway to
-  `225f3d96fee3422bc565870f946af19fac42d471`, carrying bounded FM5 startup
+  `7f1cbea90e0b189486febc656632e9e7430c8500`, carrying bounded FM5 startup
   convergence and correct endpoint ownership in Modbus startup redaction.
 - Require the configured HTTP listener and any adapter-direct proxy listener
   to accept bounded TCP connections before publishing `RUNNING` or

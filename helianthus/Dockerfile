@@ -8,7 +8,7 @@ FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG BUILD_VERSION
-ARG EBUSGATEWAY_VERSION=225f3d96fee3422bc565870f946af19fac42d471
+ARG EBUSGATEWAY_VERSION=7f1cbea90e0b189486febc656632e9e7430c8500
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret

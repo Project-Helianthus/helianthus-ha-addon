@@ -16,7 +16,7 @@ RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
 RELEASE = "0.6.47"
-GATEWAY = "225f3d96fee3422bc565870f946af19fac42d471"
+GATEWAY = "7f1cbea90e0b189486febc656632e9e7430c8500"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
