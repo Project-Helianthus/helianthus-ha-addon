@@ -124,6 +124,10 @@ def test_validator_cannot_recreate_endpoint_after_wrapper_termination(
     assert run.index('python3 "${modbus_guard}" validate') < run.index(
         'mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"'
     )
+    terminating_traps = run.split("trap 'exit 130' INT", 1)[1]
+    assert terminating_traps.index("abort_modbus_pre_exec_on_signal") < (
+        terminating_traps.index("unset MODBUS_TCP_ENDPOINT")
+    )
 
     wrapper = tmp_path / "run-under-test.sh"
     guard = tmp_path / "delayed-guard.py"
