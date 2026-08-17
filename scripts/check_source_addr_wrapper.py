@@ -265,9 +265,9 @@ def _check_adapter_direct_protocol_contract() -> None:
         ("enh", "203.0.113.10:9999", "disabled", "", "adapter-direct://203.0.113.10:9999"),
         ("ens", "203.0.113.10:9999", "disabled", "", "adapter-direct-ens://203.0.113.10:9999"),
         # The explicit adapter selector is authoritative even when a legacy
-        # address prefix or proxy profile suggests the opposite protocol.
-        ("enh", "ens://203.0.113.10:9999", "ens", "proxy.example.invalid:9999", "adapter-direct://203.0.113.10:9999"),
-        ("ens", "enh://203.0.113.10:9999", "enh", "proxy.example.invalid:9999", "adapter-direct-ens://203.0.113.10:9999"),
+        # address prefix suggests the opposite protocol.
+        ("enh", "ens://203.0.113.10:9999", "disabled", "", "adapter-direct://203.0.113.10:9999"),
+        ("ens", "enh://203.0.113.10:9999", "disabled", "", "adapter-direct-ens://203.0.113.10:9999"),
         # Missing upgrade-era input has the deterministic compatibility default.
         ("", "203.0.113.10:9999", "disabled", "", "adapter-direct://203.0.113.10:9999"),
     )
@@ -295,6 +295,21 @@ def _check_adapter_direct_protocol_contract() -> None:
         _assert(
             _argv_value(argv, "-proxy-listen") == "0.0.0.0:19001",
             f"adapter_direct_protocol={protocol!r} dropped the integrated proxy listener",
+        )
+
+    for proxy_profile in ("enh", "ens"):
+        conflict_argv, _logs, _state_exists, _state_content, conflict_stderr = _run_wrapper_case(
+            source_addr="auto",
+            gateway_mode="new",
+            adapter_direct_protocol="enh",
+            proxy_profile=proxy_profile,
+            proxy_endpoint="proxy.example.invalid:9999",
+            expect_success=False,
+        )
+        _assert(conflict_argv == [], "adapter-direct/proxy conflict must fail before gateway exec")
+        _assert(
+            "adapter_direct_enabled=true requires proxy_profile=disabled" in conflict_stderr,
+            "adapter-direct/proxy conflict must explain the mutually exclusive configuration",
         )
 
     invalid_argv, _logs, _state_exists, _state_content, invalid_stderr = _run_wrapper_case(
