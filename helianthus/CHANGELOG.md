@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.49 (2026-08-17)
+
+- Add the typed `adapter_direct_protocol` selector with a compatible `enh`
+  default and exact ENH/ENS mapping to the gateway's existing adapter-direct
+  URI forms.
+- Keep `proxy_profile` scoped to external proxy input while preserving a
+  deterministic migration for pre-selector direct configurations and rejecting
+  every populated proxy endpoint in adapter-direct mode.
+- Preserve the gateway-integrated `-proxy-listen` argument for both physical
+  adapter protocols; the gateway binary and its transport implementation remain
+  unchanged from 0.6.48.
+
 ## 0.6.48 (2026-08-17)
 
 - Remove the Modbus-specific Bash process supervisor, FIFO redactors,

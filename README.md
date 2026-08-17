@@ -59,7 +59,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.48` packages the consolidated gateway with bounded FM5 startup
+Release `0.6.49` packages the consolidated gateway with bounded FM5 startup
 convergence, source-owned endpoint sanitization, and protocol-local Modbus
 startup failure. Enabled and disabled Modbus configurations use the same direct
 gateway `exec` lifecycle; Modbus remains disabled by default.
