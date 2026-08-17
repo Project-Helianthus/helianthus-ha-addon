@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -43,7 +42,7 @@ def enabled_options(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def run_validate(options: Path, endpoint_file: Path) -> subprocess.CompletedProcess[str]:
+def run_validate(options: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
@@ -51,8 +50,6 @@ def run_validate(options: Path, endpoint_file: Path) -> subprocess.CompletedProc
             "validate",
             "--options",
             str(options),
-            "--endpoint-file",
-            str(endpoint_file),
         ],
         text=True,
         capture_output=True,
@@ -120,7 +117,7 @@ def test_cli_error_never_emits_endpoint_or_credentials(tmp_path: Path) -> None:
     endpoint = "tcp://operator:topsecret@192.0.2.40:502"
     options = write_options(tmp_path, enabled_options(modbus_tcp_endpoint=endpoint))
     endpoint_file = tmp_path / "run" / "modbus-endpoint"
-    result = run_validate(options, endpoint_file)
+    result = run_validate(options)
 
     assert result.returncode != 0
     assert endpoint not in result.stderr
@@ -128,44 +125,41 @@ def test_cli_error_never_emits_endpoint_or_credentials(tmp_path: Path) -> None:
     assert not endpoint_file.exists()
 
 
-def test_endpoint_file_is_atomic_private_and_disabled_launch_removes_it(
+def test_cli_returns_a_complete_validated_bundle_without_materializing_endpoint(
     tmp_path: Path,
 ) -> None:
     endpoint_file = tmp_path / "run" / "modbus-endpoint"
     endpoint_file.parent.mkdir(mode=0o755)
-    enabled = run_validate(write_options(tmp_path, enabled_options()), endpoint_file)
+    enabled = run_validate(write_options(tmp_path, enabled_options()))
 
     assert enabled.returncode == 0, enabled.stderr
     assert enabled.stdout.splitlines() == [
         "MODBUS_TCP_ENABLED=true",
+        "MODBUS_TCP_ENDPOINT=tcp://192.0.2.40:502",
         "MODBUS_TCP_DIAL_TIMEOUT=5s",
     ]
-    assert endpoint_file.read_text(encoding="utf-8") == "tcp://192.0.2.40:502"
-    assert stat.S_IMODE(endpoint_file.stat().st_mode) == 0o600
-    assert stat.S_IMODE(endpoint_file.parent.stat().st_mode) == 0o700
+    assert not endpoint_file.exists()
 
-    disabled = run_validate(
-        write_options(tmp_path, {"modbus_tcp_enabled": False}), endpoint_file
-    )
+    disabled = run_validate(write_options(tmp_path, {"modbus_tcp_enabled": False}))
     assert disabled.returncode == 0, disabled.stderr
     assert disabled.stdout.splitlines() == [
         "MODBUS_TCP_ENABLED=false",
+        "MODBUS_TCP_ENDPOINT=''",
         "MODBUS_TCP_DIAL_TIMEOUT=''",
     ]
     assert not endpoint_file.exists()
 
 
-def test_invalid_update_removes_last_materialized_endpoint(tmp_path: Path) -> None:
+def test_invalid_update_does_not_mutate_existing_endpoint(tmp_path: Path) -> None:
     endpoint_file = tmp_path / "run" / "modbus-endpoint"
-    valid = run_validate(write_options(tmp_path, enabled_options()), endpoint_file)
-    assert valid.returncode == 0, valid.stderr
+    endpoint_file.parent.mkdir(parents=True)
+    endpoint_file.write_text("stale", encoding="utf-8")
 
     invalid = run_validate(
-        write_options(tmp_path, enabled_options(modbus_tcp_dial_timeout="invalid")),
-        endpoint_file,
+        write_options(tmp_path, enabled_options(modbus_tcp_dial_timeout="invalid"))
     )
     assert invalid.returncode != 0
-    assert not endpoint_file.exists()
+    assert endpoint_file.read_text(encoding="utf-8") == "stale"
 
 
 def test_image_and_wrapper_use_only_current_gateway_and_one_exec() -> None:

@@ -43,10 +43,12 @@ def test_enabled_and_disabled_modbus_share_one_direct_exec_lifecycle() -> None:
         assert removed not in run
 
 
-def test_guard_only_validates_and_materializes_runtime_configuration() -> None:
+def test_guard_only_validates_runtime_configuration() -> None:
     guard = GUARD.read_text(encoding="utf-8")
 
     assert 'commands.add_parser("validate")' in guard
+    assert "write_endpoint_file" not in guard
+    assert "endpoint_file" not in guard
     for removed in (
         'commands.add_parser("health")',
         'commands.add_parser("probe-readiness")',
@@ -119,6 +121,9 @@ def test_validator_cannot_recreate_endpoint_after_wrapper_termination(
     assert "if modbus_eval=$(python3" not in run
     assert 'python3 "${modbus_guard}" validate' in run
     assert '> "${modbus_eval_file}"' in run
+    assert run.index('python3 "${modbus_guard}" validate') < run.index(
+        'mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"'
+    )
 
     wrapper = tmp_path / "run-under-test.sh"
     guard = tmp_path / "delayed-guard.py"
@@ -133,12 +138,11 @@ def test_validator_cannot_recreate_endpoint_after_wrapper_termination(
         "parser = argparse.ArgumentParser()\n"
         "parser.add_argument('command')\n"
         "parser.add_argument('--options')\n"
-        "parser.add_argument('--endpoint-file')\n"
         "args = parser.parse_args()\n"
         "pathlib.Path(os.environ['TEST_GUARD_MARKER']).write_text('started', encoding='utf-8')\n"
         "time.sleep(1)\n"
-        "pathlib.Path(args.endpoint_file).write_text('tcp://192.0.2.40:502', encoding='utf-8')\n"
         "print(\"MODBUS_TCP_ENABLED='true'\")\n"
+        "print(\"MODBUS_TCP_ENDPOINT='tcp://192.0.2.40:502'\")\n"
         "print(\"MODBUS_TCP_DIAL_TIMEOUT='5s'\")\n",
         encoding="utf-8",
     )

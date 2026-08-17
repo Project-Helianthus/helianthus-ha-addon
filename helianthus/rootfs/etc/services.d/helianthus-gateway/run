@@ -61,16 +61,34 @@ v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
+modbus_eval_file=""
+modbus_endpoint_staging=""
 cleanup_modbus_pre_exec() {
   rm -f -- "${modbus_endpoint_file}" || true
+  if [ -n "${modbus_eval_file}" ]; then
+    rm -f -- "${modbus_eval_file}" || true
+  fi
+  if [ -n "${modbus_endpoint_staging}" ]; then
+    rm -f -- "${modbus_endpoint_staging}" || true
+  fi
 }
 trap cleanup_modbus_pre_exec EXIT
 
 MODBUS_TCP_ENABLED=""
+MODBUS_TCP_ENDPOINT=""
 MODBUS_TCP_DIAL_TIMEOUT=""
-if modbus_eval=$(python3 "${modbus_guard}" validate \
-  --options "${modbus_options_path}" \
-  --endpoint-file "${modbus_endpoint_file}"); then
+if ! rm -f -- "${modbus_endpoint_file}"; then
+  bashio::exit.nok "Unable to remove stale Modbus endpoint material"
+fi
+modbus_eval_file=$(mktemp /tmp/helianthus-modbus-validate.XXXXXX) || \
+  bashio::exit.nok "Unable to create the Modbus validation result file"
+chmod 0600 "${modbus_eval_file}" || \
+  bashio::exit.nok "Unable to protect the Modbus validation result file"
+if python3 "${modbus_guard}" validate \
+  --options "${modbus_options_path}" > "${modbus_eval_file}"; then
+  modbus_eval=$(<"${modbus_eval_file}")
+  rm -f -- "${modbus_eval_file}"
+  modbus_eval_file=""
   eval "${modbus_eval}"
 else
   bashio::exit.nok "Modbus TCP options failed atomic validation; endpoint remains redacted"
@@ -81,6 +99,22 @@ case "${MODBUS_TCP_ENABLED}" in
 esac
 modbus_tcp_enabled="${MODBUS_TCP_ENABLED}"
 modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
+if [ "${modbus_tcp_enabled}" = "true" ]; then
+  modbus_endpoint_dir="${modbus_endpoint_file%/*}"
+  if [ "${modbus_endpoint_dir}" = "${modbus_endpoint_file}" ]; then
+    bashio::exit.nok "Modbus endpoint file must include a parent directory"
+  fi
+  mkdir -p -- "${modbus_endpoint_dir}"
+  chmod 0700 "${modbus_endpoint_dir}"
+  modbus_endpoint_staging="${modbus_endpoint_file}.tmp.$$"
+  rm -f -- "${modbus_endpoint_staging}"
+  umask 077
+  printf '%s' "${MODBUS_TCP_ENDPOINT}" > "${modbus_endpoint_staging}"
+  chmod 0600 "${modbus_endpoint_staging}"
+  mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"
+  modbus_endpoint_staging=""
+fi
+unset MODBUS_TCP_ENDPOINT modbus_eval
 
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain

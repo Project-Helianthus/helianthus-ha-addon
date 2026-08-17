@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""Validate and materialize the add-on's Modbus TCP configuration."""
+"""Validate the add-on's Modbus TCP configuration."""
 
 from __future__ import annotations
 
 import argparse
-import contextlib
 import ipaddress
 import json
-import os
 import re
 import shlex
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -103,38 +100,14 @@ def load_config(path: Path) -> Config:
     return Config(True, endpoint, dial_timeout)
 
 
-def write_endpoint_file(path: Path, config: Config) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.parent.chmod(0o700)
-    if not config.enabled:
-        with contextlib.suppress(FileNotFoundError):
-            path.unlink()
-        return
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(config.endpoint)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(temporary)
-
-
 def _shell_assignment(name: str, value: str) -> str:
     return f"{name}={shlex.quote(value)}"
 
 
 def _validate_command(args: argparse.Namespace) -> int:
-    with contextlib.suppress(FileNotFoundError):
-        args.endpoint_file.unlink()
     config = load_config(args.options)
-    write_endpoint_file(args.endpoint_file, config)
     print(_shell_assignment("MODBUS_TCP_ENABLED", str(config.enabled).lower()))
+    print(_shell_assignment("MODBUS_TCP_ENDPOINT", config.endpoint))
     print(_shell_assignment("MODBUS_TCP_DIAL_TIMEOUT", config.dial_timeout))
     return 0
 
@@ -144,7 +117,6 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate")
     validate.add_argument("--options", type=Path, required=True)
-    validate.add_argument("--endpoint-file", type=Path, required=True)
     validate.set_defaults(handler=_validate_command)
     return result
 
