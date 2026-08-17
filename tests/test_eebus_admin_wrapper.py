@@ -33,7 +33,7 @@ REMOVED_WRAPPER_TERMS = (
 )
 
 
-def test_release_pin_is_0651_and_gateway_provenance_is_exact() -> None:
+def test_release_pin_is_0652_and_gateway_provenance_is_exact() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.6.52 (2026-08-17)
+
+- Pin the gateway to `d8bdb0f66b30a30c09690935d18a887ff5c84f64`,
+  adding deterministic read-only `modbus.v1.semantic.pv.get` over retained,
+  terminal-qualified SunSpec observations.
+- Project qualified SunSpec facts through the canonical PV V1 registry with
+  exact provenance, projection accounting, lifecycle, and counter continuity.
+- Preserve the 0.6.51 owner-atomic raw Modbus retry, option schema, and direct
+  single-process wrapper without adding writes or consumer APIs.
+
 ## 0.6.51 (2026-08-17)
 
 - Pin the gateway to `6f4aaa7a08eeffb655e5da0f6f6c2053e399a45b`,

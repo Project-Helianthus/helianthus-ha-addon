@@ -51,11 +51,12 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.51`, do not supply any eeBUS-specific credential options:
-they remain removed. The consolidated runtime includes bounded FM5 startup
-convergence, endpoint-free Modbus provider errors, and one owner-atomic raw MCP
-reconnect/retry. Modbus remains opt-in and uses the same direct gateway process
-lifecycle as the disabled configuration.
+For release `0.6.52`, do not supply any eeBUS-specific credential options:
+they remain removed. The consolidated runtime includes deterministic canonical
+PV V1 retrieval for retained qualified SunSpec samples, endpoint-free Modbus
+provider errors, and one owner-atomic raw MCP reconnect/retry. Modbus remains
+opt-in and uses the same direct gateway process lifecycle as the disabled
+configuration.
 
 3) Open add-on **Configuration** and paste the configuration payload below.
 

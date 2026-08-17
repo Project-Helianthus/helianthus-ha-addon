@@ -59,12 +59,13 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.51` packages the gateway with owner-atomic Modbus MCP recovery:
-one retryable transport reset can trigger one reconnect and one retry without
-a second caller quota admission or stale-generation provenance. Provider
-errors remain endpoint-free. The release preserves the 0.6.50 Supervisor
-option compatibility, direct gateway `exec` lifecycle, and
-disabled-by-default Modbus configuration.
+Release `0.6.52` packages deterministic canonical PV V1 projection for
+terminal-qualified SunSpec observations and the read-only
+`modbus.v1.semantic.pv.get` MCP prototype. The retained response carries exact
+source and projection provenance without endpoints or raw words. The release
+preserves the 0.6.51 owner-atomic raw Modbus retry, Supervisor option
+compatibility, direct gateway `exec` lifecycle, and disabled-by-default Modbus
+configuration.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 

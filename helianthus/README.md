@@ -52,12 +52,11 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.51` pins the gateway with one owner-atomic reconnect and retry for
-a retryable raw Modbus MCP transport loss. The retry stays within the original
-bounded operation and caller quota admission, returns only recovered-generation
-provenance, and exposes static endpoint-free provider errors. The 0.6.50 option
-schema, single-process wrapper, and disabled-by-default Modbus behavior remain
-unchanged.
+Release `0.6.52` pins the gateway with deterministic canonical PV V1 projection
+and read-only MCP retrieval for retained, terminal-qualified SunSpec samples.
+The semantic response preserves exact source and projection provenance without
+endpoints or raw words. The 0.6.51 owner-atomic raw Modbus retry, option schema,
+single-process wrapper, and disabled-by-default behavior remain unchanged.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 
