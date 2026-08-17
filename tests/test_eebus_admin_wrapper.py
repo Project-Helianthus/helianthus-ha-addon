@@ -144,7 +144,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
         "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
         "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"),
-        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options), "HELIANTHUS_MODBUS_HEALTH_FILE": str(tmp_path / "health"),
+        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "endpoint"),
     }
     result = subprocess.run(["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False)
