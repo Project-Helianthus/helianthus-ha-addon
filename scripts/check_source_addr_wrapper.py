@@ -330,7 +330,7 @@ def _check_adapter_direct_protocol_contract() -> None:
 
     # A populated proxy endpoint is a genuine external-proxy configuration,
     # not the old adapter-direct selector shape, so it remains invalid here.
-    for proxy_profile in ("enh", "ens"):
+    for proxy_profile in ("disabled", "enh", "ens"):
         conflict_argv, _logs, _state_exists, _state_content, conflict_stderr = _run_wrapper_case(
             source_addr="auto",
             gateway_mode="new",
