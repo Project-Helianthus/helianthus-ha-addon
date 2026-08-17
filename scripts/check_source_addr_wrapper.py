@@ -13,6 +13,7 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_SCRIPT = REPO_ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
+CONFIG_PATH = REPO_ROOT / "helianthus/config.json"
 RUNTIME_STATE_WRAPPER = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"
 MODBUS_RUNTIME_GUARD = REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 DOCKERFILE = REPO_ROOT / "helianthus/Dockerfile"
@@ -48,6 +49,7 @@ bashio::config() {
     dial_timeout) printf '%s\n' "${TEST_DIAL_TIMEOUT:-5s}" ;;
     adapter_direct_enabled) printf '%s\n' "${TEST_ADAPTER_DIRECT_ENABLED:-false}" ;;
     adapter_direct_address) printf '%s\n' "${TEST_ADAPTER_DIRECT_ADDRESS:-}" ;;
+    adapter_direct_protocol) printf '%s\n' "${TEST_ADAPTER_DIRECT_PROTOCOL:-enh}" ;;
     proxy_listen_addr) printf '%s\n' "${TEST_PROXY_LISTEN_ADDR:-0.0.0.0:19001}" ;;
     observe_first_enabled) printf '%s\n' "${TEST_OBSERVE_FIRST_ENABLED:-true}" ;;
     passive_state_direct_apply) printf '%s\n' "${TEST_PASSIVE_STATE_DIRECT_APPLY:-true}" ;;
@@ -146,6 +148,11 @@ def _run_wrapper_case(
     existing_state: str | None = None,
     transport: str = "enh",
     adapter_direct_enabled: bool = True,
+    adapter_direct_protocol: str = "enh",
+    adapter_direct_address: str = "203.0.113.10:9999",
+    proxy_profile: str = "disabled",
+    proxy_endpoint: str = "",
+    proxy_listen_addr: str = "0.0.0.0:19001",
     expect_success: bool = True,
 ) -> tuple[list[str], str, bool, str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -198,7 +205,11 @@ def _run_wrapper_case(
                 "TEST_LEGACY_SOURCE_ADDR_STATE_FILE": str(state_file),
                 "TEST_TRANSPORT": transport,
                 "TEST_ADAPTER_DIRECT_ENABLED": "true" if adapter_direct_enabled else "false",
-                "TEST_ADAPTER_DIRECT_ADDRESS": "203.0.113.10:9999",
+                "TEST_ADAPTER_DIRECT_PROTOCOL": adapter_direct_protocol,
+                "TEST_ADAPTER_DIRECT_ADDRESS": adapter_direct_address,
+                "TEST_PROXY_PROFILE": proxy_profile,
+                "TEST_PROXY_ENDPOINT": proxy_endpoint,
+                "TEST_PROXY_LISTEN_ADDR": proxy_listen_addr,
                 # M6 wrapper integration: redirect bash + Python sides at the
                 # in-repo wrapper script and the temp-sandboxed runtime-state
                 # paths so the test runs on a host without /data/ (CI).
@@ -230,6 +241,73 @@ def _run_wrapper_case(
         state_exists = state_file.exists()
         state_content = state_file.read_text(encoding="utf-8") if state_exists else ""
         return argv, logs, state_exists, state_content, result.stderr
+
+
+def _argv_value(argv: list[str], flag: str) -> str:
+    _assert(flag in argv, f"gateway argv is missing {flag}: {argv}")
+    index = argv.index(flag)
+    _assert(index + 1 < len(argv), f"gateway argv has no value after {flag}: {argv}")
+    return argv[index + 1]
+
+
+def _check_adapter_direct_protocol_contract() -> None:
+    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    _assert(
+        config["options"].get("adapter_direct_protocol") == "enh",
+        "adapter_direct_protocol must default to enh",
+    )
+    _assert(
+        config["schema"].get("adapter_direct_protocol") == "list(enh|ens)",
+        "adapter_direct_protocol must be typed as list(enh|ens)",
+    )
+
+    cases = (
+        ("enh", "203.0.113.10:9999", "disabled", "", "adapter-direct://203.0.113.10:9999"),
+        ("ens", "203.0.113.10:9999", "disabled", "", "adapter-direct-ens://203.0.113.10:9999"),
+        # The explicit adapter selector is authoritative even when a legacy
+        # address prefix or proxy profile suggests the opposite protocol.
+        ("enh", "ens://203.0.113.10:9999", "ens", "proxy.example.invalid:9999", "adapter-direct://203.0.113.10:9999"),
+        ("ens", "enh://203.0.113.10:9999", "enh", "proxy.example.invalid:9999", "adapter-direct-ens://203.0.113.10:9999"),
+        # Missing upgrade-era input has the deterministic compatibility default.
+        ("", "203.0.113.10:9999", "disabled", "", "adapter-direct://203.0.113.10:9999"),
+    )
+    for protocol, address, proxy_profile, proxy_endpoint, expected_address in cases:
+        argv, _logs, _state_exists, _state_content, _stderr = _run_wrapper_case(
+            source_addr="auto",
+            gateway_mode="new",
+            adapter_direct_protocol=protocol,
+            adapter_direct_address=address,
+            proxy_profile=proxy_profile,
+            proxy_endpoint=proxy_endpoint,
+        )
+        _assert(
+            _argv_value(argv, "-transport") == "adapter-direct",
+            f"adapter_direct_protocol={protocol!r} changed the gateway transport",
+        )
+        _assert(
+            _argv_value(argv, "-network") == "tcp",
+            f"adapter_direct_protocol={protocol!r} did not force TCP",
+        )
+        _assert(
+            _argv_value(argv, "-address") == expected_address,
+            f"adapter_direct_protocol={protocol!r} produced the wrong gateway address",
+        )
+        _assert(
+            _argv_value(argv, "-proxy-listen") == "0.0.0.0:19001",
+            f"adapter_direct_protocol={protocol!r} dropped the integrated proxy listener",
+        )
+
+    invalid_argv, _logs, _state_exists, _state_content, invalid_stderr = _run_wrapper_case(
+        source_addr="auto",
+        gateway_mode="new",
+        adapter_direct_protocol="auto",
+        expect_success=False,
+    )
+    _assert(invalid_argv == [], "invalid adapter_direct_protocol must fail before gateway exec")
+    _assert(
+        "adapter_direct_protocol must be one of: enh, ens" in invalid_stderr,
+        "invalid adapter_direct_protocol failure must explain the accepted values",
+    )
 
 
 def _check_static_run_script() -> None:
@@ -443,6 +521,7 @@ def _check_runtime_cases() -> None:
 
 def main() -> int:
     try:
+        _check_adapter_direct_protocol_contract()
         _check_static_run_script()
         _check_docs()
         _check_runtime_cases()
