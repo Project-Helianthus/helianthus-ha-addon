@@ -172,7 +172,7 @@ def test_image_and_wrapper_use_only_current_gateway_and_one_exec() -> None:
     assert "gateway-fallback" not in dockerfile
     assert config["options"]["modbus_tcp_enabled"] is False
     assert config["options"]["modbus_tcp_endpoint"] == ""
-    assert config["schema"]["modbus_tcp_endpoint"] == "password"
+    assert config["schema"]["modbus_tcp_endpoint"] == "str"
     assert "-modbus-tcp-enabled=true" in run
     assert '-modbus-tcp-endpoint-file "${modbus_endpoint_file}"' in run
     assert run.count('exec "${gateway_bin}" "${gateway_args[@]}"') == 1

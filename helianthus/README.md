@@ -40,7 +40,7 @@ Key options are exposed in `config.json`:
 - `eebus_enabled`: enable raw eeBUS runtime; pairing remains closed by default
 - `eebus_listen_port`, `eebus_interface`, `eebus_subnets`, `eebus_discovery_enabled`, and `eebus_remote_ski_allowlist`: raw eeBUS runtime network controls
 - `modbus_tcp_enabled`: opt in to the read-only Modbus TCP sidecar (default `false`)
-- `modbus_tcp_endpoint`: one `tcp://host:port` endpoint; Supervisor treats it as a password field and embedded credentials are rejected
+- `modbus_tcp_endpoint`: one visible `tcp://host:port` routing endpoint; embedded credentials are rejected
 - `modbus_tcp_dial_timeout`: bounded `ms` or `s` dial timeout from 100 ms through 30 s
 
 The add-on validates the closed option bundle, materializes the admitted
@@ -52,10 +52,11 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.49` packages the consolidated gateway with bounded FM5 startup
-convergence, source-owned endpoint sanitization, and protocol-local Modbus
-startup failure. All
-eeBUS-specific credential provisioning remains removed, and the read-only
+Release `0.6.50` packages the same consolidated gateway as 0.6.49 with an
+upgrade-safe optional adapter protocol selector and a visible, non-secret
+Modbus endpoint field. It retains bounded FM5 startup convergence,
+source-owned endpoint sanitization, and protocol-local Modbus startup failure.
+All eeBUS-specific credential provisioning remains removed, and the read-only
 Modbus runtime remains disabled unless explicitly enabled.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
