@@ -297,6 +297,39 @@ def _check_adapter_direct_protocol_contract() -> None:
             f"adapter_direct_protocol={protocol!r} dropped the integrated proxy listener",
         )
 
+    # Upgrade compatibility: before adapter_direct_protocol existed, direct
+    # installs used proxy_profile as the accidental ENS/ENH selector and left
+    # proxy_endpoint empty. Migrate that exact legacy shape deterministically.
+    for legacy_profile, expected_address in (
+        ("enh", "adapter-direct://203.0.113.10:9999"),
+        ("ens", "adapter-direct-ens://203.0.113.10:9999"),
+    ):
+        argv, logs, _state_exists, _state_content, _stderr = _run_wrapper_case(
+            source_addr="auto",
+            gateway_mode="new",
+            adapter_direct_protocol="enh",
+            proxy_profile=legacy_profile,
+            proxy_endpoint="",
+        )
+        _assert(
+            _argv_value(argv, "-address") == expected_address,
+            f"legacy proxy_profile={legacy_profile} was not migrated to adapter-direct",
+        )
+        _assert(
+            _argv_value(argv, "-proxy-listen") == "0.0.0.0:19001",
+            f"legacy proxy_profile={legacy_profile} migration dropped the integrated proxy listener",
+        )
+        _assert(
+            f"Migrating legacy adapter-direct proxy_profile={legacy_profile}" in logs,
+            f"legacy proxy_profile={legacy_profile} migration must be visible in logs",
+        )
+        _assert(
+            "Proxy profile: disabled" in logs,
+            f"legacy proxy_profile={legacy_profile} must not remain an active proxy profile",
+        )
+
+    # A populated proxy endpoint is a genuine external-proxy configuration,
+    # not the old adapter-direct selector shape, so it remains invalid here.
     for proxy_profile in ("enh", "ens"):
         conflict_argv, _logs, _state_exists, _state_content, conflict_stderr = _run_wrapper_case(
             source_addr="auto",
