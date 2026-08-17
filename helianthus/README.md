@@ -89,6 +89,7 @@ It runs with:
 helianthus_vrc_explorer --help
 ```
 
-For local smoke/debug, executable overrides are supported from add-on data:
-
-- `/data/helianthus-gateway` overrides `/usr/local/bin/helianthus-gateway`
+Persistent gateway executable overrides are not supported. If an earlier
+installation left `/data/helianthus-gateway` behind, remove that file or
+symlink before startup. The wrapper fails closed until the packaged,
+version-pinned gateway is authoritative.

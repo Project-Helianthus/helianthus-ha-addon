@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 GUARD = ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 DOCKERFILE = ROOT / "helianthus/Dockerfile"
+README = ROOT / "helianthus/README.md"
 
 
 def test_enabled_and_disabled_modbus_share_one_direct_exec_lifecycle() -> None:
@@ -53,3 +54,14 @@ def test_container_packages_only_the_current_gateway_binary() -> None:
     assert "/out/gateway ./cmd/gateway" in dockerfile
     assert "gateway-fallback" not in dockerfile
     assert "helianthus-gateway-fallback" not in dockerfile
+
+
+def test_readme_matches_fail_closed_gateway_override_policy() -> None:
+    readme = README.read_text(encoding="utf-8")
+    normalized_readme = " ".join(readme.split())
+    run = RUN.read_text(encoding="utf-8")
+
+    assert "Persistent gateway executable overrides are not supported" in normalized_readme
+    assert "remove that file or symlink before startup" in normalized_readme
+    assert "Persistent gateway binary override is not supported" in run
+    assert "/data/helianthus-gateway` overrides" not in readme
