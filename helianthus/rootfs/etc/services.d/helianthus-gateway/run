@@ -134,6 +134,7 @@ if [ "${modbus_tcp_enabled}" = "true" ]; then
 fi
 trap 'exit 143' TERM
 trap 'exit 130' INT
+abort_modbus_pre_exec_on_signal
 unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_pre_exec_signal
 
 # Validate protected eeBUS values before bashio captures them. Bash command
