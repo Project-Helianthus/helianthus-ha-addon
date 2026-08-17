@@ -149,6 +149,7 @@ def _run_wrapper_case(
     transport: str = "enh",
     adapter_direct_enabled: bool = True,
     adapter_direct_protocol: str = "enh",
+    adapter_direct_protocol_persisted: bool = True,
     adapter_direct_address: str = "203.0.113.10:9999",
     proxy_profile: str = "disabled",
     proxy_endpoint: str = "",
@@ -190,6 +191,11 @@ def _run_wrapper_case(
         instance_guid_file = tmp / "instance_guid"
         # Legacy file deliberately absent; runtime_state.json is the source.
         legacy_marker_file = tmp / "migration_marker"
+        addon_options_file = tmp / "addon-options.json"
+        addon_options: dict[str, object] = {}
+        if adapter_direct_protocol_persisted:
+            addon_options["adapter_direct_protocol"] = adapter_direct_protocol
+        addon_options_file.write_text(json.dumps(addon_options) + "\n", encoding="utf-8")
         _write_test_wrapper(wrapper)
         _write_gateway_stub(gateway, gateway_mode)
 
@@ -220,6 +226,7 @@ def _run_wrapper_case(
                 "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(tmp / "missing-options.json"),
                 "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
+                "HELIANTHUS_OPTIONS_PATH": str(addon_options_file),
             },
         )
 
@@ -308,6 +315,7 @@ def _check_adapter_direct_protocol_contract() -> None:
             source_addr="auto",
             gateway_mode="new",
             adapter_direct_protocol="enh",
+            adapter_direct_protocol_persisted=False,
             proxy_profile=legacy_profile,
             proxy_endpoint="",
         )
@@ -326,6 +334,29 @@ def _check_adapter_direct_protocol_contract() -> None:
         _assert(
             "Proxy profile: disabled" in logs,
             f"legacy proxy_profile={legacy_profile} must not remain an active proxy profile",
+        )
+
+    # Once the new key exists in persisted options it is authoritative, even
+    # if a stale empty-endpoint legacy profile has not yet been cleared.
+    for protocol, stale_profile, expected_address in (
+        ("enh", "ens", "adapter-direct://203.0.113.10:9999"),
+        ("ens", "enh", "adapter-direct-ens://203.0.113.10:9999"),
+    ):
+        argv, logs, _state_exists, _state_content, _stderr = _run_wrapper_case(
+            source_addr="auto",
+            gateway_mode="new",
+            adapter_direct_protocol=protocol,
+            adapter_direct_protocol_persisted=True,
+            proxy_profile=stale_profile,
+            proxy_endpoint="",
+        )
+        _assert(
+            _argv_value(argv, "-address") == expected_address,
+            f"explicit adapter_direct_protocol={protocol} was overridden by stale proxy_profile={stale_profile}",
+        )
+        _assert(
+            "Proxy profile: disabled" in logs,
+            f"stale proxy_profile={stale_profile} must be normalized after explicit selection",
         )
 
     # A populated proxy endpoint is a genuine external-proxy configuration,
