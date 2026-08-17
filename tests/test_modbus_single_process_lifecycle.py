@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -7,6 +8,9 @@ GUARD = ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
 DOCKERFILE = ROOT / "helianthus/Dockerfile"
 README = ROOT / "helianthus/README.md"
 CHANGELOG = ROOT / "helianthus/CHANGELOG.md"
+ROOT_README = ROOT / "README.md"
+SMOKE_RUNBOOK = ROOT / "SMOKE_RUNBOOK.md"
+CONFIG = ROOT / "helianthus/config.json"
 
 
 def test_enabled_and_disabled_modbus_share_one_direct_exec_lifecycle() -> None:
@@ -76,3 +80,13 @@ def test_release_history_keeps_0647_immutable_and_records_0648() -> None:
     assert "7f1cbea90e0b189486febc656632e9e7430c8500" in release_0648
     assert "225f3d96fee3422bc565870f946af19fac42d471" in release_0647
     assert "7f1cbea90e0b189486febc656632e9e7430c8500" not in release_0647
+
+
+def test_current_operator_docs_match_release_authority() -> None:
+    version = json.loads(CONFIG.read_text(encoding="utf-8"))["version"]
+    root_readme = ROOT_README.read_text(encoding="utf-8")
+    smoke = SMOKE_RUNBOOK.read_text(encoding="utf-8")
+
+    assert f"Release `{version}` packages" in root_readme
+    assert f"For release `{version}`" in smoke
+    assert "active Modbus runtime state" not in root_readme
