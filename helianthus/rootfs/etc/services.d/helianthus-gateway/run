@@ -31,6 +31,13 @@ adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || 
 adapter_direct_protocol=$(bashio::config 'adapter_direct_protocol' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
 proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)
+addon_options_path="${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"
+adapter_direct_protocol_persisted=false
+if [ -f "${addon_options_path}" ] && command -v jq >/dev/null 2>&1 && \
+  jq -e 'type == "object" and has("adapter_direct_protocol") and .adapter_direct_protocol != null' \
+    "${addon_options_path}" >/dev/null 2>&1; then
+  adapter_direct_protocol_persisted=true
+fi
 # F-1 defensive fallback (EBUSD-VERIFICATION-2026-05-10.md): HA Supervisor's
 # /addons/self/options/config endpoint has been observed silently returning
 # empty for proxy_listen_addr despite the value being correctly stored in
@@ -431,11 +438,15 @@ case "${proxy_profile}" in
     if bashio::var.true "${adapter_direct_enabled}"; then
       # Compatibility migration for pre-selector installs. The old wrapper
       # used proxy_profile as the accidental adapter-direct ENS/ENH selector;
-      # those configurations have no proxy endpoint. Consume that exact legacy
-      # shape, then disable the effective proxy profile so normal adapter-direct
-      # routing remains owned solely by adapter_direct_protocol.
-      bashio::log.warning "Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options"
-      adapter_direct_protocol="${proxy_profile}"
+      # those configurations have no persisted selector or proxy endpoint.
+      # Once the typed key is persisted it remains authoritative, even while a
+      # stale legacy profile still exists.
+      if [ "${adapter_direct_protocol_persisted}" = true ]; then
+        bashio::log.warning "Ignoring stale adapter-direct proxy_profile=${proxy_profile}; adapter_direct_protocol=${adapter_direct_protocol} is explicitly persisted; save proxy_profile=disabled in add-on options"
+      else
+        bashio::log.warning "Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options"
+        adapter_direct_protocol="${proxy_profile}"
+      fi
       proxy_profile="disabled"
     else
       if [ -z "${proxy_endpoint_trimmed}" ]; then

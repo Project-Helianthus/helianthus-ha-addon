@@ -86,10 +86,12 @@ Keep `proxy_profile=disabled`: adapter-direct and an external proxy endpoint are
 mutually exclusive configurations. The gateway-integrated proxy listener is
 preserved for both adapter protocols.
 
-For upgrade compatibility only, the wrapper recognizes the exact old
-adapter-direct shape `proxy_profile=enh|ens` with an empty `proxy_endpoint`,
-migrates it to the matching adapter-direct protocol, and disables the effective
-proxy profile. Save `adapter_direct_protocol` explicitly and reset
+For upgrade compatibility only, when persisted options do not yet contain
+`adapter_direct_protocol`, the wrapper recognizes the exact old adapter-direct
+shape `proxy_profile=enh|ens` with an empty `proxy_endpoint`, migrates it to the
+matching adapter-direct protocol, and disables the effective proxy profile.
+Once the typed key is persisted it remains authoritative even if the stale
+profile remains. Save `adapter_direct_protocol` explicitly and reset
 `proxy_profile=disabled` after upgrading. Adapter-direct plus a populated
 external `proxy_endpoint` is rejected.
 
