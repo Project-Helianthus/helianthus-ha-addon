@@ -42,23 +42,15 @@ Key options are exposed in `config.json`:
 - `modbus_tcp_endpoint`: one `tcp://host:port` endpoint; Supervisor treats it as a password field and embedded credentials are rejected
 - `modbus_tcp_dial_timeout`: bounded `ms` or `s` dial timeout from 100 ms through 30 s
 
-Modbus startup writes `/data/modbus-runtime-health.json` with only a truncated
-endpoint fingerprint. Three failures inside the bounded startup window activate
-the packaged previous gateway binary with all Modbus flags omitted. The endpoint
-file is removed before fallback launch. Health moves through
-`FALLBACK_STARTING` and reaches `FALLBACK_ACTIVE` only after the fallback
-survives the startup window; any later or earlier fallback exit is recorded as
-`FALLBACK_EXITED` instead of leaving a stale active state. Gateway output passes
-through private synchronized redaction pipes before publication; a redactor or
-health-write failure terminates and reaps the child before restart. Set
-`modbus_tcp_enabled=false` to restore the normal inert path; any retained
-endpoint value is ignored and omitted from arguments and health. Rollback to
-add-on `0.6.41` restores the same previous gateway pin.
+The add-on validates the closed option bundle, materializes the admitted
+endpoint in a private runtime file, appends the three Modbus flags when enabled,
+and directly `exec`s the packaged gateway. It does not supervise a separate
+gateway child, post-process logs, probe listeners, retry the complete gateway,
+or launch a previous binary. Modbus reconnect and availability remain
+protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 
 Release `0.6.47` packages the consolidated gateway with bounded FM5 startup
-convergence and correct endpoint ownership in startup redaction. Before an
-active Modbus state is published, the configured HTTP listener and any
-adapter-direct proxy listener must accept bounded TCP connections. All
+convergence and source-owned endpoint sanitization. All
 eeBUS-specific credential provisioning remains removed, and the read-only
 Modbus runtime remains disabled unless explicitly enabled.
 

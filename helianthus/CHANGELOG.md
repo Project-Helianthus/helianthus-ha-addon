@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Remove the Modbus-specific Bash process supervisor, FIFO redactors,
+  listener probes, whole-gateway retries, process-health FSM, and packaged
+  fallback gateway.
+- Validate and materialize the optional Modbus endpoint before launching the
+  current gateway through the same direct `exec` lifecycle used when Modbus is
+  disabled.
+
 ## 0.6.47 (2026-08-15)
 
 - Pin the consolidated gateway to

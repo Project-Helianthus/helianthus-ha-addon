@@ -54,8 +54,11 @@ echo "==> persistent eeBUS wrapper wiring"
 python3 scripts/check_eebus_wrapper.py
 python3 -m pytest tests/test_eebus_admin_wrapper.py -q
 
-echo "==> Modbus TCP add-on configuration and recovery"
-python3 -m pytest tests/test_modbus_runtime_guard.py -q
+echo "==> Modbus TCP add-on configuration and lifecycle"
+python3 -m pytest \
+  tests/test_modbus_runtime_guard.py \
+  tests/test_modbus_single_process_lifecycle.py \
+  -q
 
 echo "==> gateway parity gate readiness"
 python3 -m pytest tests/test_gateway_parity_gate.py -q
