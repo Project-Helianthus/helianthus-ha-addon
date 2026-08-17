@@ -1,4 +1,9 @@
 import json
+import os
+import signal
+import stat
+import subprocess
+import time
 from pathlib import Path
 
 
@@ -105,3 +110,69 @@ def test_pre_exec_cleanup_retires_health_and_removes_unconsumed_endpoint() -> No
     assert run.index("trap cleanup_modbus_pre_exec EXIT") < run.index(
         'exec "${gateway_bin}" "${gateway_args[@]}"'
     )
+
+
+def test_validator_cannot_recreate_endpoint_after_wrapper_termination(
+    tmp_path: Path,
+) -> None:
+    run = RUN.read_text(encoding="utf-8")
+    assert "if modbus_eval=$(python3" not in run
+    assert 'python3 "${modbus_guard}" validate' in run
+    assert '> "${modbus_eval_file}"' in run
+
+    wrapper = tmp_path / "run-under-test.sh"
+    guard = tmp_path / "delayed-guard.py"
+    marker = tmp_path / "guard-started"
+    endpoint = tmp_path / "modbus-endpoint"
+    options = tmp_path / "options.json"
+    options.write_text("{}", encoding="utf-8")
+
+    guard.write_text(
+        "#!/usr/bin/env python3\n"
+        "import argparse, os, pathlib, time\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('command')\n"
+        "parser.add_argument('--options')\n"
+        "parser.add_argument('--endpoint-file')\n"
+        "args = parser.parse_args()\n"
+        "pathlib.Path(os.environ['TEST_GUARD_MARKER']).write_text('started', encoding='utf-8')\n"
+        "time.sleep(1)\n"
+        "pathlib.Path(args.endpoint_file).write_text('tcp://192.0.2.40:502', encoding='utf-8')\n"
+        "print(\"MODBUS_TCP_ENABLED='true'\")\n"
+        "print(\"MODBUS_TCP_DIAL_TIMEOUT='5s'\")\n",
+        encoding="utf-8",
+    )
+    guard.chmod(guard.stat().st_mode | stat.S_IXUSR)
+
+    prelude = r'''
+bashio::config() { printf '\n'; }
+bashio::exit.nok() { exit 1; }
+'''
+    wrapper.write_text(prelude + "\n" + RUN.read_text(encoding="utf-8"), encoding="utf-8")
+
+    env = os.environ | {
+        "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(guard),
+        "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
+        "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(endpoint),
+        "TEST_GUARD_MARKER": str(marker),
+    }
+    process = subprocess.Popen(
+        ["bash", str(wrapper)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    try:
+        deadline = time.monotonic() + 2
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists(), "validator did not start"
+        process.send_signal(signal.SIGTERM)
+        process.communicate(timeout=3)
+        time.sleep(1.2)
+        assert not endpoint.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=1)
