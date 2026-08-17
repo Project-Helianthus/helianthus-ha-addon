@@ -63,6 +63,7 @@ modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_ru
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
 modbus_eval_file=""
 modbus_endpoint_staging=""
+modbus_pre_exec_signal=""
 cleanup_modbus_pre_exec() {
   rm -f -- "${modbus_endpoint_file}" || true
   if [ -n "${modbus_eval_file}" ]; then
@@ -72,7 +73,15 @@ cleanup_modbus_pre_exec() {
     rm -f -- "${modbus_endpoint_staging}" || true
   fi
 }
+abort_modbus_pre_exec_on_signal() {
+  case "${modbus_pre_exec_signal}" in
+    TERM) exit 143 ;;
+    INT) exit 130 ;;
+  esac
+}
 trap cleanup_modbus_pre_exec EXIT
+trap 'modbus_pre_exec_signal=TERM' TERM
+trap 'modbus_pre_exec_signal=INT' INT
 
 MODBUS_TCP_ENABLED=""
 MODBUS_TCP_ENDPOINT=""
@@ -84,8 +93,12 @@ modbus_eval_file=$(mktemp /tmp/helianthus-modbus-validate.XXXXXX) || \
   bashio::exit.nok "Unable to create the Modbus validation result file"
 chmod 0600 "${modbus_eval_file}" || \
   bashio::exit.nok "Unable to protect the Modbus validation result file"
-if python3 "${modbus_guard}" validate \
-  --options "${modbus_options_path}" > "${modbus_eval_file}"; then
+modbus_validation_status=0
+python3 "${modbus_guard}" validate \
+  --options "${modbus_options_path}" > "${modbus_eval_file}" || \
+  modbus_validation_status=$?
+abort_modbus_pre_exec_on_signal
+if [ "${modbus_validation_status}" -eq 0 ]; then
   modbus_eval=$(<"${modbus_eval_file}")
   rm -f -- "${modbus_eval_file}"
   modbus_eval_file=""
@@ -105,16 +118,23 @@ if [ "${modbus_tcp_enabled}" = "true" ]; then
     bashio::exit.nok "Modbus endpoint file must include a parent directory"
   fi
   mkdir -p -- "${modbus_endpoint_dir}"
+  abort_modbus_pre_exec_on_signal
   chmod 0700 "${modbus_endpoint_dir}"
+  abort_modbus_pre_exec_on_signal
   modbus_endpoint_staging="${modbus_endpoint_file}.tmp.$$"
   rm -f -- "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
   umask 077
   printf '%s' "${MODBUS_TCP_ENDPOINT}" > "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
   chmod 0600 "${modbus_endpoint_staging}"
+  abort_modbus_pre_exec_on_signal
   mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"
-  modbus_endpoint_staging=""
+  abort_modbus_pre_exec_on_signal
 fi
-unset MODBUS_TCP_ENDPOINT modbus_eval
+trap 'exit 143' TERM
+trap 'exit 130' INT
+unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_pre_exec_signal
 
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain

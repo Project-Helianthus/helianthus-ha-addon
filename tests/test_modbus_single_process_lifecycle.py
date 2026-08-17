@@ -141,6 +141,7 @@ def test_validator_cannot_recreate_endpoint_after_wrapper_termination(
         "args = parser.parse_args()\n"
         "pathlib.Path(os.environ['TEST_GUARD_MARKER']).write_text('started', encoding='utf-8')\n"
         "time.sleep(1)\n"
+        "pathlib.Path(os.environ['TEST_ENDPOINT']).write_text('tcp://192.0.2.40:502', encoding='utf-8')\n"
         "print(\"MODBUS_TCP_ENABLED='true'\")\n"
         "print(\"MODBUS_TCP_ENDPOINT='tcp://192.0.2.40:502'\")\n"
         "print(\"MODBUS_TCP_DIAL_TIMEOUT='5s'\")\n",
@@ -159,6 +160,7 @@ bashio::exit.nok() { exit 1; }
         "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(endpoint),
         "TEST_GUARD_MARKER": str(marker),
+        "TEST_ENDPOINT": str(endpoint),
     }
     process = subprocess.Popen(
         ["bash", str(wrapper)],
