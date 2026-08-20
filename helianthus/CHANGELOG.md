@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.55 (2026-08-20)
+
+- Pin gateway `b8416b9997f6778780441bb65eb0611181d85d88`, which replaces
+  startup-only SunSpec qualification with serialized continuous acquisition:
+  one shared 10-second cycle budget followed by a 15-second delay.
+- Keep the first exact qualification as immutable MCP evidence while later
+  accepted samples replace only the canonical per-asset current slot. Failed
+  cycles remain non-destructive and canonical freshness continues to age under
+  the registry-owned policy.
+- Preserve the 0.6.54 M2M TLS, Portal PV, Supervisor options, single-process
+  wrapper, eBUS/eeBUS paths, and read-only Modbus behavior unchanged.
+
 ## 0.6.54 (2026-08-20)
 
 - Provision the dedicated canonical PV M2M listener and Portal semantic client

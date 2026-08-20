@@ -59,7 +59,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.54` packages the canonical PV MCP and authenticated GraphQL M2M
+Release `0.6.55` packages the canonical PV MCP and authenticated GraphQL M2M
 surfaces plus separate semantic and bounded raw Portal views. Its rollout
 contract binds the exact gateway image to the Home Assistant canonical PV
 consumer and preserves source/projection provenance without endpoints or raw

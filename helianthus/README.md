@@ -52,7 +52,7 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.54` pins the gateway with deterministic canonical PV V1 projection,
+Release `0.6.55` pins the gateway with deterministic canonical PV V1 projection,
 authenticated GraphQL M2M publication, and separate semantic and bounded raw
 Portal surfaces. The rollout contract binds this image to the canonical PV
 Home Assistant consumer while keeping Modbus read-only and disabled by default.
