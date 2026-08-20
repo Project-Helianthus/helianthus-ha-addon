@@ -14,6 +14,15 @@ GATEWAY = "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e"
 HA_INTEGRATION = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 FIXTURE = ROOT / "scripts/fixtures/fronius_ha_rollout_contract_pass.json"
 VERIFIER = ROOT / "scripts/check_fronius_ha_rollout.py"
+MANIFEST_DIGEST = "sha256:" + "a" * 64
+PLATFORM_DIGEST = "sha256:" + "b" * 64
+PUBLICATION = {
+    "image_repository": "ghcr.io/project-helianthus/helianthus-ha-addon",
+    "image_tag": VERSION,
+    "target_platform": "linux/arm64",
+    "manifest_digest": MANIFEST_DIGEST,
+    "platform_digest": PLATFORM_DIGEST,
+}
 
 
 def _verifier_module():  # noqa: ANN202
@@ -32,10 +41,15 @@ def _live_payload() -> dict:
         name: "pass" for name in payload["required_assertions"]
     }
     payload["live"] = {
-        "image_digest": "sha256:" + "a" * 64,
+        "image_repository": PUBLICATION["image_repository"],
+        "image_tag": VERSION,
+        "target_platform": PUBLICATION["target_platform"],
+        "manifest_digest": MANIFEST_DIGEST,
+        "platform_digest": PLATFORM_DIGEST,
+        "installed_image_digest": MANIFEST_DIGEST,
         "installed_at": "2026-08-20T15:00:00+03:00",
         "backup_ref": "b930e982",
-        "evidence_ref": "sha256:" + "b" * 64,
+        "evidence_ref": "sha256:" + "c" * 64,
         "runtime_version": VERSION,
         "gateway_build_id": GATEWAY,
         "ha_integration_ref": HA_INTEGRATION,
@@ -127,11 +141,37 @@ def test_rollout_verifier_rejects_numeric_boolean_claims() -> None:
     ):
         payload = deepcopy(_live_payload())
         payload[path[0]][path[1]] = 1
-        assert verifier.validate(payload, "lab")
+        assert verifier.validate(payload, "lab", publication=PUBLICATION)
 
 
 def test_rollout_verifier_rejects_whitespace_backup_reference() -> None:
     verifier = _verifier_module()
     payload = _live_payload()
     payload["live"]["backup_ref"] = " "
-    assert verifier.validate(payload, "lab")
+    assert verifier.validate(payload, "lab", publication=PUBLICATION)
+
+
+def test_rollout_verifier_binds_live_image_to_public_manifest_and_platform() -> None:
+    verifier = _verifier_module()
+    payload = _live_payload()
+    assert verifier.validate(payload, "lab", publication=PUBLICATION) == []
+
+    payload["live"]["installed_image_digest"] = "sha256:" + "d" * 64
+    assert verifier.validate(payload, "lab", publication=PUBLICATION)
+
+    payload = _live_payload()
+    wrong_platform = dict(PUBLICATION, target_platform="linux/amd64")
+    assert verifier.validate(payload, "lab", publication=wrong_platform)
+
+
+def test_rollout_verifier_rejects_non_rfc3339_timestamp() -> None:
+    verifier = _verifier_module()
+    for invalid in (
+        "20260820T150000+0300",
+        "2026-08-20X15:00:00+03:00",
+        "2026-08-20T15:00:00,1+03:00",
+        "2026-08-20T15:00:00+03",
+    ):
+        payload = _live_payload()
+        payload["live"]["installed_at"] = invalid
+        assert verifier.validate(payload, "lab", publication=PUBLICATION)
