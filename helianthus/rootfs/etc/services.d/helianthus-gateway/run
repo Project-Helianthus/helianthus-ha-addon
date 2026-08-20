@@ -780,6 +780,7 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     m2m-graphql-server-key \
     m2m-graphql-allowed-assets \
     m2m-graphql-known-assets \
+    portal-pv-semantic-enabled \
     portal-pv-m2m-url \
     portal-pv-m2m-server-name \
     portal-pv-m2m-ca \
@@ -801,6 +802,7 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     -m2m-graphql-server-key "${m2m_server_key}"
     -m2m-graphql-allowed-assets "${m2m_graphql_asset_ref}"
     -m2m-graphql-known-assets "${m2m_graphql_asset_ref}"
+    -portal-pv-semantic-enabled=true
     -portal-pv-m2m-url "https://127.0.0.1:8443/graphql/m2m/v1"
     -portal-pv-m2m-server-name "${m2m_graphql_server_name}"
     -portal-pv-m2m-ca "${m2m_client_ca}"
