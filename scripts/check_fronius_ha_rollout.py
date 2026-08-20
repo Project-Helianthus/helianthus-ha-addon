@@ -9,12 +9,15 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 CONTRACT_ID = "helianthus.fronius-ha-rollout/v1"
 ADDON_VERSION = "0.6.53"
 GATEWAY_REF = "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e"
 HA_INTEGRATION_REF = "e614e63898d4ddc317c66f1a673fefe0e2786245"
+IMAGE_REPOSITORY = "ghcr.io/project-helianthus/helianthus-ha-addon"
 REQUIRED_ASSERTIONS = {
     "raw_mcp",
     "semantic_mcp",
@@ -33,6 +36,10 @@ REQUIRED_ASSERTIONS = {
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 BACKUP_RE = re.compile(r"^[0-9a-f]{8}$")
+RFC3339_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+)
 
 
 def _closed(value: object, keys: set[str], context: str) -> dict[str, Any]:
@@ -42,7 +49,7 @@ def _closed(value: object, keys: set[str], context: str) -> dict[str, Any]:
 
 
 def _rfc3339(value: object, context: str) -> None:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or RFC3339_RE.fullmatch(value) is None:
         raise ValueError(f"{context} must be RFC3339")
     try:
         parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -52,7 +59,89 @@ def _rfc3339(value: object, context: str) -> None:
         raise ValueError(f"{context} must include a timezone")
 
 
-def validate(payload: object, mode: str) -> list[str]:
+def _platform_id(platform: object) -> str:
+    if not isinstance(platform, dict):
+        return ""
+    operating_system = platform.get("os")
+    architecture = platform.get("architecture")
+    if not isinstance(operating_system, str) or not isinstance(architecture, str):
+        return ""
+    identifier = f"{operating_system}/{architecture}"
+    variant = platform.get("variant")
+    if architecture == "arm" and isinstance(variant, str) and variant:
+        identifier += f"/{variant}"
+    return identifier
+
+
+def resolve_publication(
+    image_repository: str, image_tag: str, target_platform: str
+) -> dict[str, str]:
+    if image_repository != IMAGE_REPOSITORY or image_tag != ADDON_VERSION:
+        raise ValueError("live image repository or tag mismatch")
+    repository_path = image_repository.removeprefix("ghcr.io/")
+    token_query = urlencode(
+        {
+            "service": "ghcr.io",
+            "scope": f"repository:{repository_path}:pull",
+        }
+    )
+    token_request = Request(
+        f"https://ghcr.io/token?{token_query}",
+        headers={"Accept": "application/json"},
+    )
+    with urlopen(token_request, timeout=30) as response:
+        token_payload = json.loads(response.read(65_537))
+    token = token_payload.get("token") if isinstance(token_payload, dict) else None
+    if not isinstance(token, str) or not token:
+        raise ValueError("GHCR pull token missing")
+
+    manifest_request = Request(
+        f"https://ghcr.io/v2/{repository_path}/manifests/{image_tag}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": ", ".join(
+                (
+                    "application/vnd.oci.image.index.v1+json",
+                    "application/vnd.docker.distribution.manifest.list.v2+json",
+                )
+            ),
+        },
+    )
+    with urlopen(manifest_request, timeout=30) as response:
+        manifest_digest = response.headers.get("Docker-Content-Digest", "")
+        raw = response.read(1_048_577)
+    if len(raw) > 1_048_576 or DIGEST_RE.fullmatch(manifest_digest) is None:
+        raise ValueError("GHCR manifest response is invalid or unbounded")
+    manifest = json.loads(raw)
+    descriptors = manifest.get("manifests") if isinstance(manifest, dict) else None
+    if not isinstance(descriptors, list):
+        raise ValueError("GHCR tag is not a multi-platform manifest")
+    matches = [
+        descriptor
+        for descriptor in descriptors
+        if isinstance(descriptor, dict)
+        and _platform_id(descriptor.get("platform")) == target_platform
+    ]
+    if len(matches) != 1:
+        raise ValueError("GHCR target platform is missing or ambiguous")
+    platform_digest = matches[0].get("digest")
+    if not isinstance(platform_digest, str) or DIGEST_RE.fullmatch(platform_digest) is None:
+        raise ValueError("GHCR platform digest is invalid")
+    return {
+        "image_repository": image_repository,
+        "image_tag": image_tag,
+        "target_platform": target_platform,
+        "manifest_digest": manifest_digest,
+        "platform_digest": platform_digest,
+    }
+
+
+def validate(
+    payload: object,
+    mode: str,
+    *,
+    publication: dict[str, str] | None = None,
+) -> list[str]:
     errors: list[str] = []
     try:
         root = _closed(
@@ -144,7 +233,12 @@ def validate(payload: object, mode: str) -> list[str]:
             live = _closed(
                 root["live"],
                 {
-                    "image_digest",
+                    "image_repository",
+                    "image_tag",
+                    "target_platform",
+                    "manifest_digest",
+                    "platform_digest",
+                    "installed_image_digest",
                     "installed_at",
                     "backup_ref",
                     "evidence_ref",
@@ -154,8 +248,23 @@ def validate(payload: object, mode: str) -> list[str]:
                 },
                 "live evidence",
             )
-            if not DIGEST_RE.fullmatch(str(live["image_digest"])):
-                errors.append("live image_digest must be sha256")
+            if publication is None:
+                errors.append("verified OCI publication is required in lab mode")
+            else:
+                for field in (
+                    "image_repository",
+                    "image_tag",
+                    "target_platform",
+                    "manifest_digest",
+                    "platform_digest",
+                ):
+                    if live[field] != publication.get(field):
+                        errors.append(f"live {field} differs from verified OCI publication")
+            for field in ("manifest_digest", "platform_digest", "installed_image_digest"):
+                if not DIGEST_RE.fullmatch(str(live[field])):
+                    errors.append(f"live {field} must be sha256")
+            if live["installed_image_digest"] != live["manifest_digest"]:
+                errors.append("installed image digest differs from published manifest")
             if not DIGEST_RE.fullmatch(str(live["evidence_ref"])):
                 errors.append("live evidence_ref must be sha256")
             _rfc3339(live["installed_at"], "live installed_at")
@@ -184,7 +293,21 @@ def main() -> int:
     except (OSError, json.JSONDecodeError) as exc:
         print(f"Fronius HA rollout: FAIL ({exc})")
         return 1
-    errors = validate(payload, args.mode)
+    publication = None
+    if args.mode == "lab":
+        live = payload.get("live") if isinstance(payload, dict) else None
+        try:
+            if not isinstance(live, dict):
+                raise ValueError("live evidence missing")
+            publication = resolve_publication(
+                str(live.get("image_repository", "")),
+                str(live.get("image_tag", "")),
+                str(live.get("target_platform", "")),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"Fronius HA rollout: FAIL (OCI publication verification failed: {exc})")
+            return 1
+    errors = validate(payload, args.mode, publication=publication)
     if errors:
         print(f"Fronius HA rollout: FAIL ({'; '.join(errors)})")
         return 1
