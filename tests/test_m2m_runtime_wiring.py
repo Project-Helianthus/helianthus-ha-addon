@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
-VERSION = "0.6.54"
+VERSION = "0.6.55"
 TLS_ROOT = "/ssl/helianthus-pv-m2m"
 
 

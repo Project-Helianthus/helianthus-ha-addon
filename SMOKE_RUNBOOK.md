@@ -51,7 +51,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.54`, do not supply any eeBUS-specific credential options:
+For release `0.6.55`, do not supply any eeBUS-specific credential options:
 they remain removed. The consolidated runtime includes deterministic canonical
 PV V1 retrieval for retained qualified SunSpec samples, endpoint-free Modbus
 provider errors, and one owner-atomic raw MCP reconnect/retry. Modbus remains
