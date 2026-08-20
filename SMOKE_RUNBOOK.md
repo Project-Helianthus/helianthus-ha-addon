@@ -51,7 +51,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.53`, do not supply any eeBUS-specific credential options:
+For release `0.6.54`, do not supply any eeBUS-specific credential options:
 they remain removed. The consolidated runtime includes deterministic canonical
 PV V1 retrieval for retained qualified SunSpec samples, endpoint-free Modbus
 provider errors, and one owner-atomic raw MCP reconnect/retry. Modbus remains
@@ -179,6 +179,14 @@ Run these checks only against the exact add-on, gateway, and Home Assistant
 integration revisions recorded by the rollout artifact. Keep every Modbus
 operation read-only and keep endpoint values out of the public artifact.
 
+Before enabling `m2m_graphql_enabled`, create the fixed TLS bundle below
+`/ssl/helianthus-pv-m2m`. The add-on reads `ca.pem`, `server-cert.pem`,
+`server-key.pem`, `portal-client-cert.pem`, and `portal-client-key.pem` through
+the read-only `/ssl` mount. Home Assistant uses the same `ca.pem` plus its
+own `ha-client-cert.pem` and `ha-client-key.pem`. Set the server identity option
+to an exact DNS name or IP SAN in `server-cert.pem`, and use one opaque asset
+reference consistently in the add-on and Home Assistant options.
+
 ```text
 - [ ] M5_08_RAW_MCP: bounded raw FC03 read succeeds through the authenticated raw Portal/MCP boundary
 - [ ] M5_08_SEMANTIC_MCP: canonical PV semantic MCP returns terminal-qualified facts and provenance
@@ -189,7 +197,7 @@ operation read-only and keep endpoint values out of the public artifact.
 - [ ] M5_08_EXTERNAL_MTLS: external service polling uses mTLS, verified server identity, and a cadence of at least 5 seconds
 - [ ] M5_08_RECOVERY: credential rotation, channel reconnect, and one restart recover without identity drift
 - [ ] M5_08_INDEPENDENT_DISABLE: Modbus acquisition and the HA PV consumer disable independently
-- [ ] M5_08_ROLLBACK: backup exists and rollback to 0.6.52 preserves schema compatibility and unavailable behavior
+- [ ] M5_08_ROLLBACK: backup exists and rollback to 0.6.53 preserves schema compatibility and unavailable behavior
 ```
 
 Record the sanitized result with `helianthus.fronius-ha-rollout/v1` and verify it:

@@ -196,6 +196,50 @@ eebus_subnets=$(bashio::config 'eebus_subnets' 2>/dev/null || true)
 eebus_discovery_enabled=$(bashio::config 'eebus_discovery_enabled' 2>/dev/null || true)
 eebus_remote_ski_allowlist=$(bashio::config 'eebus_remote_ski_allowlist' 2>/dev/null || true)
 
+m2m_graphql_enabled=false
+m2m_graphql_server_name=""
+m2m_graphql_asset_ref=""
+m2m_tls_root="/ssl/helianthus-pv-m2m"
+m2m_client_ca="${m2m_tls_root}/ca.pem"
+m2m_server_cert="${m2m_tls_root}/server-cert.pem"
+m2m_server_key="${m2m_tls_root}/server-key.pem"
+m2m_portal_client_cert="${m2m_tls_root}/portal-client-cert.pem"
+m2m_portal_client_key="${m2m_tls_root}/portal-client-key.pem"
+
+m2m_validate_protected_option() {
+  local key expected_type
+  key="$1"
+  expected_type="$2"
+  if ! jq -e --arg key "${key}" 'has($key) and .[$key] != null' \
+    "${eebus_options_path}" >/dev/null 2>&1; then
+    return 0
+  fi
+  case "${expected_type}" in
+    boolean)
+      jq -e --arg key "${key}" '.[ $key ] | type == "boolean"' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "M2M option ${key} has an invalid protected JSON type"
+      ;;
+    string)
+      jq -e --arg key "${key}" \
+        '.[ $key ] | type == "string" and (index("\u0000") == null) and (index("\n") == null) and (index("\r") == null)' \
+        "${eebus_options_path}" >/dev/null 2>&1 || \
+        bashio::exit.nok "M2M option ${key} has an invalid protected JSON value or type"
+      ;;
+  esac
+}
+
+if [ -f "${eebus_options_path}" ]; then
+  m2m_validate_protected_option m2m_graphql_enabled boolean
+  m2m_graphql_enabled=$(jq -r '.m2m_graphql_enabled // false' "${eebus_options_path}")
+  if [ "${m2m_graphql_enabled}" = "true" ]; then
+    m2m_validate_protected_option m2m_graphql_server_name string
+    m2m_validate_protected_option m2m_graphql_asset_ref string
+    m2m_graphql_server_name=$(jq -r '.m2m_graphql_server_name // ""' "${eebus_options_path}")
+    m2m_graphql_asset_ref=$(jq -r '.m2m_graphql_asset_ref // ""' "${eebus_options_path}")
+  fi
+fi
+
 # An in-place upgrade can briefly expose the previous Supervisor schema even
 # though /data/options.json already contains the new eeBUS keys. Recover only
 # missing eeBUS values from the protected options file; all recovered values
@@ -707,6 +751,70 @@ else
   bashio::log.info "eeBUS runtime: disabled"
 fi
 
+m2m_args=()
+if bashio::var.true "${m2m_graphql_enabled}"; then
+  m2m_graphql_server_name=$(printf '%s' "${m2m_graphql_server_name}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  m2m_graphql_asset_ref=$(printf '%s' "${m2m_graphql_asset_ref}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  if ! [[ "${m2m_graphql_server_name}" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]]; then
+    bashio::exit.nok "M2M GraphQL requires a valid server certificate identity"
+  fi
+  if ! [[ "${m2m_graphql_asset_ref}" =~ ^[A-Za-z0-9._:-]{1,64}$ ]]; then
+    bashio::exit.nok "M2M GraphQL requires one opaque asset reference"
+  fi
+  for m2m_tls_file in \
+    "${m2m_client_ca}" \
+    "${m2m_server_cert}" \
+    "${m2m_server_key}" \
+    "${m2m_portal_client_cert}" \
+    "${m2m_portal_client_key}"; do
+    if [ ! -f "${m2m_tls_file}" ] || [ ! -r "${m2m_tls_file}" ]; then
+      bashio::exit.nok "M2M GraphQL requires the complete fixed TLS file bundle"
+    fi
+  done
+  missing_m2m_flags=()
+  for required_flag in \
+    m2m-graphql-listen \
+    m2m-graphql-server-name \
+    m2m-graphql-client-ca \
+    m2m-graphql-server-cert \
+    m2m-graphql-server-key \
+    m2m-graphql-allowed-assets \
+    m2m-graphql-known-assets \
+    portal-pv-semantic-enabled \
+    portal-pv-m2m-url \
+    portal-pv-m2m-server-name \
+    portal-pv-m2m-ca \
+    portal-pv-m2m-client-cert \
+    portal-pv-m2m-client-key \
+    portal-pv-asset-ref; do
+    if ! gateway_supports_flag "${required_flag}"; then
+      missing_m2m_flags+=("${required_flag}")
+    fi
+  done
+  if [ "${#missing_m2m_flags[@]}" -ne 0 ]; then
+    bashio::exit.nok "gateway does not support the complete M2M GraphQL and Portal PV flag set"
+  fi
+  m2m_args=(
+    -m2m-graphql-listen "0.0.0.0:8443"
+    -m2m-graphql-server-name "${m2m_graphql_server_name}"
+    -m2m-graphql-client-ca "${m2m_client_ca}"
+    -m2m-graphql-server-cert "${m2m_server_cert}"
+    -m2m-graphql-server-key "${m2m_server_key}"
+    -m2m-graphql-allowed-assets "${m2m_graphql_asset_ref}"
+    -m2m-graphql-known-assets "${m2m_graphql_asset_ref}"
+    -portal-pv-semantic-enabled=true
+    -portal-pv-m2m-url "https://127.0.0.1:8443/graphql/m2m/v1"
+    -portal-pv-m2m-server-name "${m2m_graphql_server_name}"
+    -portal-pv-m2m-ca "${m2m_client_ca}"
+    -portal-pv-m2m-client-cert "${m2m_portal_client_cert}"
+    -portal-pv-m2m-client-key "${m2m_portal_client_key}"
+    -portal-pv-asset-ref "${m2m_graphql_asset_ref}"
+  )
+  bashio::log.info "M2M GraphQL runtime: enabled"
+else
+  bashio::log.info "M2M GraphQL runtime: disabled"
+fi
+
 modbus_args=()
 if bashio::var.true "${modbus_tcp_enabled}"; then
   missing_modbus_flags=()
@@ -802,6 +910,7 @@ gateway_args+=(
 if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[@]}"); fi
 if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
 if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
+if [ "${#m2m_args[@]}" -ne 0 ]; then gateway_args+=("${m2m_args[@]}"); fi
 
 if bashio::var.true "${modbus_tcp_enabled}"; then
   gateway_args+=("${modbus_args[@]}")

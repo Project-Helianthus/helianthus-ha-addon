@@ -59,13 +59,18 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.53` packages the canonical PV MCP and authenticated GraphQL M2M
+Release `0.6.54` packages the canonical PV MCP and authenticated GraphQL M2M
 surfaces plus separate semantic and bounded raw Portal views. Its rollout
 contract binds the exact gateway image to the Home Assistant canonical PV
 consumer and preserves source/projection provenance without endpoints or raw
 words. The release preserves the owner-atomic raw Modbus retry, Supervisor
 option compatibility, direct gateway `exec` lifecycle, and disabled-by-default
 Modbus configuration.
+
+The dedicated M2M listener is also disabled by default. When enabled, the only
+Supervisor values are its server identity and opaque asset reference. TLS files
+are read from `/ssl/helianthus-pv-m2m`: `ca.pem`, `server-cert.pem`,
+`server-key.pem`, `portal-client-cert.pem`, and `portal-client-key.pem`.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 

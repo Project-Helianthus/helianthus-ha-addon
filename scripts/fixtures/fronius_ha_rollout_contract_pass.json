@@ -3,7 +3,7 @@
   "evidence_kind": "contract_fixture_v1",
   "mode": "contract",
   "release": {
-    "addon_version": "0.6.53",
+    "addon_version": "0.6.54",
     "gateway_ref": "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e",
     "ha_integration_ref": "e614e63898d4ddc317c66f1a673fefe0e2786245"
   },
@@ -33,7 +33,7 @@
     "response_max_bytes": 1048576
   },
   "rollback": {
-    "prior_version": "0.6.52",
+    "prior_version": "0.6.53",
     "schema_compatible": true,
     "backup_required": true
   },

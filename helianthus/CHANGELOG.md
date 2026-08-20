@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.54 (2026-08-20)
+
+- Provision the dedicated canonical PV M2M listener and Portal semantic client
+  through the existing single gateway process. The runtime remains disabled by
+  default and fails closed unless the complete fixed TLS file bundle exists.
+- Expose only enabled state, server certificate identity, and opaque asset ref
+  as non-secret Supervisor options. Mount Home Assistant `/ssl` read-only;
+  certificate and key bytes never enter options, argv, environment, logs, or
+  the repository.
+- Keep gateway pin `739721c9ed19e95bb6531a3b87ebc5f49a3ef19e`,
+  Modbus read-only behavior, and all eBUS/eeBUS transport paths unchanged.
+
 ## 0.6.53 (2026-08-20)
 
 - Pin the gateway to M5-06 merge
