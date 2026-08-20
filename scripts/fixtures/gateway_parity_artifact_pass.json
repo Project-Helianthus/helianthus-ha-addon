@@ -1,35 +1,35 @@
 {
   "evidence_kind": "github_actions_exact_commit_ci_v1",
   "source_repo": "Project-Helianthus/helianthus-ebusgateway",
-  "source_ref": "d8bdb0f66b30a30c09690935d18a887ff5c84f64",
-  "source_tree": "42fbbd3fd4549065caa7293874214f0fd592bad4",
-  "tested_ref": "d8bdb0f66b30a30c09690935d18a887ff5c84f64",
-  "tested_tree": "42fbbd3fd4549065caa7293874214f0fd592bad4",
-  "generated_at": "2026-08-17T18:48:28Z",
+  "source_ref": "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e",
+  "source_tree": "efef607c4ac957d8a00232e22b1eb56d918850b8",
+  "tested_ref": "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e",
+  "tested_tree": "efef607c4ac957d8a00232e22b1eb56d918850b8",
+  "generated_at": "2026-08-20T12:28:47Z",
   "workflow_run": {
-    "id": 32056252218,
+    "id": 32368591517,
     "attempt": 1,
     "event": "push",
-    "head_sha": "d8bdb0f66b30a30c09690935d18a887ff5c84f64",
+    "head_sha": "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e",
     "status": "completed",
     "conclusion": "success",
-    "updated_at": "2026-08-17T18:48:28Z",
-    "url": "https://github.com/Project-Helianthus/helianthus-ebusgateway/actions/runs/32056252218",
+    "updated_at": "2026-08-20T12:28:47Z",
+    "url": "https://github.com/Project-Helianthus/helianthus-ebusgateway/actions/runs/32368591517",
     "jobs": [
-      {"id": 95466979303, "name": "build", "status": "completed", "conclusion": "success"},
-      {"id": 95466979243, "name": "test", "status": "completed", "conclusion": "success"},
-      {"id": 95466979350, "name": "terminology", "status": "completed", "conclusion": "success"},
-      {"id": 95466979369, "name": "lint", "status": "completed", "conclusion": "success"}
+      {"id": 96423664217, "name": "build", "status": "completed", "conclusion": "success"},
+      {"id": 96423664090, "name": "test", "status": "completed", "conclusion": "success"},
+      {"id": 96423664015, "name": "terminology", "status": "completed", "conclusion": "success"},
+      {"id": 96423663890, "name": "lint", "status": "completed", "conclusion": "success"}
     ]
   },
   "gates": {
     "parity_contract": {
       "status": "pass",
-      "details": "mcp parity_contract_test passed"
+      "details": "MCP, PUBLIC_GRAPHQL_M2M_V1, and Portal parity tests passed"
     },
     "tool_classification": {
       "status": "pass",
-      "details": "mcp tool_classification_test passed"
+      "details": "semantic and bounded raw tool classification tests passed"
     }
   }
 }

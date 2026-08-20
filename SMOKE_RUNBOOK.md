@@ -51,7 +51,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 
 2) Install and start the `helianthus` add-on from Home Assistant Add-on Store.
 
-For release `0.6.52`, do not supply any eeBUS-specific credential options:
+For release `0.6.53`, do not supply any eeBUS-specific credential options:
 they remain removed. The consolidated runtime includes deterministic canonical
 PV V1 retrieval for retained qualified SunSpec samples, endpoint-free Modbus
 provider errors, and one owner-atomic raw MCP reconnect/retry. Modbus remains
@@ -171,6 +171,33 @@ Expected final line:
 
 ```text
 OVERALL PASS
+```
+
+## M5-08 Fronius-to-Home-Assistant rollout
+
+Run these checks only against the exact add-on, gateway, and Home Assistant
+integration revisions recorded by the rollout artifact. Keep every Modbus
+operation read-only and keep endpoint values out of the public artifact.
+
+```text
+- [ ] M5_08_RAW_MCP: bounded raw FC03 read succeeds through the authenticated raw Portal/MCP boundary
+- [ ] M5_08_SEMANTIC_MCP: canonical PV semantic MCP returns terminal-qualified facts and provenance
+- [ ] M5_08_GRAPHQL_M2M: PUBLIC_GRAPHQL_M2M_V1 returns the same canonical fact identities and accounting
+- [ ] M5_08_PORTAL_SEMANTIC: semantic Portal view consumes GraphQL and shows the canonical PV snapshot
+- [ ] M5_08_PORTAL_RAW: separate raw Portal view remains bounded, audited, authenticated, and read-only
+- [ ] M5_08_HOME_ASSISTANT: M5-07 entities are available with stable IDs, exact units, and freshness state
+- [ ] M5_08_EXTERNAL_MTLS: external service polling uses mTLS, verified server identity, and a cadence of at least 5 seconds
+- [ ] M5_08_RECOVERY: credential rotation, channel reconnect, and one restart recover without identity drift
+- [ ] M5_08_INDEPENDENT_DISABLE: Modbus acquisition and the HA PV consumer disable independently
+- [ ] M5_08_ROLLBACK: backup exists and rollback to 0.6.52 preserves schema compatibility and unavailable behavior
+```
+
+Record the sanitized result with `helianthus.fronius-ha-rollout/v1` and verify it:
+
+```bash
+python3 scripts/check_fronius_ha_rollout.py \
+  --artifact /path/to/fronius-ha-rollout-live.json \
+  --mode lab
 ```
 
 Exit code:

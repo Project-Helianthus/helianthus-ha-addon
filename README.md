@@ -59,13 +59,13 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.52` packages deterministic canonical PV V1 projection for
-terminal-qualified SunSpec observations and the read-only
-`modbus.v1.semantic.pv.get` MCP prototype. The retained response carries exact
-source and projection provenance without endpoints or raw words. The release
-preserves the 0.6.51 owner-atomic raw Modbus retry, Supervisor option
-compatibility, direct gateway `exec` lifecycle, and disabled-by-default Modbus
-configuration.
+Release `0.6.53` packages the canonical PV MCP and authenticated GraphQL M2M
+surfaces plus separate semantic and bounded raw Portal views. Its rollout
+contract binds the exact gateway image to the Home Assistant canonical PV
+consumer and preserves source/projection provenance without endpoints or raw
+words. The release preserves the owner-atomic raw Modbus retry, Supervisor
+option compatibility, direct gateway `exec` lifecycle, and disabled-by-default
+Modbus configuration.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 
@@ -170,6 +170,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 | gateway parity gate readiness | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --verify-github` |
 | rollout guardrails | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version"` |
 | post-parity enablement tasks | `gateway_version="$(sed -n 's/^ARG EBUSGATEWAY_VERSION=//p' helianthus/Dockerfile)"; python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md` |
+| Fronius-to-HA rollout contract | `python3 scripts/check_fronius_ha_rollout.py --artifact scripts/fixtures/fronius_ha_rollout_contract_pass.json --mode contract` |
 | Markdown private IPv4 gate | `python3 scripts/check_markdown_private_ips.py --self-test && python3 scripts/check_markdown_private_ips.py` |
 | smoke checker CLI | `python3 scripts/smoke_addon_checklist.py --help` |
 

@@ -60,6 +60,12 @@ python3 -m pytest \
   tests/test_modbus_single_process_lifecycle.py \
   -q
 
+echo "==> Fronius-to-Home-Assistant rollout contract"
+python3 -m pytest tests/test_fronius_ha_rollout.py -q
+python3 scripts/check_fronius_ha_rollout.py \
+  --artifact scripts/fixtures/fronius_ha_rollout_contract_pass.json \
+  --mode contract
+
 echo "==> gateway parity gate readiness"
 python3 -m pytest tests/test_gateway_parity_gate.py -q
 python3 scripts/check_gateway_parity_gate.py --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --verify-github

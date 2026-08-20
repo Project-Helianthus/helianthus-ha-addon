@@ -15,8 +15,8 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.52"
-GATEWAY = "d8bdb0f66b30a30c09690935d18a887ff5c84f64"
+RELEASE = "0.6.53"
+GATEWAY = "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
@@ -40,7 +40,7 @@ def main() -> int:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     run = RUN.read_text(encoding="utf-8")
 
-    assert config["version"] == RELEASE, "config.json must be the 0.6.52 release authority"
+    assert config["version"] == RELEASE, "config.json must be the 0.6.53 release authority"
     assert f"ARG EBUSGATEWAY_VERSION={GATEWAY}" in dockerfile, "Dockerfile primary gateway pin drifted"
     assert f"EBUSGATEWAY_VERSION={GATEWAY}" in workflow, "workflow primary gateway pin drifted"
     for key in ("source_ref", "tested_ref"):

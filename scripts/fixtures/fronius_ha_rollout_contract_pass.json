@@ -1,0 +1,41 @@
+{
+  "contract_id": "helianthus.fronius-ha-rollout/v1",
+  "evidence_kind": "contract_fixture_v1",
+  "mode": "contract",
+  "release": {
+    "addon_version": "0.6.53",
+    "gateway_ref": "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e",
+    "ha_integration_ref": "e614e63898d4ddc317c66f1a673fefe0e2786245"
+  },
+  "required_assertions": {
+    "raw_mcp": "required",
+    "semantic_mcp": "required",
+    "graphql_m2m": "required",
+    "portal_semantic": "required",
+    "portal_raw": "required",
+    "home_assistant": "required",
+    "external_mtls": "required",
+    "credential_recovery": "required",
+    "channel_recovery": "required",
+    "restart": "required",
+    "modbus_independent_disable": "required",
+    "ha_independent_disable": "required",
+    "compatible_rollback": "required"
+  },
+  "safety": {
+    "no_modbus_writes": true,
+    "no_inverter_mutation": true,
+    "endpoint_values_redacted": true
+  },
+  "limits": {
+    "external_poll_min_seconds": 5,
+    "raw_max_registers": 125,
+    "response_max_bytes": 1048576
+  },
+  "rollback": {
+    "prior_version": "0.6.52",
+    "schema_compatible": true,
+    "backup_required": true
+  },
+  "live": null
+}
