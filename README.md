@@ -69,7 +69,7 @@ Modbus configuration.
 
 The dedicated M2M listener is also disabled by default. When enabled, the only
 Supervisor values are its server identity and opaque asset reference. TLS files
-are read from `/config/helianthus/pv-m2m`: `ca.pem`, `server-cert.pem`,
+are read from `/ssl/helianthus-pv-m2m`: `ca.pem`, `server-cert.pem`,
 `server-key.pem`, `portal-client-cert.pem`, and `portal-client-key.pem`.
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)

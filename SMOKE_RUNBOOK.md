@@ -180,9 +180,9 @@ integration revisions recorded by the rollout artifact. Keep every Modbus
 operation read-only and keep endpoint values out of the public artifact.
 
 Before enabling `m2m_graphql_enabled`, create the fixed TLS bundle below
-`/config/helianthus/pv-m2m`. The add-on reads `ca.pem`, `server-cert.pem`,
+`/ssl/helianthus-pv-m2m`. The add-on reads `ca.pem`, `server-cert.pem`,
 `server-key.pem`, `portal-client-cert.pem`, and `portal-client-key.pem` through
-the read-only `/config` mount. Home Assistant uses the same `ca.pem` plus its
+the read-only `/ssl` mount. Home Assistant uses the same `ca.pem` plus its
 own `ha-client-cert.pem` and `ha-client-key.pem`. Set the server identity option
 to an exact DNS name or IP SAN in `server-cert.pem`, and use one opaque asset
 reference consistently in the add-on and Home Assistant options.

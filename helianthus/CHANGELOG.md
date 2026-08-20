@@ -8,7 +8,7 @@
   through the existing single gateway process. The runtime remains disabled by
   default and fails closed unless the complete fixed TLS file bundle exists.
 - Expose only enabled state, server certificate identity, and opaque asset ref
-  as non-secret Supervisor options. Mount Home Assistant `/config` read-only;
+  as non-secret Supervisor options. Mount Home Assistant `/ssl` read-only;
   certificate and key bytes never enter options, argv, environment, logs, or
   the repository.
 - Keep gateway pin `739721c9ed19e95bb6531a3b87ebc5f49a3ef19e`,

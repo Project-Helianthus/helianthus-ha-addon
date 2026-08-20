@@ -12,7 +12,7 @@
   "init": false,
   "host_network": true,
   "map": [
-    "config:ro"
+    "ssl:ro"
   ],
   "ports": {
     "8080/tcp": 8080,
