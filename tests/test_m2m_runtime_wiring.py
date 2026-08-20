@@ -8,14 +8,15 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 VERSION = "0.6.54"
-TLS_ROOT = "/config/helianthus/pv-m2m"
+TLS_ROOT = "/ssl/helianthus-pv-m2m"
 
 
 def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
 
     assert config["version"] == VERSION
-    assert "config:ro" in config["map"]
+    assert config["map"] == ["ssl:ro"]
+    assert "config:ro" not in config["map"]
     assert config["ports"]["8443/tcp"] == 8443
     assert config["options"]["m2m_graphql_enabled"] is False
     assert config["options"]["m2m_graphql_server_name"] == ""
