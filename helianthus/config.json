@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.53",
+  "version": "0.6.54",
   "slug": "helianthus",
   "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [
@@ -11,11 +11,16 @@
   "boot": "auto",
   "init": false,
   "host_network": true,
+  "map": [
+    "config:ro"
+  ],
   "ports": {
-    "8080/tcp": 8080
+    "8080/tcp": 8080,
+    "8443/tcp": 8443
   },
   "ports_description": {
-    "8080/tcp": "GraphQL + MCP HTTP server"
+    "8080/tcp": "GraphQL + MCP HTTP server",
+    "8443/tcp": "Dedicated canonical PV M2M HTTPS server"
   },
   "image": "ghcr.io/project-helianthus/helianthus-ha-addon",
   "options": {
@@ -56,7 +61,10 @@
     "eebus_remote_ski_allowlist": "",
     "modbus_tcp_enabled": false,
     "modbus_tcp_endpoint": "",
-    "modbus_tcp_dial_timeout": "5s"
+    "modbus_tcp_dial_timeout": "5s",
+    "m2m_graphql_enabled": false,
+    "m2m_graphql_server_name": "",
+    "m2m_graphql_asset_ref": ""
   },
   "schema": {
     "adapter_direct_enabled": "bool",
@@ -97,6 +105,9 @@
     "eebus_remote_ski_allowlist": "str",
     "modbus_tcp_enabled": "bool",
     "modbus_tcp_endpoint": "str",
-    "modbus_tcp_dial_timeout": "str"
+    "modbus_tcp_dial_timeout": "str",
+    "m2m_graphql_enabled": "bool",
+    "m2m_graphql_server_name": "str",
+    "m2m_graphql_asset_ref": "str"
   }
 }

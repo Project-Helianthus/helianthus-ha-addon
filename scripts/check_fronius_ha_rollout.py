@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 
 
 CONTRACT_ID = "helianthus.fronius-ha-rollout/v1"
-ADDON_VERSION = "0.6.53"
+ADDON_VERSION = "0.6.54"
 GATEWAY_REF = "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e"
 HA_INTEGRATION_REF = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 IMAGE_REPOSITORY = "ghcr.io/project-helianthus/helianthus-ha-addon"
@@ -219,7 +219,7 @@ def validate(
             or type(rollback["backup_required"]) is not bool
             or rollback
             != {
-                "prior_version": "0.6.52",
+                "prior_version": "0.6.53",
                 "schema_compatible": True,
                 "backup_required": True,
             }

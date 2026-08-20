@@ -40,8 +40,9 @@ def test_wrapper_uses_fixed_tls_files_and_complete_m2m_flag_bundle() -> None:
         "portal-client-cert.pem",
         "portal-client-key.pem",
     )
+    assert f'm2m_tls_root="{TLS_ROOT}"' in run
     for name in fixed_files:
-        assert f'{TLS_ROOT}/{name}' in run
+        assert f'${{m2m_tls_root}}/{name}' in run
     required_flags = (
         "m2m-graphql-listen",
         "m2m-graphql-server-name",
@@ -90,6 +91,12 @@ def test_m2m_enabled_values_are_type_checked_and_never_logged() -> None:
     assert "m2m_graphql_enabled boolean" in run
     assert "m2m_graphql_server_name string" in run
     assert "m2m_graphql_asset_ref string" in run
+    enabled_read = run.index("m2m_graphql_enabled=$(jq -r")
+    enabled_gate = run.index('if [ "${m2m_graphql_enabled}" = "true" ]; then', enabled_read)
+    string_validation = run.index(
+        "m2m_validate_protected_option m2m_graphql_server_name string", enabled_gate
+    )
+    assert enabled_read < enabled_gate < string_validation
     assert "M2M GraphQL runtime: enabled" in run
     assert "${m2m_graphql_server_name}" not in {
         line for line in run.splitlines() if "bashio::log" in line

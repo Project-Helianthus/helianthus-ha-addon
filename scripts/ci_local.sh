@@ -61,7 +61,7 @@ python3 -m pytest \
   -q
 
 echo "==> Fronius-to-Home-Assistant rollout contract"
-python3 -m pytest tests/test_fronius_ha_rollout.py -q
+python3 -m pytest tests/test_fronius_ha_rollout.py tests/test_m2m_runtime_wiring.py -q
 python3 scripts/check_fronius_ha_rollout.py \
   --artifact scripts/fixtures/fronius_ha_rollout_contract_pass.json \
   --mode contract
