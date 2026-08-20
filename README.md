@@ -59,8 +59,9 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.55` packages the canonical PV MCP and authenticated GraphQL M2M
-surfaces plus separate semantic and bounded raw Portal views. Its rollout
+Release `0.6.56` packages the separated eeBUS Pairing, SHIP and read-only SPINE
+workspaces alongside the canonical PV MCP and authenticated GraphQL M2M
+surfaces. Its rollout
 contract binds the exact gateway image to the Home Assistant canonical PV
 consumer and preserves source/projection provenance without endpoints or raw
 words. The release preserves the owner-atomic raw Modbus retry, Supervisor

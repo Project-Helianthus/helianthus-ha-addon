@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.56 (2026-08-20)
+
+- Pin gateway `a759efd7f72a099288f1fc2b7cf20236d37cfa0b`, which separates
+  the eeBUS operator surface into Pairing, SHIP and read-only SPINE
+  workspaces.
+- Present durably trusted but physically offline partners as disconnected and
+  require a current connected SHIP capability before loading SPINE. A valid
+  connected snapshot without partner inventory is distinguished from a real
+  AdminV1 provider failure.
+- Preserve the 0.6.55 continuous SunSpec acquisition, M2M TLS, canonical PV,
+  eBUS/Modbus runtime behavior and Supervisor option schema unchanged.
+
 ## 0.6.55 (2026-08-20)
 
 - Pin gateway `b8416b9997f6778780441bb65eb0611181d85d88`, which replaces
