@@ -15,8 +15,8 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.54"
-GATEWAY = "739721c9ed19e95bb6531a3b87ebc5f49a3ef19e"
+RELEASE = "0.6.55"
+GATEWAY = "b8416b9997f6778780441bb65eb0611181d85d88"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",
@@ -33,7 +33,7 @@ REMOVED_WRAPPER_TERMS = (
 )
 
 
-def test_release_pin_is_0654_and_gateway_provenance_is_exact() -> None:
+def test_release_pin_is_0655_and_gateway_provenance_is_exact() -> None:
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
