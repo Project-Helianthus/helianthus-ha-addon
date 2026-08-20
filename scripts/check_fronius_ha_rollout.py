@@ -32,6 +32,7 @@ REQUIRED_ASSERTIONS = {
 }
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+BACKUP_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
 def _closed(value: object, keys: set[str], context: str) -> dict[str, Any]:
@@ -104,7 +105,7 @@ def validate(payload: object, mode: str) -> list[str]:
             {"no_modbus_writes", "no_inverter_mutation", "endpoint_values_redacted"},
             "safety",
         )
-        if set(safety.values()) != {True}:
+        if any(type(value) is not bool or value is not True for value in safety.values()):
             errors.append("all safety invariants must be true")
 
         limits = _closed(
@@ -112,7 +113,7 @@ def validate(payload: object, mode: str) -> list[str]:
             {"external_poll_min_seconds", "raw_max_registers", "response_max_bytes"},
             "limits",
         )
-        if limits != {
+        if any(type(value) is not int for value in limits.values()) or limits != {
             "external_poll_min_seconds": 5,
             "raw_max_registers": 125,
             "response_max_bytes": 1_048_576,
@@ -124,11 +125,16 @@ def validate(payload: object, mode: str) -> list[str]:
             {"prior_version", "schema_compatible", "backup_required"},
             "rollback",
         )
-        if rollback != {
-            "prior_version": "0.6.52",
-            "schema_compatible": True,
-            "backup_required": True,
-        }:
+        if (
+            type(rollback["schema_compatible"]) is not bool
+            or type(rollback["backup_required"]) is not bool
+            or rollback
+            != {
+                "prior_version": "0.6.52",
+                "schema_compatible": True,
+                "backup_required": True,
+            }
+        ):
             errors.append("rollback contract mismatch")
 
         if mode == "contract":
@@ -153,8 +159,10 @@ def validate(payload: object, mode: str) -> list[str]:
             if not DIGEST_RE.fullmatch(str(live["evidence_ref"])):
                 errors.append("live evidence_ref must be sha256")
             _rfc3339(live["installed_at"], "live installed_at")
-            if not isinstance(live["backup_ref"], str) or not live["backup_ref"]:
-                errors.append("live backup_ref missing")
+            if not isinstance(live["backup_ref"], str) or not BACKUP_RE.fullmatch(
+                live["backup_ref"]
+            ):
+                errors.append("live backup_ref must be an 8-character lowercase hex slug")
             if live["runtime_version"] != ADDON_VERSION:
                 errors.append("live runtime version mismatch")
             if live["gateway_build_id"] != GATEWAY_REF:
