@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.6.53 (2026-08-20)
+
+- Pin the gateway to M5-06 merge
+  `739721c9ed19e95bb6531a3b87ebc5f49a3ef19e`, including the authenticated
+  `PUBLIC_GRAPHQL_M2M_V1` surface and separate semantic PV and bounded raw
+  Modbus Portal views.
+- Bind the rollout proof to Home Assistant integration M5-07 merge
+  `e614e63898d4ddc317c66f1a673fefe0e2786245`, which consumes only the
+  canonical GraphQL PV contract with stable entity identities and closed
+  mTLS configuration.
+- Add a closed contract and live-artifact verifier for raw and semantic MCP,
+  GraphQL, Portal, Home Assistant, credential and channel recovery, restart,
+  independent disable, and schema-compatible rollback. Modbus remains
+  read-only and disabled by default.
+
 ## 0.6.52 (2026-08-17)
 
 - Pin the gateway to `d8bdb0f66b30a30c09690935d18a887ff5c84f64`,
