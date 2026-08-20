@@ -9,8 +9,8 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.6.55"
-GATEWAY = "b8416b9997f6778780441bb65eb0611181d85d88"
+VERSION = "0.6.56"
+GATEWAY = "a759efd7f72a099288f1fc2b7cf20236d37cfa0b"
 HA_INTEGRATION = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 FIXTURE = ROOT / "scripts/fixtures/fronius_ha_rollout_contract_pass.json"
 VERIFIER = ROOT / "scripts/check_fronius_ha_rollout.py"

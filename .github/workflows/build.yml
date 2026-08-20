@@ -94,7 +94,7 @@ jobs:
             org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
           build-args: |
             BUILD_VERSION=${{ steps.addon.outputs.version }}
-            EBUSGATEWAY_VERSION=b8416b9997f6778780441bb65eb0611181d85d88
+            EBUSGATEWAY_VERSION=a759efd7f72a099288f1fc2b7cf20236d37cfa0b
             VRCEXPLORER_VERSION=v0.5.1
             BUILD_FROM=${{ matrix.base }}
           secrets: |
