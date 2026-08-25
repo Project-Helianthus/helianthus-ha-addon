@@ -1,75 +1,45 @@
 # AGENTS
 
-This repository is part of the **Helianthus Multi-Protocol HVAC Gateway Platform**.
+## Scope
 
-## Dual-AI Operating Model
+This repository owns the Helianthus Home Assistant add-on packaging only:
 
-All development follows the dual-AI orchestrator protocol defined in the workspace-root [`AGENTS.md`](../AGENTS.md):
+- add-on metadata and configuration;
+- container image and filesystem overlay;
+- startup, argument wiring, and safe runtime guards.
 
-- **Role binding:** `ORCHESTRATOR` and `CO_PILOT` are portable roles. The current workspace default is Claude as orchestrator and Codex as co-pilot, but this repo must remain swap-ready.
-- **Co-Pilot use:** Use the co-pilot only for adversarial/cooperative reasoning roles such as planner, bounded developer, reviewer, and second-opinion consultant. Do not spend Claude MCP or any equivalent co-pilot runtime on file reads, globs, grep, polling, or routine repo inspection.
-- **Fallback:** If the preferred co-pilot is unavailable, throttled, or not integrated, the active orchestrator spawns fresh-context agents on the available runtime and keeps the same supervision contract.
-- Phases: Adversarial Planning → Smart Routing → Dual Code Review
-- Hard rules: one issue/PR per repo, squash+merge only, doc-gate, transport-gate, MCP-first
+Do not add gateway semantics, protocol decoding, device discovery, public API
+design, or Home Assistant integration entities here. Consume already-published
+artifacts and stable interfaces without redefining their contracts.
 
-See the root AGENTS.md for the full protocol, routing tables, portable role prompts, and invariants. When running under Codex local orchestration, use the workspace-root skills `helianthus-orchestrator-supervision` and `helianthus-review-watch` as the portable supervision contract.
+## Workflow
 
----
+1. Create one English GitHub issue for the change.
+2. Create `issue/<number>-<short-slug>` from `origin/main`.
+3. Make the smallest scoped change and add or update focused tests when behavior
+   changes.
+4. Run the relevant local validation, commit, push, and open one PR that links
+   the issue.
+5. Do not merge the PR. Address review findings on the PR branch and rerun the
+   relevant validation.
 
-## Repo-Specific Rules
+Use public GitHub URLs in tracked documentation. Instructions must remain
+usable when this repository is checked out alone and must not depend on external
+checkout or machine state.
 
-## Helianthus HA Add-on – Agent Instructions
+## Validation and deployment
 
-### Scope
+- Validate packaging, configuration, startup, and container behavior with local
+  checks, fixtures, or mocks where practical.
+- A local or real Home Assistant deployment is optional validation, not a
+  prerequisite for ordinary changes.
+- Never perform a live deployment, installation write, credential change, or
+  live-system mutation without explicit operator confirmation at action time.
+- Record the command and result for every validation run in the PR.
 
-This repository contains the Home Assistant add-on for Helianthus. The current phase is bootstrap only: add minimal add-on structure and repo docs without any functional daemon or integration logic.
+## Review hygiene
 
-### Constraints
-
-- Keep changes minimal and focused on scaffolding.
-- Do not introduce real eBUS/HA integration until explicitly requested.
-- Follow `CONVENTIONS.md` for repo structure and documentation style.
-- React (emoji) to every review comment and reply with status when actioned.
-
-### MCP-first Policy
-
-#### Scope and ordering
-- MCP is the primary prototyping/exploration interface.
-- GraphQL is second and may reach parity only after MCP tools are deterministic and contract-solid.
-- Home Assistant and other consumers are enabled only after GraphQL parity and stability gates are met.
-
-#### Tool taxonomy and naming
-- Core stable tools use versioned names: `ebus.v<MAJOR>.<domain>.<subdomain>.<verb>`.
-- Experimental tools live under `ebus.experimental.*` and are never used by external consumers.
-- Prefer composable tools over monolithic endpoints.
-
-#### Contract envelope (required for ebus.v1.*)
-Each `ebus.v1.*` tool returns:
-- `meta` with `contract`, `consistency`, `data_timestamp`, `data_hash`
-- `data`
-- `error` (null or structured error)
-
-#### Determinism requirements
-- List ordering must be stable.
-- Snapshot mode must produce stable `data_hash` for identical snapshot + request.
-- Tool schemas and outputs must have golden snapshots.
-
-#### Invoke safety
-`ebus.v1.rpc.invoke` requires:
-- explicit `intent` (`READ_ONLY` or `MUTATE`)
-- `allow_dangerous=true` for mutating or unknown methods
-- `idempotency_key` for mutating intent
-
-#### Graduation gates (MCP -> GraphQL)
-A capability may graduate to GraphQL only if:
-1. it exists as core stable MCP (`ebus.v1.*`)
-2. it passes determinism + contract + golden tests
-3. parity tests MCP <-> GraphQL are green
-
-#### End-of-cycle cleanup
-At cycle end, each `ebus.experimental.*` tool must be promoted, deleted, or moved to internal-only with written justification.
-No temporary/junk tool may remain in the showroom surface.
-
-#### CI gates
-- Breaking changes in `ebus.v1.*` require a new major namespace.
-- Parity drift MCP vs GraphQL fails CI.
+- Keep one active issue and PR for the same repository change.
+- Reply to actionable review comments with the result and commit reference.
+- Preserve backward-compatible add-on configuration unless an approved issue
+  explicitly requires a migration.
