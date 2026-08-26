@@ -205,6 +205,7 @@ m2m_server_cert="${m2m_tls_root}/server-cert.pem"
 m2m_server_key="${m2m_tls_root}/server-key.pem"
 m2m_portal_client_cert="${m2m_tls_root}/portal-client-cert.pem"
 m2m_portal_client_key="${m2m_tls_root}/portal-client-key.pem"
+m2m_identity_validator="${HELIANTHUS_M2M_IDENTITY_VALIDATOR:-/usr/share/helianthus/m2m_tls_identity.py}"
 
 m2m_validate_protected_option() {
   local key expected_type
@@ -755,7 +756,7 @@ m2m_args=()
 if bashio::var.true "${m2m_graphql_enabled}"; then
   m2m_graphql_server_name=$(printf '%s' "${m2m_graphql_server_name}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   m2m_graphql_asset_ref=$(printf '%s' "${m2m_graphql_asset_ref}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-  if ! [[ "${m2m_graphql_server_name}" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]]; then
+  if ! python3 "${m2m_identity_validator}" "${m2m_graphql_server_name}" >/dev/null 2>&1; then
     bashio::exit.nok "M2M GraphQL requires a valid server certificate identity"
   fi
   if ! [[ "${m2m_graphql_asset_ref}" =~ ^[A-Za-z0-9._:-]{1,64}$ ]]; then
