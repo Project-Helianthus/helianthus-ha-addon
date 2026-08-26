@@ -127,7 +127,6 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     text = text.replace("/data/source_addr.last", "${TEST_SOURCE_STATE}")
     text = text.replace("/etc/machine-id", "${TEST_MACHINE_ID}")
     text = text.replace('interface_id_path="/sys/class/net/${eebus_interface}/address"', 'interface_id_path="${TEST_INTERFACE_ID_PATH}"')
-    text = text.replace('eebus_options_path="/data/options.json"', 'eebus_options_path="${TEST_EEBUS_OPTIONS}"')
     text = text.replace("/usr/share/helianthus/eebus_admin_credentials.py", "${TEST_LEGACY_HELPER}")
     text = text.replace("/run/helianthus/eebus-admin", "${TEST_LEGACY_RUNTIME}")
     wrapper.write_text(prelude + "\n" + text, encoding="utf-8")
@@ -139,6 +138,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "TEST_INTERFACE_ID_PATH": str(interface_id),
         "TEST_MACHINE_ID": str(tmp_path / "machine-id"),
         "TEST_EEBUS_OPTIONS": str(options),
+        "HELIANTHUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_RUNTIME_STATE_WRAPPER": str(ROOT / "helianthus/rootfs/usr/share/helianthus/check_runtime_state_wrapper.py"),
         "HELIANTHUS_RUNTIME_STATE_PATH": str(tmp_path / "runtime-state.json"),
         "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
@@ -155,3 +155,10 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     for term in REMOVED_WRAPPER_TERMS:
         assert term not in rendered
     assert "eeBUS admin" not in rendered
+
+
+def test_eebus_protected_options_share_the_configurable_options_path() -> None:
+    run = RUN.read_text(encoding="utf-8")
+
+    assert run.count('"${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"') == 2
+    assert 'eebus_options_path="${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"' in run
