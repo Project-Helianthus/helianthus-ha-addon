@@ -33,7 +33,7 @@
     "response_max_bytes": 1048576
   },
   "rollback": {
-    "prior_version": "0.6.53",
+    "prior_version": "0.6.55",
     "schema_compatible": true,
     "backup_required": true
   },

@@ -219,7 +219,7 @@ def validate(
             or type(rollback["backup_required"]) is not bool
             or rollback
             != {
-                "prior_version": "0.6.53",
+                "prior_version": "0.6.55",
                 "schema_compatible": True,
                 "backup_required": True,
             }
