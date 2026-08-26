@@ -132,7 +132,7 @@ def test_enabled_wrapper_executes_gateway_with_portal_semantic_switch(
         json.dumps(
             {
                 "m2m_graphql_enabled": True,
-                "m2m_graphql_server_name": "192.0.2.10",
+                "m2m_graphql_server_name": "2001:db8::10",
                 "m2m_graphql_asset_ref": "pv-asset-fixture",
             }
         ),
@@ -224,3 +224,5 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     assert result.returncode == 0, result.stderr
     executed = argv.read_text(encoding="utf-8").splitlines()
     assert "-portal-pv-semantic-enabled=true" in executed
+    assert executed[executed.index("-m2m-graphql-server-name") + 1] == "2001:db8::10"
+    assert executed[executed.index("-portal-pv-m2m-server-name") + 1] == "2001:db8::10"
