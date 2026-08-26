@@ -104,6 +104,11 @@ def test_rollout_contract_fixture_covers_every_m5_08_gate() -> None:
         "ha_independent_disable",
         "compatible_rollback",
     }
+    assert payload["rollback"] == {
+        "prior_version": "0.6.55",
+        "schema_compatible": True,
+        "backup_required": True,
+    }
 
 
 def test_rollout_verifier_is_wired_into_ci_and_smoke_runbook() -> None:
