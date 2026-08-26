@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -12,6 +13,7 @@ CONFIG = ROOT / "helianthus/config.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 VERSION = "0.6.56"
 TLS_ROOT = "/ssl/helianthus-pv-m2m"
+M2M_IDENTITY_VALIDATOR = ROOT / "helianthus/rootfs/usr/share/helianthus/m2m_tls_identity.py"
 
 
 def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() -> None:
@@ -110,6 +112,18 @@ def test_m2m_enabled_values_are_type_checked_and_never_logged() -> None:
     }
 
 
+def test_m2m_tls_identity_validator_accepts_ip_sans_and_rejects_malformed_values() -> None:
+    for identity in ("gateway.example", "192.0.2.10", "2001:db8::10"):
+        result = subprocess.run(
+            [sys.executable, str(M2M_IDENTITY_VALIDATOR), identity], check=False
+        )
+        assert result.returncode == 0
+
+    for identity in ("", "2001:db8:::10", "gateway example"):
+        result = subprocess.run(
+            [sys.executable, str(M2M_IDENTITY_VALIDATOR), identity], check=False
+        )
+        assert result.returncode == 1
 def test_enabled_wrapper_executes_gateway_with_portal_semantic_switch(
     tmp_path: Path,
 ) -> None:
@@ -132,7 +146,7 @@ def test_enabled_wrapper_executes_gateway_with_portal_semantic_switch(
         json.dumps(
             {
                 "m2m_graphql_enabled": True,
-                "m2m_graphql_server_name": "192.0.2.10",
+                "m2m_graphql_server_name": "2001:db8::10",
                 "m2m_graphql_asset_ref": "pv-asset-fixture",
             }
         ),
@@ -217,6 +231,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         ),
         "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
+        "HELIANTHUS_M2M_IDENTITY_VALIDATOR": str(M2M_IDENTITY_VALIDATOR),
     }
     result = subprocess.run(
         ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False
@@ -224,3 +239,5 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     assert result.returncode == 0, result.stderr
     executed = argv.read_text(encoding="utf-8").splitlines()
     assert "-portal-pv-semantic-enabled=true" in executed
+    assert executed[executed.index("-m2m-graphql-server-name") + 1] == "2001:db8::10"
+    assert executed[executed.index("-portal-pv-m2m-server-name") + 1] == "2001:db8::10"
