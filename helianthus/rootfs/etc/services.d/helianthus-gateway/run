@@ -45,8 +45,8 @@ fi
 # Supervisor cache-invalidation bug appears specific to this key and reproduces
 # only after the addon options POST without a container recreation. When
 # bashio returns empty, parse the JSON directly via jq as the source of truth.
-if [ -z "${proxy_listen_addr}" ] && [ -f /data/options.json ] && command -v jq >/dev/null 2>&1; then
-  proxy_listen_addr_fallback=$(jq -r '.proxy_listen_addr // empty' /data/options.json 2>/dev/null || true)
+if [ -z "${proxy_listen_addr}" ] && [ -f "${addon_options_path}" ] && command -v jq >/dev/null 2>&1; then
+  proxy_listen_addr_fallback=$(jq -r '.proxy_listen_addr // empty' "${addon_options_path}" 2>/dev/null || true)
   if [ -n "${proxy_listen_addr_fallback}" ] && [ "${proxy_listen_addr_fallback}" != "null" ]; then
     bashio::log.warning "bashio::config 'proxy_listen_addr' returned empty; falling back to /data/options.json (value=${proxy_listen_addr_fallback}). Supervisor cache-invalidation bug — see EBUSD-VERIFICATION-2026-05-10.md F-1."
     proxy_listen_addr="${proxy_listen_addr_fallback}"
@@ -148,7 +148,7 @@ unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_pre_exec_s
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain
 # JSON scalar types, so validation after capture would be too late.
-eebus_options_path="/data/options.json"
+eebus_options_path="${addon_options_path}"
 eebus_validate_protected_option() {
   local key expected_type
   key="$1"

@@ -160,5 +160,6 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
 def test_eebus_protected_options_share_the_configurable_options_path() -> None:
     run = RUN.read_text(encoding="utf-8")
 
-    assert run.count('"${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"') == 2
-    assert 'eebus_options_path="${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"' in run
+    assert 'addon_options_path="${HELIANTHUS_OPTIONS_PATH:-/data/options.json}"' in run
+    assert 'eebus_options_path="${addon_options_path}"' in run
+    assert '[ -f "${addon_options_path}" ]' in run
