@@ -486,7 +486,7 @@ def _find_ip_tokens(value: str) -> set[str]:
 
 def _is_forbidden_ip(value: str) -> bool:
     try:
-        address = ipaddress.ip_address(value)
+        ipaddress.ip_address(value)
     except ValueError:
         return False
     return True
