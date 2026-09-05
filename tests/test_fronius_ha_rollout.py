@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.6.56"
@@ -23,6 +25,60 @@ PUBLICATION = {
     "manifest_digest": MANIFEST_DIGEST,
     "platform_digest": PLATFORM_DIGEST,
 }
+
+
+class _Response:
+    def __init__(self, raw: bytes, headers: dict[str, str] | None = None) -> None:
+        self._raw = raw
+        self.headers = headers or {}
+
+    def __enter__(self):  # noqa: ANN204
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self, _limit: int) -> bytes:
+        return self._raw
+
+
+def _mock_registry(
+    monkeypatch: pytest.MonkeyPatch,
+    verifier,
+    *,
+    token_payload: object = None,
+    manifest_payload: object = None,
+    manifest_raw: bytes | None = None,
+    manifest_digest: str = MANIFEST_DIGEST,
+) -> list:
+    if token_payload is None:
+        token_payload = {"token": "fixture-token"}
+    if manifest_payload is None:
+        manifest_payload = {
+            "manifests": [
+                {
+                    "digest": "sha256:" + "c" * 64,
+                    "platform": {"os": "linux", "architecture": "amd64"},
+                },
+                {
+                    "digest": PLATFORM_DIGEST,
+                    "platform": {"os": "linux", "architecture": "arm64"},
+                },
+            ]
+        }
+    requests = []
+
+    def fake_urlopen(request, *, timeout: int):  # noqa: ANN001, ANN202
+        requests.append((request, timeout))
+        if len(requests) == 1:
+            return _Response(json.dumps(token_payload).encode())
+        raw = manifest_raw
+        if raw is None:
+            raw = json.dumps(manifest_payload).encode()
+        return _Response(raw, {"Docker-Content-Digest": manifest_digest})
+
+    monkeypatch.setattr(verifier, "urlopen", fake_urlopen)
+    return requests
 
 
 def _verifier_module():  # noqa: ANN202
@@ -180,3 +236,155 @@ def test_rollout_verifier_rejects_non_rfc3339_timestamp() -> None:
         payload = _live_payload()
         payload["live"]["installed_at"] = invalid
         assert verifier.validate(payload, "lab", publication=PUBLICATION)
+
+
+@pytest.mark.parametrize("token_payload", ({}, {"token": ""}, {"token": 7}))
+def test_publication_resolver_rejects_missing_token(
+    monkeypatch: pytest.MonkeyPatch, token_payload: object
+) -> None:
+    verifier = _verifier_module()
+    _mock_registry(monkeypatch, verifier, token_payload=token_payload)
+
+    with pytest.raises(ValueError, match="pull token missing"):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+@pytest.mark.parametrize(
+    ("manifest_raw", "manifest_payload", "expected_error"),
+    (
+        (b"x" * 1_048_577, None, (ValueError,)),
+        (b"not-json", None, (json.JSONDecodeError,)),
+        (None, {"manifests": {}}, (ValueError,)),
+    ),
+)
+def test_publication_resolver_rejects_invalid_or_oversized_index(
+    monkeypatch: pytest.MonkeyPatch,
+    manifest_raw: bytes | None,
+    manifest_payload: object,
+    expected_error: tuple[type[Exception], ...],
+) -> None:
+    verifier = _verifier_module()
+    _mock_registry(
+        monkeypatch,
+        verifier,
+        manifest_raw=manifest_raw,
+        manifest_payload=manifest_payload,
+    )
+
+    with pytest.raises(expected_error):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+def test_publication_resolver_rejects_invalid_index_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = _verifier_module()
+    _mock_registry(monkeypatch, verifier, manifest_digest="sha256:not-a-digest")
+
+    with pytest.raises(ValueError, match="manifest response is invalid"):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+@pytest.mark.parametrize(
+    "matching_descriptors",
+    (
+        [],
+        [
+            {
+                "digest": PLATFORM_DIGEST,
+                "platform": {"os": "linux", "architecture": "arm64"},
+            },
+            {
+                "digest": "sha256:" + "d" * 64,
+                "platform": {"os": "linux", "architecture": "arm64"},
+            },
+        ],
+    ),
+)
+def test_publication_resolver_rejects_absent_or_ambiguous_platform(
+    monkeypatch: pytest.MonkeyPatch, matching_descriptors: list[dict]
+) -> None:
+    verifier = _verifier_module()
+    manifest = {
+        "manifests": [
+            {
+                "digest": "sha256:" + "c" * 64,
+                "platform": {"os": "linux", "architecture": "amd64"},
+            },
+            *matching_descriptors,
+        ]
+    }
+    _mock_registry(monkeypatch, verifier, manifest_payload=manifest)
+
+    with pytest.raises(ValueError, match="platform is missing or ambiguous"):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+def test_publication_resolver_rejects_malformed_platform_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = _verifier_module()
+    manifest = {
+        "manifests": [
+            {
+                "digest": "sha256:invalid",
+                "platform": {"os": "linux", "architecture": "arm64"},
+            }
+        ]
+    }
+    _mock_registry(monkeypatch, verifier, manifest_payload=manifest)
+
+    with pytest.raises(ValueError, match="platform digest is invalid"):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+def test_publication_resolver_binds_exact_index_and_platform_digests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = _verifier_module()
+    requests = _mock_registry(monkeypatch, verifier)
+
+    publication = verifier.resolve_publication(
+        PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+    )
+
+    assert publication == PUBLICATION
+    assert len(requests) == 2
+    token_request, token_timeout = requests[0]
+    manifest_request, manifest_timeout = requests[1]
+    assert token_timeout == manifest_timeout == 30
+    assert token_request.full_url.startswith("https://ghcr.io/token?")
+    assert "repository%3Aproject-helianthus%2Fhelianthus-ha-addon%3Apull" in (
+        token_request.full_url
+    )
+    assert manifest_request.full_url.endswith(
+        "/project-helianthus/helianthus-ha-addon/manifests/0.6.56"
+    )
+    assert manifest_request.get_header("Authorization") == "Bearer fixture-token"
+    assert "application/vnd.oci.image.index.v1+json" in manifest_request.get_header(
+        "Accept"
+    )
+
+
+def test_public_release_manifest_probe_resolves_existing_tag() -> None:
+    verifier = _verifier_module()
+
+    publication = verifier.resolve_publication(
+        PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+    )
+
+    assert publication["image_repository"] == PUBLICATION["image_repository"]
+    assert publication["image_tag"] == VERSION
+    assert publication["target_platform"] == PUBLICATION["target_platform"]
+    assert verifier.DIGEST_RE.fullmatch(publication["manifest_digest"])
+    assert verifier.DIGEST_RE.fullmatch(publication["platform_digest"])

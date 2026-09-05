@@ -49,6 +49,7 @@ python3 scripts/check_eebus_ha_network_proof.py --artifact scripts/fixtures/eebu
 
 echo "==> source address wrapper migration"
 python3 scripts/check_source_addr_wrapper.py
+python3 -m pytest tests/test_source_addr_wrapper_m4.py -q
 
 echo "==> persistent eeBUS wrapper wiring"
 python3 scripts/check_eebus_wrapper.py
