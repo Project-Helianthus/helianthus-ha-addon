@@ -652,6 +652,14 @@ gateway_supports_flag() {
   binary_supports_flag "${gateway_bin}" "$1"
 }
 
+# The wrapper creates an identity only for this invocation; durable ownership
+# belongs exclusively to the gateway's eager runtime-state writer. Refuse to
+# start a packaged binary that cannot receive that identity rather than adding
+# a wrapper-side persistence fallback.
+if ! gateway_supports_flag "instance-guid"; then
+  bashio::exit.nok "Packaged gateway binary does not support required -instance-guid; refusing startup without gateway-owned runtime-state persistence"
+fi
+
 # Gate `-enable-static-seed-table` on gateway support — the flag is
 # only present in builds containing P3 wiring. Older pinned gateway
 # binaries would fail flag parsing at startup. (Codex P1+P2 follow-up

@@ -36,7 +36,6 @@ import re
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -302,71 +301,6 @@ def write_migration_marker(
             pass  # happy-path: temp already consumed by os.replace above
 
 
-def persist_bootstrap_runtime_state(
-    runtime_state_path: str,
-    instance_guid: str,
-    written_at: str,
-) -> bool:
-    """Write a minimal schema-valid runtime_state.json for case-3 bootstrap.
-
-    Codex P2 follow-up on PR #127: a /data/helianthus-gateway override that
-    predates M2_GATEWAY_LOADER will not write runtime_state.json itself, so
-    a fresh install that hits case 3 (both files absent → generate UUIDv4)
-    would re-enter case 3 on every restart and present a different HA
-    identity. Persisting from the wrapper bootstraps the file once; the
-    pinned (M2-aware) gateway then takes over via eager-persist and adds
-    ebus.* sections. Older overrides simply leave the file alone, but
-    identity is now stable across restarts because the wrapper itself
-    reads its own bootstrap on the next boot.
-
-    This is the ONLY non-gateway writer of runtime_state.json. It writes
-    only the fields the schema requires (schema_version, meta) and never
-    touches ebus.* — the gateway owns those.
-
-    Atomic temp+rename within the target file's directory. Returns True on
-    success, False on any I/O error (caller logs and continues — failing
-    closed here would block fresh installs).
-    """
-    body = (
-        json.dumps(
-            {
-                "schema_version": 1,
-                "meta": {
-                    "instance_guid": instance_guid,
-                    "written_at": written_at,
-                },
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n"
-    )
-    target = Path(runtime_state_path)
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as fp:
-            fp.write(body)
-            fp.flush()
-            try:
-                os.fsync(fp.fileno())
-            except (OSError, AttributeError):
-                pass  # best-effort fsync
-        os.replace(tmp, target)
-        return True
-    except OSError:
-        # Best-effort: the gateway will still receive -instance-guid for
-        # this run; identity churn becomes an issue only across restarts,
-        # and the operator will see HELIANTHUS_FRESH_IDENTITY each time
-        # which is the established case-3 signal.
-        try:
-            tmp.unlink()
-        except (FileNotFoundError, NameError, OSError):
-            # Successful replace consumes tmp; unlink fails benignly here.
-            pass
-        return False
-
-
 def emit_log_lines(lines: list[str], stream=None) -> None:
     """Write the structured log lines to the Supervisor stdout stream.
 
@@ -399,8 +333,9 @@ def main(argv: list[str] | None = None) -> int:
       - Reads /data/runtime_state.json (with AD26 ENOENT retries).
       - On AD09a halt: writes /data/.helianthus_migration_required marker file,
         emits HELIANTHUS_MIGRATION_REQUIRED log token, exits with code 1.
-      - On case (3) fresh generation: emits HELIANTHUS_FRESH_IDENTITY warn
-        and bootstrap-persists the generated GUID into runtime_state.json.
+      - On case (3) fresh generation: emits HELIANTHUS_FRESH_IDENTITY and
+        passes the one generated GUID to the gateway. The gateway is the
+        sole writer and eagerly persists it.
 
     Standalone invocation (no args) is also a CI smoke check: it runs the
     resolver against runtime defaults; if the system has no /data/ dir,
@@ -430,26 +365,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         emit_log_lines(result.log_lines)
         return EXIT_MIGRATION_REQUIRED
-
-    # Case 3 (fresh generation): persist the bootstrap runtime_state.json
-    # before handing identity to the gateway. Without this, an old
-    # /data/helianthus-gateway override that predates M2_GATEWAY_LOADER
-    # would never write the file, and every restart would generate a
-    # different identity (Codex P2 on PR #127). The pinned gateway will
-    # overwrite this file with the full schema during eager-persist.
-    if result.source == IDENTITY_SOURCE_GENERATED:
-        written_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        if not persist_bootstrap_runtime_state(
-            runtime_state_path=runtime_state_path,
-            instance_guid=result.guid,
-            written_at=written_at,
-        ):
-            print(
-                "WARN HELIANTHUS_BOOTSTRAP_PERSIST_FAILED "
-                f"path={runtime_state_path}; identity may churn across restarts "
-                "if the pinned gateway also fails to write runtime_state.json",
-                file=sys.stderr,
-            )
 
     # Case (1/3/4) success — emit log lines (warn on case 3 fresh-id;
     # warn on case 4 mismatch; silent on case 1).
