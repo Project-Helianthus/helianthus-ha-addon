@@ -3,9 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import urllib.request
 
 import pytest
 
@@ -25,6 +27,23 @@ PUBLICATION = {
     "manifest_digest": MANIFEST_DIGEST,
     "platform_digest": PLATFORM_DIGEST,
 }
+PUBLIC_GHCR_PROBE_ENV = "HELIANTHUS_RUN_PUBLIC_GHCR_PROBE"
+_ORIGINAL_URLOPEN = urllib.request.urlopen
+
+
+@pytest.fixture(autouse=True)
+def _deny_unmocked_registry_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    def denied_urlopen(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("unit tests must not access the public registry")
+
+    monkeypatch.setattr(urllib.request, "urlopen", denied_urlopen)
+
+
+@pytest.fixture
+def _public_ghcr_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    if os.environ.get(PUBLIC_GHCR_PROBE_ENV) != "1":
+        pytest.skip(f"set {PUBLIC_GHCR_PROBE_ENV}=1 to run the public GHCR probe")
+    monkeypatch.setattr(urllib.request, "urlopen", _ORIGINAL_URLOPEN)
 
 
 class _Response:
@@ -376,7 +395,18 @@ def test_publication_resolver_binds_exact_index_and_platform_digests(
     )
 
 
-def test_public_release_manifest_probe_resolves_existing_tag() -> None:
+def test_default_resolver_suite_denies_unmocked_registry_access() -> None:
+    verifier = _verifier_module()
+
+    with pytest.raises(AssertionError, match="must not access the public registry"):
+        verifier.resolve_publication(
+            PUBLICATION["image_repository"], VERSION, PUBLICATION["target_platform"]
+        )
+
+
+def test_public_release_manifest_probe_resolves_existing_tag(
+    _public_ghcr_probe: None,
+) -> None:
     verifier = _verifier_module()
 
     publication = verifier.resolve_publication(
