@@ -70,7 +70,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install --quiet --user pytest
           python3 scripts/check_source_addr_wrapper.py
+          python3 -m pytest tests/test_source_addr_wrapper_m4.py -q
 
       - name: Validate persistent eeBUS wrapper wiring
         shell: bash

@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
@@ -124,8 +126,11 @@ def test_m2m_tls_identity_validator_accepts_ip_sans_and_rejects_malformed_values
             [sys.executable, str(M2M_IDENTITY_VALIDATOR), identity], check=False
         )
         assert result.returncode == 1
-def test_enabled_wrapper_executes_gateway_with_portal_semantic_switch(
-    tmp_path: Path,
+
+
+@pytest.mark.parametrize("m2m_enabled", (False, True))
+def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
+    tmp_path: Path, m2m_enabled: bool
 ) -> None:
     wrapper = tmp_path / "run-under-test.sh"
     gateway = tmp_path / "gateway.py"
@@ -145,7 +150,7 @@ def test_enabled_wrapper_executes_gateway_with_portal_semantic_switch(
     options.write_text(
         json.dumps(
             {
-                "m2m_graphql_enabled": True,
+                "m2m_graphql_enabled": m2m_enabled,
                 "m2m_graphql_server_name": "2001:db8::10",
                 "m2m_graphql_asset_ref": "pv-asset-fixture",
             }
@@ -238,6 +243,41 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     )
     assert result.returncode == 0, result.stderr
     executed = argv.read_text(encoding="utf-8").splitlines()
-    assert "-portal-pv-semantic-enabled=true" in executed
-    assert executed[executed.index("-m2m-graphql-server-name") + 1] == "2001:db8::10"
-    assert executed[executed.index("-portal-pv-m2m-server-name") + 1] == "2001:db8::10"
+    m2m_argv = [
+        "-m2m-graphql-listen",
+        "0.0.0.0:8443",
+        "-m2m-graphql-server-name",
+        "2001:db8::10",
+        "-m2m-graphql-client-ca",
+        str(tls_root / "ca.pem"),
+        "-m2m-graphql-server-cert",
+        str(tls_root / "server-cert.pem"),
+        "-m2m-graphql-server-key",
+        str(tls_root / "server-key.pem"),
+        "-m2m-graphql-allowed-assets",
+        "pv-asset-fixture",
+        "-m2m-graphql-known-assets",
+        "pv-asset-fixture",
+        "-portal-pv-semantic-enabled=true",
+        "-portal-pv-m2m-url",
+        "https://127.0.0.1:8443/graphql/m2m/v1",
+        "-portal-pv-m2m-server-name",
+        "2001:db8::10",
+        "-portal-pv-m2m-ca",
+        str(tls_root / "ca.pem"),
+        "-portal-pv-m2m-client-cert",
+        str(tls_root / "portal-client-cert.pem"),
+        "-portal-pv-m2m-client-key",
+        str(tls_root / "portal-client-key.pem"),
+        "-portal-pv-asset-ref",
+        "pv-asset-fixture",
+    ]
+    if m2m_enabled:
+        assert executed[executed.index("-m2m-graphql-listen") :] == m2m_argv
+        assert "M2M GraphQL runtime: enabled" in log.read_text(encoding="utf-8")
+    else:
+        assert not any(
+            arg.startswith("-m2m-graphql-") or arg.startswith("-portal-pv-")
+            for arg in executed
+        )
+        assert "M2M GraphQL runtime: disabled" in log.read_text(encoding="utf-8")
