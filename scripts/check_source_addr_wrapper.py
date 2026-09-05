@@ -100,19 +100,22 @@ def _write_gateway_stub(path: Path, mode: str) -> None:
         # `old` predates startup-source-override AND -instance-guid-source —
         # the bash run script must suppress -instance-guid-source via the
         # AD27 compatibility gate (Codex P2 follow-up on PR #127).
-        "old": "Usage of gateway:\n  -source-addr string\n",
+        "old": "Usage of gateway:\n  -source-addr string\n  -instance-guid string\n",
         # `new` advertises both the M2_GATEWAY_LOADER -instance-guid-source
         # flag and the source-override flags. The bash gate must pass through
         # the provenance tag in this mode.
         "new": (
             "Usage of gateway:\n"
             "  -source-addr string\n"
+            "  -instance-guid string\n"
             "  -startup-source-override string\n"
             "  -startup-source-override-validate\n"
             "  -instance-guid-source string\n"
             "  -semantic-cache-path string\n"
         ),
     }
+    if mode == "missing-instance-guid":
+        help_by_mode[mode] = "Usage of gateway:\n  -source-addr string\n"
     script = f"""#!/usr/bin/env python3
 from pathlib import Path
 import os
@@ -155,6 +158,8 @@ def _run_wrapper_case(
     proxy_endpoint: str = "",
     proxy_listen_addr: str = "0.0.0.0:19001",
     expect_success: bool = True,
+    fresh_runtime_state: bool = False,
+    assert_runtime_state_absent: bool = False,
 ) -> tuple[list[str], str, bool, str, str]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -173,21 +178,22 @@ def _run_wrapper_case(
         # wrapper's path env vars into the temp sandbox so it reads our test
         # GUID without touching /data/.
         runtime_state_file = tmp / "runtime_state.json"
-        runtime_state_file.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "meta": {
-                        "instance_guid": VALID_INSTANCE_GUID,
-                        "written_at": "2026-05-10T00:00:00Z",
+        if not fresh_runtime_state:
+            runtime_state_file.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "meta": {
+                            "instance_guid": VALID_INSTANCE_GUID,
+                            "written_at": "2026-05-10T00:00:00Z",
+                        },
                     },
-                },
-                indent=2,
-                sort_keys=True,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            + "\n",
-            encoding="utf-8",
-        )
         instance_guid_file = tmp / "instance_guid"
         # Legacy file deliberately absent; runtime_state.json is the source.
         legacy_marker_file = tmp / "migration_marker"
@@ -241,6 +247,11 @@ def _run_wrapper_case(
             _assert(
                 result.returncode != 0,
                 f"wrapper case source_addr={source_addr!r} gateway_mode={gateway_mode!r} unexpectedly succeeded",
+            )
+        if assert_runtime_state_absent:
+            _assert(
+                not runtime_state_file.exists(),
+                "wrapper-side startup failure must not create runtime_state.json",
             )
 
         argv = argv_file.read_text(encoding="utf-8").splitlines() if argv_file.exists() else []
@@ -595,7 +606,18 @@ def _check_runtime_cases() -> None:
     _assert(argv == [], "unknown gateway exact source must fail before invoking gateway")
     _assert("-source-addr" not in argv, "unknown gateway exact source must not use legacy active source input")
     _assert(not state_exists, "unknown gateway exact source must not create source state file")
-    _assert("requires gateway startup source override validation support" in stderr, "unknown gateway failure must explain missing startup override support")
+    _assert("does not support required -instance-guid" in stderr, "unknown gateway failure must explain the required identity interface")
+
+    argv, _logs, state_exists, _state_content, stderr = _run_wrapper_case(
+        source_addr="auto",
+        gateway_mode="missing-instance-guid",
+        expect_success=False,
+        fresh_runtime_state=True,
+        assert_runtime_state_absent=True,
+    )
+    _assert(argv == [], "gateway lacking -instance-guid must fail before invocation")
+    _assert(not state_exists, "required-interface failure must not create wrapper state")
+    _assert("does not support required -instance-guid" in stderr, "required-interface failure must name -instance-guid")
 
 
 def main() -> int:

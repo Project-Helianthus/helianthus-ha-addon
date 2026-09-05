@@ -172,6 +172,7 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
         "portal-pv-m2m-client-cert",
         "portal-pv-m2m-client-key",
         "portal-pv-asset-ref",
+        "instance-guid",
         "instance-guid-source",
     )
     gateway.write_text(

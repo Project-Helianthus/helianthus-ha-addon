@@ -90,7 +90,7 @@ def test_eebus_runtime_keeps_pairing_without_admin_argv_logs_or_environment(
     gateway.write_text(
         "#!/usr/bin/env python3\nimport os, pathlib, sys\n"
         "if '--help' in sys.argv:\n"
-        "    sys.stderr.write('\\n'.join('-' + value for value in ('eebus-enabled', 'eebus-listen-port', 'eebus-interfaces', 'eebus-subnets', 'eebus-state-root', 'eebus-discovery-enabled', 'eebus-remote-ski-allowlist', 'eebus-pairing-window-mode', 'instance-guid-source', 'semantic-cache-path')) + '\\n')\n"
+        "    sys.stderr.write('\\n'.join('-' + value for value in ('eebus-enabled', 'eebus-listen-port', 'eebus-interfaces', 'eebus-subnets', 'eebus-state-root', 'eebus-discovery-enabled', 'eebus-remote-ski-allowlist', 'eebus-pairing-window-mode', 'instance-guid', 'instance-guid-source', 'semantic-cache-path')) + '\\n')\n"
         "    raise SystemExit(0)\n"
         "pathlib.Path(os.environ['TEST_ARGV']).write_text('\\n'.join(sys.argv[1:]), encoding='utf-8')\n",
         encoding="utf-8",

@@ -21,6 +21,7 @@ Plan: runtime-state-w19-26.locked. ADs referenced inline per case.
 from __future__ import annotations
 
 import importlib.util
+import builtins
 import io
 import json
 import os
@@ -319,88 +320,85 @@ def test_ad26_enoent_retry_budget(tmp_path: Path) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Case-3 bootstrap persistence (Codex P2 follow-up on PR #127).
+# Sole-writer boundary: the wrapper only reads runtime_state.json.
 # -----------------------------------------------------------------------------
 
 
-def test_case3_bootstrap_persists_runtime_state(tmp_path: Path) -> None:
-    """Case 3 must write runtime_state.json so identity is stable across restarts
-    even when /data/helianthus-gateway predates M2_GATEWAY_LOADER and never
-    writes the file itself."""
+def test_case3_passes_one_generated_guid_without_runtime_state_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fresh startup leaves durable runtime-state ownership to the gateway."""
     module = _wrapper_module()
     rs_path = tmp_path / "runtime_state.json"
     legacy_path = tmp_path / "instance_guid"
     marker_path = tmp_path / "marker"
-    monkey_env = {
-        "HELIANTHUS_RUNTIME_STATE_PATH": str(rs_path),
-        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(legacy_path),
-        "HELIANTHUS_MIGRATION_MARKER_PATH": str(marker_path),
-    }
-    saved = {k: os.environ.get(k) for k in monkey_env}
-    os.environ.update(monkey_env)
-    try:
-        rc = module.main([])
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    monkeypatch.setenv("HELIANTHUS_RUNTIME_STATE_PATH", str(rs_path))
+    monkeypatch.setenv("HELIANTHUS_LEGACY_INSTANCE_GUID_PATH", str(legacy_path))
+    monkeypatch.setenv("HELIANTHUS_MIGRATION_MARKER_PATH", str(marker_path))
+    original_open = builtins.open
+    runtime_modes: list[str] = []
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        if str(file).startswith(str(rs_path)):
+            runtime_modes.append(mode)
+        return original_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    rc = module.main([])
     assert rc == module.EXIT_OK
-    assert rs_path.exists(), "case 3 must bootstrap runtime_state.json"
-    body = json.loads(rs_path.read_text())
-    assert body["schema_version"] == 1
-    assert "meta" in body and re.match(
-        module.INSTANCE_GUID_REGEX, body["meta"]["instance_guid"]
-    )
-    # Second run with the same paths must read the bootstrap file (case 1)
-    # rather than generate a new identity.
-    first_guid = body["meta"]["instance_guid"]
-    result2 = module.resolve_instance_guid(
-        runtime_state_path=str(rs_path), legacy_path=str(legacy_path)
-    )
-    assert result2.source == module.IDENTITY_SOURCE_RUNTIME_STATE, (
-        "after bootstrap persistence, restart must read runtime_state.json"
-    )
-    assert result2.guid == first_guid, (
-        "identity must remain stable across restarts after bootstrap"
-    )
+    output = capsys.readouterr().out.splitlines()
+    emitted = [line.split("=", 1)[1] for line in output if line.startswith("HELIANTHUS_INSTANCE_GUID=")]
+    assert len(emitted) == 1 and re.match(module.INSTANCE_GUID_REGEX, emitted[0])
+    assert not rs_path.exists(), "the wrapper must not create runtime_state.json"
+    assert runtime_modes and all(mode == "r" for mode in runtime_modes)
 
 
-def test_case1_does_not_overwrite_runtime_state(tmp_path: Path) -> None:
-    """When runtime_state.json already exists (case 1), main() must not
-    rewrite it — only the gateway owns ongoing writes. Bootstrap is a
-    case-3-only side effect."""
+def test_gateway_persisted_runtime_state_is_reused_without_regeneration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Restart identity is supplied by gateway-persisted state, not fallback state."""
     module = _wrapper_module()
     rs_path = tmp_path / "runtime_state.json"
     legacy_path = tmp_path / "instance_guid"
     marker_path = tmp_path / "marker"
     _write_runtime_state(rs_path, guid=VALID_GUID_A)
     original_body = rs_path.read_text()
-    original_mtime = rs_path.stat().st_mtime_ns
-    monkey_env = {
-        "HELIANTHUS_RUNTIME_STATE_PATH": str(rs_path),
-        "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(legacy_path),
-        "HELIANTHUS_MIGRATION_MARKER_PATH": str(marker_path),
-    }
-    saved = {k: os.environ.get(k) for k in monkey_env}
-    os.environ.update(monkey_env)
-    try:
-        rc = module.main([])
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    monkeypatch.setenv("HELIANTHUS_RUNTIME_STATE_PATH", str(rs_path))
+    monkeypatch.setenv("HELIANTHUS_LEGACY_INSTANCE_GUID_PATH", str(legacy_path))
+    monkeypatch.setenv("HELIANTHUS_MIGRATION_MARKER_PATH", str(marker_path))
+    rc = module.main([])
     assert rc == module.EXIT_OK
-    # File untouched: bytes + mtime unchanged.
-    assert rs_path.read_text() == original_body, (
-        "case 1 (valid runtime_state) must not be overwritten by the wrapper"
-    )
-    assert rs_path.stat().st_mtime_ns == original_mtime, (
-        "case 1 must not rewrite the file (mtime preserved)"
-    )
+    assert rs_path.read_text() == original_body
+    output = capsys.readouterr().out
+    assert f"HELIANTHUS_INSTANCE_GUID={VALID_GUID_A}" in output
+    assert "HELIANTHUS_INSTANCE_GUID_SOURCE=runtime_state" in output
+
+
+def test_migration_halt_never_mutates_runtime_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Legacy-only failure may write its marker, never runtime state."""
+    module = _wrapper_module()
+    rs_path = tmp_path / "runtime_state.json"
+    legacy_path = tmp_path / "instance_guid"
+    marker_path = tmp_path / "marker"
+    legacy_path.write_text(VALID_GUID_A + "\n")
+    monkeypatch.setenv("HELIANTHUS_RUNTIME_STATE_PATH", str(rs_path))
+    monkeypatch.setenv("HELIANTHUS_LEGACY_INSTANCE_GUID_PATH", str(legacy_path))
+    monkeypatch.setenv("HELIANTHUS_MIGRATION_MARKER_PATH", str(marker_path))
+    original_open = builtins.open
+    runtime_modes: list[str] = []
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        if str(file).startswith(str(rs_path)):
+            runtime_modes.append(mode)
+        return original_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    assert module.main([]) == module.EXIT_MIGRATION_REQUIRED
+    assert not rs_path.exists()
+    assert runtime_modes and all(mode == "r" for mode in runtime_modes)
+    assert marker_path.exists(), "the separate migration marker remains required"
 
 
 # -----------------------------------------------------------------------------
