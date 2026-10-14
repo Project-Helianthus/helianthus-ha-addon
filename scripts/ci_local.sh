@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Local CI. Test dependencies come from requirements-ci.txt in .venv-ci, which
+# scripts/ci_bootstrap.sh recreates (venv --clear) whenever that file changes.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,12 +14,7 @@ fi
 
 echo "==> bootstrap test dependencies (.venv-ci from requirements-ci.txt)"
 venv=".venv-ci"
-req_stamp="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open("requirements-ci.txt","rb").read()).hexdigest())')"
-if [ ! -x "${venv}/bin/python3" ] || [ "$(cat "${venv}/.requirements-sha256" 2>/dev/null || true)" != "${req_stamp}" ]; then
-  python3 -m venv "${venv}"
-  "${venv}/bin/python3" -m pip install --quiet --disable-pip-version-check -r requirements-ci.txt
-  printf '%s' "${req_stamp}" > "${venv}/.requirements-sha256"
-fi
+./scripts/ci_bootstrap.sh "${venv}" requirements-ci.txt
 export PATH="${repo_root}/${venv}/bin:${PATH}"
 
 echo "==> validate JSON syntax"
@@ -95,7 +92,7 @@ python3 scripts/bom_manifest.py check
 python3 -m pytest tests/test_bom_manifest.py -q
 
 echo "==> test image publication plan"
-python3 -m pytest tests/test_test_image_plan.py -q
+python3 -m pytest tests/test_test_image_plan.py tests/test_ci_bootstrap.py -q
 
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 scripts/check_markdown_private_ips.py --self-test

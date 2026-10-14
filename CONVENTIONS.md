@@ -76,4 +76,6 @@ Do not roll back by re-pulling `<installed image>:<installed version>`: that tag
 is mutable and may no longer match what was installed.
 
 Test dependencies (pytest, PyYAML for the workflow test) are exact-pinned in
-`requirements-ci.txt`, used by both `ci_local.sh` and `pr-ci.yml`.
+`requirements-ci.txt`, used by both `ci_local.sh` and `pr-ci.yml`. When that file
+changes, `scripts/ci_bootstrap.sh` recreates `.venv-ci` from scratch (stamp written
+only after a successful install), so removed dependencies never linger.

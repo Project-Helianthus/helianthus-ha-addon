@@ -122,7 +122,7 @@ jobs:
           python3 -m pip install --quiet --user -r requirements-ci.txt
           python3 scripts/bom_manifest.py check
           python3 -m pytest tests/test_bom_manifest.py -q
-          python3 -m pytest tests/test_test_image_plan.py -q
+          python3 -m pytest tests/test_test_image_plan.py tests/test_ci_bootstrap.py -q
 
       - name: Validate gateway parity gate artifact
         shell: bash
