@@ -120,3 +120,17 @@ def test_workflow_manifest_destination_and_sources_come_only_from_the_plan() -> 
     assert 'refs+=("${IMAGE_NAME}:${source}")' in run
     for forbidden in ("0.6.", "version", "latest"):
         assert forbidden not in run
+
+
+def test_workflow_serializes_identical_dispatches_and_labels_the_run() -> None:
+    workflow = _workflow()
+    concurrency = workflow["concurrency"]
+    assert concurrency["cancel-in-progress"] is False
+    group = concurrency["group"]
+    assert "${{ inputs.test_label }}" in group and "${{ inputs.gateway_sha }}" in group
+    steps = workflow["jobs"]["build"]["steps"]
+    push = next(step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action"))
+    assert "io.helianthus.workflow-run=${{ github.run_id }}" in push["with"]["labels"]
+    manifest = next(step for step in workflow["jobs"]["manifest"]["steps"] if "run" in step)
+    assert manifest["env"]["RUN_ID"] == "${{ github.run_id }}"
+    assert 'index:io.helianthus.workflow-run=${RUN_ID}' in manifest["run"]

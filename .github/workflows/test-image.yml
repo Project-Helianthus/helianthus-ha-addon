@@ -21,6 +21,12 @@ permissions:
   contents: read
   packages: write
 
+# Identical dispatches (same label and gateway commit) publish the same tags, so
+# they run one after another. A running publish is never cancelled.
+concurrency:
+  group: test-image-${{ inputs.test_label }}-${{ inputs.gateway_sha }}
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: ghcr.io/project-helianthus/helianthus-ha-addon
   OCI_SOURCE: https://github.com/Project-Helianthus/helianthus-ha-addon
@@ -85,6 +91,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             io.helianthus.test-image=true
             io.helianthus.gateway-commit=${{ inputs.gateway_sha }}
+            io.helianthus.workflow-run=${{ github.run_id }}
           build-args: |
             BUILD_VERSION=${{ needs.plan.outputs.build_version }}
             EBUSGATEWAY_VERSION=${{ inputs.gateway_sha }}
@@ -108,6 +115,7 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
           SOURCES: ${{ needs.plan.outputs.manifest_sources }}
           GATEWAY_SHA: ${{ inputs.gateway_sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           refs=()
@@ -118,4 +126,5 @@ jobs:
             --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
             --annotation "index:io.helianthus.test-image=true" \
             --annotation "index:io.helianthus.gateway-commit=${GATEWAY_SHA}" \
+            --annotation "index:io.helianthus.workflow-run=${RUN_ID}" \
             -t "${IMAGE_NAME}:${TAG}" "${refs[@]}"
