@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.6.58 (2026-10-14)
+
+- Add `uart: true` device access for serial adapters. No `devices` entry is
+  declared and the add-on stays unprivileged.
+- Add disabled-by-default options for the gateway's Growatt BMS RS-485 observer
+  (`growatt_bms_rs485_*`) and the non-send Tesla Gen3 HSC retained owner
+  (`tesla_gen3_hsc_*`, identity and epochs only). A disabled family passes no
+  gateway flag; an enabled family passes its flags only after every required
+  option is present and valid. The mapping lives in
+  `rootfs/usr/share/helianthus/serial_can_options.py`.
+- The gateway pin, Modbus TCP, M2M, eeBUS and the existing option schema are
+  unchanged.
+
 ## 0.6.57 (2026-10-14)
 
 - Pin gateway `e017a547967e449ffbe76ea779d5892596306f07` (was

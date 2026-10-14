@@ -1,6 +1,6 @@
 {
   "name": "Helianthus",
-  "version": "0.6.57",
+  "version": "0.6.58",
   "slug": "helianthus",
   "description": "Helianthus multi-runtime gateway (GraphQL + MCP)",
   "arch": [
@@ -11,6 +11,7 @@
   "boot": "auto",
   "init": false,
   "host_network": true,
+  "uart": true,
   "map": [
     "ssl:ro"
   ],
@@ -64,7 +65,26 @@
     "modbus_tcp_dial_timeout": "5s",
     "m2m_graphql_enabled": false,
     "m2m_graphql_server_name": "",
-    "m2m_graphql_asset_ref": ""
+    "m2m_graphql_asset_ref": "",
+    "growatt_bms_rs485_enabled": false,
+    "growatt_bms_rs485_asset_id": "",
+    "growatt_bms_rs485_source_id": "",
+    "growatt_bms_rs485_source_epoch": "",
+    "growatt_bms_rs485_serial_path": "",
+    "growatt_bms_rs485_baud": 9600,
+    "growatt_bms_rs485_parity": "none",
+    "growatt_bms_rs485_stop_bits": 1,
+    "growatt_bms_rs485_response_timeout": "500ms",
+    "growatt_bms_rs485_max_response_delay": "250ms",
+    "growatt_bms_rs485_max_quiescence": "2s",
+    "tesla_gen3_hsc_retained_enabled": false,
+    "tesla_gen3_hsc_endpoint_id": "",
+    "tesla_gen3_hsc_asset_id": "",
+    "tesla_gen3_hsc_source_id": "",
+    "tesla_gen3_hsc_source_epoch": "",
+    "tesla_gen3_hsc_clock_epoch": "",
+    "tesla_gen3_hsc_evse_id": "",
+    "tesla_gen3_hsc_connector_id": ""
   },
   "schema": {
     "adapter_direct_enabled": "bool",
@@ -108,6 +128,29 @@
     "modbus_tcp_dial_timeout": "str",
     "m2m_graphql_enabled": "bool",
     "m2m_graphql_server_name": "str",
-    "m2m_graphql_asset_ref": "str"
+    "m2m_graphql_asset_ref": "str",
+    "growatt_bms_rs485_enabled": "bool",
+    "growatt_bms_rs485_asset_id": "str?",
+    "growatt_bms_rs485_source_id": "str?",
+    "growatt_bms_rs485_source_epoch": "str?",
+    "growatt_bms_rs485_driver_generation": "int(1,)?",
+    "growatt_bms_rs485_unit_id": "int(1,247)?",
+    "growatt_bms_rs485_serial_path": "str?",
+    "growatt_bms_rs485_baud": "int(1,4000000)",
+    "growatt_bms_rs485_parity": "list(none|even|odd)",
+    "growatt_bms_rs485_stop_bits": "int(1,2)",
+    "growatt_bms_rs485_response_timeout": "str",
+    "growatt_bms_rs485_max_response_delay": "str",
+    "growatt_bms_rs485_max_quiescence": "str",
+    "tesla_gen3_hsc_retained_enabled": "bool",
+    "tesla_gen3_hsc_endpoint_id": "str?",
+    "tesla_gen3_hsc_asset_id": "str?",
+    "tesla_gen3_hsc_source_id": "str?",
+    "tesla_gen3_hsc_source_epoch": "str?",
+    "tesla_gen3_hsc_clock_epoch": "str?",
+    "tesla_gen3_hsc_evse_id": "str?",
+    "tesla_gen3_hsc_connector_id": "str?",
+    "tesla_gen3_hsc_driver_generation": "int(1,)?",
+    "tesla_gen3_hsc_node": "int(1,247)?"
   }
 }

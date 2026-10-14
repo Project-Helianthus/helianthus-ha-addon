@@ -3,7 +3,7 @@
   "evidence_kind": "contract_fixture_v1",
   "mode": "contract",
   "release": {
-    "addon_version": "0.6.57",
+    "addon_version": "0.6.58",
     "gateway_ref": "e017a547967e449ffbe76ea779d5892596306f07",
     "ha_integration_ref": "e614e63898d4ddc317c66f1a673fefe0e2786245"
   },

@@ -230,6 +230,7 @@ def _run_wrapper_case(
                 "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(instance_guid_file),
                 "HELIANTHUS_MIGRATION_MARKER_PATH": str(legacy_marker_file),
                 "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(MODBUS_RUNTIME_GUARD),
+                "HELIANTHUS_SERIAL_CAN_GUARD": str(REPO_ROOT / "helianthus/rootfs/usr/share/helianthus/serial_can_options.py"),
                 "HELIANTHUS_MODBUS_OPTIONS_PATH": str(tmp / "missing-options.json"),
                 "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp / "modbus-endpoint"),
                 "HELIANTHUS_OPTIONS_PATH": str(addon_options_file),

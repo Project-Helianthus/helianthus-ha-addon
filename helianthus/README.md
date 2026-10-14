@@ -52,7 +52,7 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.57` pins the gateway with separate eeBUS Pairing, SHIP and
+Release `0.6.58` pins the gateway with separate eeBUS Pairing, SHIP and
 connected-only read-only SPINE workspaces, deterministic canonical PV V1
 projection, authenticated GraphQL M2M publication, and separate semantic and
 bounded raw Portal surfaces. The rollout contract binds this image to the canonical PV
@@ -103,6 +103,70 @@ Once the typed key is persisted it remains authoritative even if the stale
 profile remains. Save `adapter_direct_protocol` explicitly and reset
 `proxy_profile=disabled` after upgrading. Adapter-direct plus a populated
 external `proxy_endpoint` is rejected.
+
+## Serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)
+
+The add-on declares `uart: true`, which gives the container access to the host's
+serial adapters (for example a USB RS-485 adapter) through the Supervisor. It
+adds no `devices` entry, so no adapter has to exist for the add-on to start, and
+it does not make the add-on privileged. Both families below are **disabled by
+default**. While a family is disabled the wrapper passes none of its flags,
+because the gateway refuses a disabled family that carries any other field.
+
+Enabling a family requires every identity option of that family; the wrapper
+fails startup with the rejected option named instead of guessing. Identity and
+epoch values are operator-chosen, non-secret labels: no whitespace or control
+characters, and asset and source identities must differ. They are never derived
+from device data. The gateway remains the final validator.
+
+### Growatt BMS RS-485 (exact read-only V2.02 observer)
+
+| Option | Gateway flag | Default |
+| --- | --- | --- |
+| `growatt_bms_rs485_enabled` | `-growatt-bms-rs485-enabled` | `false` |
+| `growatt_bms_rs485_asset_id` | `-growatt-bms-rs485-asset-id` | required when enabled |
+| `growatt_bms_rs485_source_id` | `-growatt-bms-rs485-source-id` | required when enabled |
+| `growatt_bms_rs485_source_epoch` | `-growatt-bms-rs485-source-epoch` | required when enabled |
+| `growatt_bms_rs485_driver_generation` | `-growatt-bms-rs485-driver-generation` | required, 1 or more |
+| `growatt_bms_rs485_unit_id` | `-growatt-bms-rs485-unit-id` | required, 1-247 |
+| `growatt_bms_rs485_serial_path` | `-growatt-bms-rs485-serial-path` | required, a `/dev/` path |
+| `growatt_bms_rs485_baud` | `-growatt-bms-rs485-baud` | `9600` |
+| `growatt_bms_rs485_parity` | `-growatt-bms-rs485-parity` | `none` (`none`, `even`, `odd`) |
+| `growatt_bms_rs485_stop_bits` | `-growatt-bms-rs485-stop-bits` | `1` (`1` or `2`) |
+| `growatt_bms_rs485_response_timeout` | `-growatt-bms-rs485-response-timeout` | `500ms` |
+| `growatt_bms_rs485_max_response_delay` | `-growatt-bms-rs485-max-response-delay` | `250ms` |
+| `growatt_bms_rs485_max_quiescence` | `-growatt-bms-rs485-max-quiescence` | `2s`, must exceed the response delay |
+
+The serial format, baud and timing defaults are add-on starting values, not
+values derived from the BMS specification; confirm them against the installed
+battery before relying on them. Durations use the form `500ms` or `2s`. When the
+M2M GraphQL listener is also enabled, the gateway additionally requires the
+quiescence plus four reads to fit below the M2M deadline and refuses to start
+otherwise.
+
+### Tesla Gen3 HSC retained owner (identity only)
+
+| Option | Gateway flag | Default |
+| --- | --- | --- |
+| `tesla_gen3_hsc_retained_enabled` | `-tesla-gen3-hsc-retained-enabled` | `false` |
+| `tesla_gen3_hsc_endpoint_id` | `-tesla-gen3-hsc-endpoint-id` | required when enabled |
+| `tesla_gen3_hsc_asset_id` | `-tesla-gen3-hsc-asset-id` | required when enabled |
+| `tesla_gen3_hsc_source_id` | `-tesla-gen3-hsc-source-id` | required when enabled |
+| `tesla_gen3_hsc_source_epoch` | `-tesla-gen3-hsc-source-epoch` | required when enabled |
+| `tesla_gen3_hsc_clock_epoch` | `-tesla-gen3-hsc-clock-epoch` | required when enabled |
+| `tesla_gen3_hsc_evse_id` | `-tesla-gen3-hsc-evse-id` | required when enabled |
+| `tesla_gen3_hsc_connector_id` | `-tesla-gen3-hsc-connector-id` | required when enabled |
+| `tesla_gen3_hsc_driver_generation` | `-tesla-gen3-hsc-driver-generation` | required, 1 or more |
+| `tesla_gen3_hsc_node` | `-tesla-gen3-hsc-node` | required, 1-247 |
+| (fixed, not an option) | `-tesla-gen3-hsc-profile wc3_24_44_3` | passed whenever enabled |
+
+The Tesla owner is **non-send** on the pinned gateway. These options configure
+identity, epochs and the unicast node label of a completed-outcome owner only.
+They open no serial port, send no request and do no acquisition; enabling the
+family does not make the Tesla charger observable. The pinned gateway also
+requires the connector, driver generation, node and profile for an enabled
+Tesla owner, so those are exposed or fixed here in addition to the identity and
+epoch fields.
 
 ## Debugging tools
 

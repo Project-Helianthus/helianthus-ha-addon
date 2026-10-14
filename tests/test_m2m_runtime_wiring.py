@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
-VERSION = "0.6.57"
+VERSION = "0.6.58"
 TLS_ROOT = "/ssl/helianthus-pv-m2m"
 M2M_IDENTITY_VALIDATOR = ROOT / "helianthus/rootfs/usr/share/helianthus/m2m_tls_identity.py"
 
@@ -233,6 +233,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(
             ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"
         ),
+        "HELIANTHUS_SERIAL_CAN_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/serial_can_options.py"),
         "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
         "HELIANTHUS_M2M_IDENTITY_VALIDATOR": str(M2M_IDENTITY_VALIDATOR),
