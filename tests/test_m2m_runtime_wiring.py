@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "helianthus/config.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
-VERSION = "0.6.56"
+VERSION = "0.6.57"
 TLS_ROOT = "/ssl/helianthus-pv-m2m"
 M2M_IDENTITY_VALIDATOR = ROOT / "helianthus/rootfs/usr/share/helianthus/m2m_tls_identity.py"
 
@@ -58,7 +58,6 @@ def test_wrapper_uses_fixed_tls_files_and_complete_m2m_flag_bundle() -> None:
         "m2m-graphql-server-cert",
         "m2m-graphql-server-key",
         "m2m-graphql-allowed-assets",
-        "m2m-graphql-known-assets",
         "portal-pv-m2m-url",
         "portal-pv-m2m-server-name",
         "portal-pv-m2m-ca",
@@ -164,7 +163,6 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
         "m2m-graphql-server-cert",
         "m2m-graphql-server-key",
         "m2m-graphql-allowed-assets",
-        "m2m-graphql-known-assets",
         "portal-pv-semantic-enabled",
         "portal-pv-m2m-url",
         "portal-pv-m2m-server-name",
@@ -256,8 +254,6 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "-m2m-graphql-server-key",
         str(tls_root / "server-key.pem"),
         "-m2m-graphql-allowed-assets",
-        "pv-asset-fixture",
-        "-m2m-graphql-known-assets",
         "pv-asset-fixture",
         "-portal-pv-semantic-enabled=true",
         "-portal-pv-m2m-url",

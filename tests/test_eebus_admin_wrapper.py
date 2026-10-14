@@ -15,8 +15,8 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.56"
-GATEWAY = "a759efd7f72a099288f1fc2b7cf20236d37cfa0b"
+RELEASE = "0.6.57"
+GATEWAY = "e017a547967e449ffbe76ea779d5892596306f07"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
     "eebus_admin_owner_username",

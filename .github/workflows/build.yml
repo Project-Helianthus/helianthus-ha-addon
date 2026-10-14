@@ -58,12 +58,12 @@ jobs:
           if [ -n "${{ secrets.REPO_READ_TOKEN }}" ]; then
             remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/Project-Helianthus/helianthus-vrc-explorer.git"
           fi
-          ref="$(git ls-remote "${remote_url}" refs/tags/v0.5.1 | awk '{print $1}')"
+          ref="$(git ls-remote "${remote_url}" refs/tags/v0.6.1 | awk '{print $1}')"
           if [ -z "${ref}" ]; then
-            echo "failed to resolve helianthus-vrc-explorer v0.5.1 tag" >&2
+            echo "failed to resolve helianthus-vrc-explorer v0.6.1 tag" >&2
             exit 1
           fi
-          echo "Resolved helianthus-vrc-explorer v0.5.1 to ${ref}"
+          echo "Resolved helianthus-vrc-explorer v0.6.1 to ${ref}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -94,8 +94,8 @@ jobs:
             org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
           build-args: |
             BUILD_VERSION=${{ steps.addon.outputs.version }}
-            EBUSGATEWAY_VERSION=a759efd7f72a099288f1fc2b7cf20236d37cfa0b
-            VRCEXPLORER_VERSION=v0.5.1
+            EBUSGATEWAY_VERSION=e017a547967e449ffbe76ea779d5892596306f07
+            VRCEXPLORER_VERSION=v0.6.1
             BUILD_FROM=${{ matrix.base }}
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}

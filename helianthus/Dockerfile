@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.6
 
 ARG BUILD_FROM=ghcr.io/home-assistant/base:3.20
-ARG VRCEXPLORER_VERSION=v0.5.1
+ARG VRCEXPLORER_VERSION=v0.6.1
 ARG BUILD_VERSION
 
 FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG BUILD_VERSION
-ARG EBUSGATEWAY_VERSION=a759efd7f72a099288f1fc2b7cf20236d37cfa0b
+ARG EBUSGATEWAY_VERSION=e017a547967e449ffbe76ea779d5892596306f07
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
@@ -42,7 +42,7 @@ RUN --mount=type=secret,id=github_token \
     fi
 
 FROM --platform=$BUILDPLATFORM python:3.12-alpine AS vrc-explorer
-ARG VRCEXPLORER_VERSION=v0.5.1
+ARG VRCEXPLORER_VERSION=v0.6.1
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
@@ -64,7 +64,7 @@ RUN --mount=type=secret,id=github_token \
     fi
 
 FROM ${BUILD_FROM}
-ARG VRCEXPLORER_VERSION=v0.5.1
+ARG VRCEXPLORER_VERSION=v0.6.1
 
 RUN apk add --no-cache python3 ca-certificates
 
