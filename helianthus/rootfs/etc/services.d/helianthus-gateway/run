@@ -843,6 +843,63 @@ else
   bashio::log.info "Modbus TCP runtime: disabled"
 fi
 
+# Serial acquisition options (Growatt BMS RS-485) and Tesla Gen3 HSC retained
+# owner identity. Both families are disabled by default and a disabled family
+# contributes no flag at all, because the gateway rejects a disabled family that
+# carries any active field. The Tesla owner is non-send on the pinned gateway:
+# its options set identity and epochs only and open no serial or network path.
+serial_can_guard="${HELIANTHUS_SERIAL_CAN_GUARD:-/usr/share/helianthus/serial_can_options.py}"
+SERIAL_CAN_ARGS=()
+serial_can_eval=$(python3 "${serial_can_guard}" argv --options "${addon_options_path}") || \
+  bashio::exit.nok "Serial acquisition options failed validation; see the add-on log for the rejected option"
+eval "${serial_can_eval}"
+unset serial_can_eval
+if [ "${#SERIAL_CAN_ARGS[@]}" -ne 0 ]; then
+  missing_serial_can_flags=()
+  for required_flag in \
+    growatt-bms-rs485-enabled \
+    growatt-bms-rs485-asset-id \
+    growatt-bms-rs485-source-id \
+    growatt-bms-rs485-source-epoch \
+    growatt-bms-rs485-driver-generation \
+    growatt-bms-rs485-unit-id \
+    growatt-bms-rs485-serial-path \
+    growatt-bms-rs485-baud \
+    growatt-bms-rs485-parity \
+    growatt-bms-rs485-stop-bits \
+    growatt-bms-rs485-response-timeout \
+    growatt-bms-rs485-max-response-delay \
+    growatt-bms-rs485-max-quiescence \
+    tesla-gen3-hsc-retained-enabled \
+    tesla-gen3-hsc-endpoint-id \
+    tesla-gen3-hsc-asset-id \
+    tesla-gen3-hsc-source-id \
+    tesla-gen3-hsc-source-epoch \
+    tesla-gen3-hsc-clock-epoch \
+    tesla-gen3-hsc-evse-id \
+    tesla-gen3-hsc-connector-id \
+    tesla-gen3-hsc-profile \
+    tesla-gen3-hsc-driver-generation \
+    tesla-gen3-hsc-node; do
+    # Only the flags actually emitted for an enabled family are required of the
+    # binary; a disabled family emits none.
+    for serial_can_arg in "${SERIAL_CAN_ARGS[@]}"; do
+      if [ "${serial_can_arg}" = "-${required_flag}" ] || [ "${serial_can_arg}" = "-${required_flag}=true" ]; then
+        if ! gateway_supports_flag "${required_flag}"; then
+          missing_serial_can_flags+=("${required_flag}")
+        fi
+        break
+      fi
+    done
+  done
+  if [ "${#missing_serial_can_flags[@]}" -ne 0 ]; then
+    bashio::exit.nok "gateway does not support the serial acquisition flags: ${missing_serial_can_flags[*]}"
+  fi
+  bashio::log.info "Serial acquisition options: enabled ($((${#SERIAL_CAN_ARGS[@]})) gateway arguments)"
+else
+  bashio::log.info "Serial acquisition options: disabled"
+fi
+
 # Gate `-instance-guid-source` (AD27) on gateway support. The pinned gateway
 # version in Dockerfile/build.yml emits this flag as part of M2_GATEWAY_LOADER.
 # The compatibility gate preserves identity continuity if a future packaged
@@ -922,5 +979,6 @@ if [ "${#m2m_args[@]}" -ne 0 ]; then gateway_args+=("${m2m_args[@]}"); fi
 if bashio::var.true "${modbus_tcp_enabled}"; then
   gateway_args+=("${modbus_args[@]}")
 fi
+if [ "${#SERIAL_CAN_ARGS[@]}" -ne 0 ]; then gateway_args+=("${SERIAL_CAN_ARGS[@]}"); fi
 
 exec "${gateway_bin}" "${gateway_args[@]}"

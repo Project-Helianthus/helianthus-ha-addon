@@ -15,7 +15,7 @@ PARITY = ROOT / "scripts/fixtures/gateway_parity_artifact_pass.json"
 RUN = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 HELPER = ROOT / "helianthus/rootfs/usr/share/helianthus/eebus_admin_credentials.py"
 
-RELEASE = "0.6.57"
+RELEASE = "0.6.58"
 GATEWAY = "e017a547967e449ffbe76ea779d5892596306f07"
 REMOVED_OPTIONS = (
     "eebus_admin_enabled",
@@ -144,6 +144,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_LEGACY_INSTANCE_GUID_PATH": str(tmp_path / "instance-guid"),
         "HELIANTHUS_MIGRATION_MARKER_PATH": str(tmp_path / "migration-marker"),
         "HELIANTHUS_MODBUS_RUNTIME_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py"),
+        "HELIANTHUS_SERIAL_CAN_GUARD": str(ROOT / "helianthus/rootfs/usr/share/helianthus/serial_can_options.py"),
         "HELIANTHUS_MODBUS_OPTIONS_PATH": str(options),
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "endpoint"),
     }

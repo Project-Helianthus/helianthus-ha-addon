@@ -2,7 +2,7 @@
   "format": "helianthus-addon-bom/1",
   "addon": {
     "slug": "helianthus",
-    "version": "0.6.57",
+    "version": "0.6.58",
     "config_arch": [
       "aarch64",
       "amd64"
