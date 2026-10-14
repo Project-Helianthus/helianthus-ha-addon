@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet --user pytest
+          python3 -m pip install --quiet --user -r requirements-ci.txt
           python3 scripts/check_source_addr_wrapper.py
           python3 -m pytest tests/test_source_addr_wrapper_m4.py -q
 
@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet --user pytest
+          python3 -m pip install --quiet --user -r requirements-ci.txt
           python3 scripts/check_eebus_wrapper.py
           python3 -m pytest tests/test_eebus_admin_wrapper.py -q
 
@@ -112,17 +112,16 @@ jobs:
           # case-3 sole-writer handoff path) — each test uses tmp_path
           # fixtures + explicit HELIANTHUS_* env-overrides, so it never
           # touches the runner's /data/.
-          python3 -m pip install --quiet --user pytest
+          python3 -m pip install --quiet --user -r requirements-ci.txt
           python3 -m pytest tests/test_runtime_state_wrapper_red.py tests/test_gateway_parity_gate.py -q
 
       - name: Validate BOM manifest
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet --user pytest
+          python3 -m pip install --quiet --user -r requirements-ci.txt
           python3 scripts/bom_manifest.py check
           python3 -m pytest tests/test_bom_manifest.py -q
-          python3 -m pip install --quiet --user pyyaml
           python3 -m pytest tests/test_test_image_plan.py -q
 
       - name: Validate gateway parity gate artifact

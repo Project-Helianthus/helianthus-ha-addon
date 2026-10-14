@@ -18,8 +18,8 @@
 
 ## Validation
 
-Run `./scripts/ci_local.sh` for the repository's complete local CI and
-`python3 -m pytest tests -q` for the default test suite. Resolver tests use
+Run `./scripts/ci_local.sh` (it creates the gitignored `.venv-ci` from `requirements-ci.txt` on first use, so it needs network access once, and runs every stage with that environment first on `PATH`) for the repository's complete local CI and
+`.venv-ci/bin/python3 -m pytest tests -q` for the default test suite. Resolver tests use
 mocked HTTP responses, deny unmocked registry access, and skip the public GHCR
 probe by default.
 
@@ -75,6 +75,5 @@ or by digest (`docker pull <recorded digest>`, then tag it as
 Do not roll back by re-pulling `<installed image>:<installed version>`: that tag
 is mutable and may no longer match what was installed.
 
-PyYAML in `pr-ci.yml` (used by the workflow test) is installed unpinned, like the
-other Python tools in that workflow; the repository has no lockfile, so this is
-not a new class of risk.
+Test dependencies (pytest, PyYAML for the workflow test) are exact-pinned in
+`requirements-ci.txt`, used by both `ci_local.sh` and `pr-ci.yml`.

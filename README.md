@@ -48,9 +48,11 @@ helianthus-ebusgo -> helianthus-ebusreg -> helianthus-ebusgateway -> helianthus-
 ```bash
 git clone https://github.com/Project-Helianthus/helianthus-ha-addon.git
 cd helianthus-ha-addon
-./scripts/ci_local.sh
+./scripts/ci_local.sh   # creates .venv-ci from requirements-ci.txt on first run (needs network once)
 python3 scripts/smoke_addon_checklist.py --help
 ```
+
+To run individual tests, use the same environment: `.venv-ci/bin/python3 -m pytest tests -q`.
 
 ### 2) Add repository to Home Assistant and install
 

@@ -10,6 +10,16 @@ if [[ ! "$gateway_version" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
+echo "==> bootstrap test dependencies (.venv-ci from requirements-ci.txt)"
+venv=".venv-ci"
+req_stamp="$(python3 -c 'import hashlib,sys;print(hashlib.sha256(open("requirements-ci.txt","rb").read()).hexdigest())')"
+if [ ! -x "${venv}/bin/python3" ] || [ "$(cat "${venv}/.requirements-sha256" 2>/dev/null || true)" != "${req_stamp}" ]; then
+  python3 -m venv "${venv}"
+  "${venv}/bin/python3" -m pip install --quiet --disable-pip-version-check -r requirements-ci.txt
+  printf '%s' "${req_stamp}" > "${venv}/.requirements-sha256"
+fi
+export PATH="${repo_root}/${venv}/bin:${PATH}"
+
 echo "==> validate JSON syntax"
 found=0
 while IFS= read -r file; do
