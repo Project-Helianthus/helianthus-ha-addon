@@ -84,6 +84,9 @@ echo "==> BOM manifest contract"
 python3 scripts/bom_manifest.py check
 python3 -m pytest tests/test_bom_manifest.py -q
 
+echo "==> test image publication plan"
+python3 -m pytest tests/test_test_image_plan.py -q
+
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 scripts/check_markdown_private_ips.py --self-test
 python3 scripts/check_markdown_private_ips.py

@@ -1,0 +1,121 @@
+name: test-image
+
+# Opt-in test build of the add-on at an explicit gateway commit. It never runs
+# on pull requests or pushes, never reads helianthus/config.json for a tag, and
+# publishes only test-<label>-<short sha> (never `latest`, never a version tag).
+# See "Test images" in CONVENTIONS.md.
+on:
+  workflow_dispatch:
+    inputs:
+      gateway_sha:
+        description: Gateway commit (40 hex) to build the add-on at
+        required: true
+        type: string
+      test_label:
+        description: Label in the test tag (test-<label>-<short sha>)
+        required: false
+        default: second-site
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/project-helianthus/helianthus-ha-addon
+  OCI_SOURCE: https://github.com/Project-Helianthus/helianthus-ha-addon
+  OCI_DESCRIPTION: Helianthus Home Assistant add-on (TEST IMAGE, not a release)
+  OCI_LICENSE: AGPL-3.0-or-later
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      short: ${{ steps.plan.outputs.short }}
+      build_version: ${{ steps.plan.outputs.build_version }}
+      manifest_sources: ${{ steps.plan.outputs.manifest_sources }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Plan test tags
+        id: plan
+        env:
+          GATEWAY_SHA: ${{ inputs.gateway_sha }}
+          TEST_LABEL: ${{ inputs.test_label }}
+        run: |
+          set -euo pipefail
+          python3 scripts/test_image_plan.py plan \
+            --gateway-sha "${GATEWAY_SHA}" --test-label "${TEST_LABEL}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            base: ghcr.io/home-assistant/amd64-base:3.20
+          - platform: linux/arm64
+            arch: aarch64
+            base: ghcr.io/home-assistant/aarch64-base:3.20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push test image (${{ matrix.arch }})
+        uses: docker/build-push-action@v5
+        with:
+          context: ./helianthus
+          push: true
+          platforms: ${{ matrix.platform }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=${{ env.OCI_SOURCE }}
+            org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.helianthus.test-image=true
+            io.helianthus.gateway-commit=${{ inputs.gateway_sha }}
+          build-args: |
+            BUILD_VERSION=${{ needs.plan.outputs.build_version }}
+            EBUSGATEWAY_VERSION=${{ inputs.gateway_sha }}
+            VRCEXPLORER_VERSION=v0.6.1
+            BUILD_FROM=${{ matrix.base }}
+          secrets: |
+            github_token=${{ secrets.REPO_READ_TOKEN }}
+
+  manifest:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create test manifest
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          SOURCES: ${{ needs.plan.outputs.manifest_sources }}
+          GATEWAY_SHA: ${{ inputs.gateway_sha }}
+        run: |
+          set -euo pipefail
+          refs=()
+          for source in ${SOURCES}; do refs+=("${IMAGE_NAME}:${source}"); done
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
+            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
+            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
+            --annotation "index:io.helianthus.test-image=true" \
+            --annotation "index:io.helianthus.gateway-commit=${GATEWAY_SHA}" \
+            -t "${IMAGE_NAME}:${TAG}" "${refs[@]}"

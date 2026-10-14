@@ -122,6 +122,8 @@ jobs:
           python3 -m pip install --quiet --user pytest
           python3 scripts/bom_manifest.py check
           python3 -m pytest tests/test_bom_manifest.py -q
+          python3 -m pip install --quiet --user pyyaml
+          python3 -m pytest tests/test_test_image_plan.py -q
 
       - name: Validate gateway parity gate artifact
         shell: bash
