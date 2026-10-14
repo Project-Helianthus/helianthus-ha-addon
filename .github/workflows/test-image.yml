@@ -2,7 +2,8 @@ name: test-image
 
 # Opt-in test build of the add-on at an explicit gateway commit. It never runs
 # on pull requests or pushes, never reads helianthus/config.json for a tag, and
-# publishes only test-<label>-<short sha> (never `latest`, never a version tag).
+# publishes only test-<label>-<short sha> (never `latest`, never a version tag);
+# per-architecture images carry the run id so a manifest only combines its own run.
 # See "Test images" in CONVENTIONS.md.
 on:
   workflow_dispatch:
@@ -48,10 +49,12 @@ jobs:
         env:
           GATEWAY_SHA: ${{ inputs.gateway_sha }}
           TEST_LABEL: ${{ inputs.test_label }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           python3 scripts/test_image_plan.py plan \
-            --gateway-sha "${GATEWAY_SHA}" --test-label "${TEST_LABEL}" >> "$GITHUB_OUTPUT"
+            --gateway-sha "${GATEWAY_SHA}" --test-label "${TEST_LABEL}" \
+            --run-id "${RUN_ID}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: plan
@@ -83,7 +86,7 @@ jobs:
           push: true
           platforms: ${{ matrix.platform }}
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}-r${{ github.run_id }}
           labels: |
             org.opencontainers.image.source=${{ env.OCI_SOURCE }}
             org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}

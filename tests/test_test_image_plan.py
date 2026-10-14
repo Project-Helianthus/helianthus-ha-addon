@@ -10,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/test_image_plan.py"
 SHA = "80cdb40082bc74d9b676d293c4554586f2588138"
+RUN = "123456789"
 
 spec = importlib.util.spec_from_file_location("test_image_plan", SCRIPT)
 module = importlib.util.module_from_spec(spec)
@@ -17,11 +18,11 @@ spec.loader.exec_module(module)
 
 
 def test_tags_are_test_only() -> None:
-    result = module.plan(SHA, "second-site")
+    result = module.plan(SHA, "second-site", RUN)
     assert result["tag"] == "test-second-site-80cdb400"
     assert result["arch_tags"] == [
-        "test-second-site-80cdb400-amd64",
-        "test-second-site-80cdb400-aarch64",
+        "test-second-site-80cdb400-amd64-r123456789",
+        "test-second-site-80cdb400-aarch64-r123456789",
     ]
     assert result["manifest_tags"] == ["test-second-site-80cdb400"]
     assert result["manifest_sources"] == result["arch_tags"]
@@ -39,27 +40,27 @@ def test_architectures_match_declared_config() -> None:
 @pytest.mark.parametrize("sha", ["", "80cdb400", SHA.upper(), SHA[:-1] + "g", SHA + "0", "main", SHA + "\n", " " + SHA, SHA + " ", SHA + "\r"])
 def test_rejects_bad_sha(sha: str) -> None:
     with pytest.raises(ValueError):
-        module.plan(sha, "second-site")
+        module.plan(sha, "second-site", RUN)
 
 
 @pytest.mark.parametrize("label", ["", "Second", "a b", "-x", "a/b", "x" * 32, "latest:1", "second-site\n", "second-site ", " second-site"])
 def test_rejects_bad_label(label: str) -> None:
     with pytest.raises(ValueError):
-        module.plan(SHA, label)
+        module.plan(SHA, label, RUN)
 
 
 def test_cli_outputs_github_output_lines() -> None:
     out = subprocess.run(
-        [sys.executable, str(SCRIPT), "plan", "--gateway-sha", SHA],
+        [sys.executable, str(SCRIPT), "plan", "--gateway-sha", SHA, "--run-id", RUN],
         check=True, capture_output=True, text=True,
     ).stdout.splitlines()
     assert "tag=test-second-site-80cdb400" in out
-    assert "manifest_sources=test-second-site-80cdb400-amd64 test-second-site-80cdb400-aarch64" in out
+    assert "manifest_sources=test-second-site-80cdb400-amd64-r123456789 test-second-site-80cdb400-aarch64-r123456789" in out
 
 
 def test_cli_fails_on_bad_input() -> None:
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "plan", "--gateway-sha", "abc"], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "plan", "--gateway-sha", "abc", "--run-id", RUN], capture_output=True, text=True
     )
     assert result.returncode == 1
 
@@ -102,7 +103,9 @@ def test_workflow_build_tags_are_exactly_the_planned_arch_tags() -> None:
     pushes = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action")]
     assert len(pushes) == 1
     tags = [line.strip() for line in pushes[0]["with"]["tags"].splitlines() if line.strip()]
-    assert tags == ["${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}"]
+    assert tags == [
+        "${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}-r${{ github.run_id }}"
+    ]
     assert pushes[0]["with"]["push"] is True
 
 
@@ -134,3 +137,37 @@ def test_workflow_serializes_identical_dispatches_and_labels_the_run() -> None:
     manifest = next(step for step in workflow["jobs"]["manifest"]["steps"] if "run" in step)
     assert manifest["env"]["RUN_ID"] == "${{ github.run_id }}"
     assert 'index:io.helianthus.workflow-run=${RUN_ID}' in manifest["run"]
+
+
+@pytest.mark.parametrize("bad_run", ["", "12a", "-1", "1 ", "1\n", "1" * 21])
+def test_rejects_bad_run_id(bad_run: str) -> None:
+    with pytest.raises(ValueError):
+        module.plan(SHA, "second-site", bad_run)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # (description, run that published amd64, run that published aarch64, run assembling the manifest)
+        ("partial rerun of the same run keeps one run id", "10", "10", "10"),
+        ("run B publishes while run A is partly failed", "10", "11", "10"),
+        ("run B publishes while run A is partly failed (B manifest)", "10", "11", "11"),
+    ],
+)
+def test_manifest_never_mixes_runs(case) -> None:
+    _, amd64_run, aarch64_run, manifest_run = case
+    published = {
+        "amd64": module.plan(SHA, "second-site", amd64_run)["arch_tags"][0],
+        "aarch64": module.plan(SHA, "second-site", aarch64_run)["arch_tags"][1],
+    }
+    sources = module.plan(SHA, "second-site", manifest_run)["manifest_sources"]
+    # The manifest assembles tags that carry its own run id; an image from another
+    # run lives under a different tag, so a missing image fails the manifest
+    # (imagetools create cannot find the source) instead of being replaced silently.
+    assert all(source.endswith(f"-r{manifest_run}") for source in sources)
+    available = set(published.values())
+    mixed = [source for source in sources if source not in available]
+    if amd64_run == aarch64_run == manifest_run:
+        assert not mixed
+    else:
+        assert mixed  # incomplete run: the manifest step fails, it never mixes runs

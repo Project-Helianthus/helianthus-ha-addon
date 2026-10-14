@@ -47,7 +47,7 @@ commit, required) and `test_label` (default `second-site`). It builds the
 commit), records the commit in the `io.helianthus.gateway-commit` label and
 index annotation, and publishes only
 `ghcr.io/project-helianthus/helianthus-ha-addon:test-<label>-<first 8 of sha>`
-(plus `-amd64` / `-aarch64`). It never publishes `latest` or a version tag and
+(assembled from run-specific `-amd64-r<run id>` / `-aarch64-r<run id>` images, so a manifest never combines images of different runs). It never publishes `latest` or a version tag and
 never reads or changes `config.json`, the BOM or the stable gateway pin. The tag
 logic lives in `scripts/test_image_plan.py` (tested by
 `tests/test_test_image_plan.py`).
