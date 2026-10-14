@@ -18,7 +18,8 @@ artifacts and stable interfaces without redefining their contracts.
 2. Create `issue/<number>-<short-slug>` from `origin/main`.
 3. Make the smallest scoped change and add or update focused tests when behavior
    changes.
-4. Run `./scripts/ci_local.sh`, commit, push, and open one PR that links the
+4. Run `./scripts/ci_local.sh` (it bootstraps the gitignored `.venv-ci` from
+   `requirements-ci.txt`; do not rely on machine-installed packages), commit, push, and open one PR that links the
    issue.
 5. Resolve every valid P0-P2 finding and rerun validation after each fix.
 6. Obtain a fresh exact-HEAD `NO_BLOCKING_FINDINGS` review with all required

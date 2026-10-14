@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Local CI. Test dependencies come from requirements-ci.txt in .venv-ci, which
+# scripts/ci_bootstrap.sh recreates (venv --clear) whenever that file changes.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,6 +11,11 @@ if [[ ! "$gateway_version" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Invalid EBUSGATEWAY_VERSION in helianthus/Dockerfile: ${gateway_version:-<empty>}" >&2
   exit 1
 fi
+
+echo "==> bootstrap test dependencies (.venv-ci from requirements-ci.txt)"
+venv=".venv-ci"
+./scripts/ci_bootstrap.sh "${venv}" requirements-ci.txt
+export PATH="${repo_root}/${venv}/bin:${PATH}"
 
 echo "==> validate JSON syntax"
 found=0
@@ -83,6 +90,9 @@ python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_gua
 echo "==> BOM manifest contract"
 python3 scripts/bom_manifest.py check
 python3 -m pytest tests/test_bom_manifest.py -q
+
+echo "==> test image publication plan"
+python3 -m pytest tests/test_test_image_plan.py tests/test_ci_bootstrap.py -q
 
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 scripts/check_markdown_private_ips.py --self-test

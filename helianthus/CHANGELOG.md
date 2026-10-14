@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the opt-in `test-image` workflow (manual dispatch with a gateway commit) that
+  publishes only `test-<label>-<short sha>` images. The catalog version, the BOM and
+  the stable gateway pin are unchanged.
+
 ## 0.6.58 (2026-10-14)
 
 - Add `uart: true` device access for serial adapters. No `devices` entry is
