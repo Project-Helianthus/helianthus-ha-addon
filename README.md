@@ -59,7 +59,7 @@ ha addons repo add https://github.com/Project-Helianthus/helianthus-ha-addon
 ```
 
 Then install **Helianthus** from the Add-on Store and open add-on configuration.
-Release `0.6.56` packages the separated eeBUS Pairing, SHIP and read-only SPINE
+Release `0.6.57` packages the separated eeBUS Pairing, SHIP and read-only SPINE
 workspaces alongside the canonical PV MCP and authenticated GraphQL M2M
 surfaces. Its rollout
 contract binds the exact gateway image to the Home Assistant canonical PV

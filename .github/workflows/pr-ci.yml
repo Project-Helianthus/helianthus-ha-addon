@@ -115,6 +115,14 @@ jobs:
           python3 -m pip install --quiet --user pytest
           python3 -m pytest tests/test_runtime_state_wrapper_red.py tests/test_gateway_parity_gate.py -q
 
+      - name: Validate BOM manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --user pytest
+          python3 scripts/bom_manifest.py check
+          python3 -m pytest tests/test_bom_manifest.py -q
+
       - name: Validate gateway parity gate artifact
         shell: bash
         run: |

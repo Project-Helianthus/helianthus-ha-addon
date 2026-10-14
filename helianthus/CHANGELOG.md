@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.6.57 (2026-10-14)
+
+- Pin gateway `e017a547967e449ffbe76ea779d5892596306f07` (was
+  `a759efd7f72a099288f1fc2b7cf20236d37cfa0b`), which includes the runtime-state
+  persistence fix, and pin `helianthus-vrc-explorer` `v0.6.1` (was `v0.5.1`).
+- Stop passing `-m2m-graphql-known-assets`: the gateway removed that flag, so
+  the M2M GraphQL wrapper would have refused to start. `-m2m-graphql-allowed-assets`
+  carries the single configured asset reference.
+- Add the machine-readable build BOM `helianthus/bom.json` (format
+  `helianthus-addon-bom/1`) and `scripts/bom_manifest.py`, which checks the BOM
+  against the Dockerfile pins, the build workflow, `config.json` and the gateway
+  flags the wrapper uses. INT-16 freezes the BOM for the 0.7 release.
+- Option schema, startup wiring and runtime behavior are otherwise unchanged.
+
 ## 0.6.56 (2026-08-20)
 
 - Pin gateway `a759efd7f72a099288f1fc2b7cf20236d37cfa0b`, which separates

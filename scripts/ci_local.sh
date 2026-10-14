@@ -77,6 +77,10 @@ python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guard
 echo "==> post-parity enablement tasks"
 python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
 
+echo "==> BOM manifest contract"
+python3 scripts/bom_manifest.py check
+python3 -m pytest tests/test_bom_manifest.py -q
+
 echo "==> private IPv4 address gate (docs must use placeholders)"
 python3 scripts/check_markdown_private_ips.py --self-test
 python3 scripts/check_markdown_private_ips.py

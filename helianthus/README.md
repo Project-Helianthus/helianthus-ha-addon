@@ -52,7 +52,7 @@ protocol-local; eBUS, eeBUS, HTTP, and MCP keep the normal gateway lifecycle.
 Upgrade startup removes the retired Modbus health record. Any failure before
 the final `exec` also removes the protected endpoint file.
 
-Release `0.6.56` pins the gateway with separate eeBUS Pairing, SHIP and
+Release `0.6.57` pins the gateway with separate eeBUS Pairing, SHIP and
 connected-only read-only SPINE workspaces, deterministic canonical PV V1
 projection, authenticated GraphQL M2M publication, and separate semantic and
 bounded raw Portal surfaces. The rollout contract binds this image to the canonical PV
@@ -119,3 +119,25 @@ Persistent gateway executable overrides are not supported. If an earlier
 installation left `/data/helianthus-gateway` behind, remove that file or
 symlink before startup. The wrapper fails closed until the packaged,
 version-pinned gateway is authoritative.
+
+## Build BOM
+
+`helianthus/bom.json` (format `helianthus-addon-bom/1`) records the exact inputs
+of the image build: the gateway commit and tree, the `helianthus-vrc-explorer`
+tag and commit, the gateway build's Go module pins (`go.mod` requires plus the
+SHA-256 of `go.mod` and `go.sum`), the builder and base images, and the gateway
+CLI flag set the wrapper was verified against.
+
+- `python3 scripts/bom_manifest.py check` runs offline in `ci_local.sh` and in
+  pull-request CI. It fails when the BOM disagrees with `helianthus/Dockerfile`,
+  `.github/workflows/build.yml` or `helianthus/config.json`, or when the wrapper
+  passes a flag the pinned gateway does not define.
+- `python3 scripts/bom_manifest.py generate --gateway-help <file>` rebuilds the
+  BOM online from the Dockerfile pins. `<file>` is the `--help` output of a
+  gateway built from the pinned commit.
+- Image digests are observed at generation time because the build references
+  tags. INT-16 freezes the BOM for the 0.7 release: it replaces the observed
+  digests with pinned digests and sets `freeze.status` to `frozen`. After the
+  freeze, any pin change requires a new BOM.
+- Pin changes also update the Dockerfile, the build workflow, the parity
+  artifact fixture, `config.json` and the changelog in the same pull request.

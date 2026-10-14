@@ -13,8 +13,8 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.6.56"
-GATEWAY = "a759efd7f72a099288f1fc2b7cf20236d37cfa0b"
+VERSION = "0.6.57"
+GATEWAY = "e017a547967e449ffbe76ea779d5892596306f07"
 HA_INTEGRATION = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 FIXTURE = ROOT / "scripts/fixtures/fronius_ha_rollout_contract_pass.json"
 VERIFIER = ROOT / "scripts/check_fronius_ha_rollout.py"
@@ -387,7 +387,7 @@ def test_publication_resolver_binds_exact_index_and_platform_digests(
         token_request.full_url
     )
     assert manifest_request.full_url.endswith(
-        "/project-helianthus/helianthus-ha-addon/manifests/0.6.56"
+        "/project-helianthus/helianthus-ha-addon/manifests/0.6.57"
     )
     assert manifest_request.get_header("Authorization") == "Bearer fixture-token"
     assert "application/vnd.oci.image.index.v1+json" in manifest_request.get_header(

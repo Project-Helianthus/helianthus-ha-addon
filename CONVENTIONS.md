@@ -30,7 +30,7 @@ Run the public release metadata probe explicitly when outbound access to
 HELIANTHUS_RUN_PUBLIC_GHCR_PROBE=1 python3 -m pytest tests/test_fronius_ha_rollout.py::test_public_release_manifest_probe_resolves_existing_tag -q
 ```
 
-That command anonymously reads a pull token and the existing public `0.6.56`
-OCI index for `linux/arm64`. It does not pull or execute an image, authenticate,
+That command anonymously reads a pull token and the public `0.6.57`
+OCI index for `linux/arm64` once that release is published. It does not pull or execute an image, authenticate,
 publish a manifest, or change a tag. Standard local and pull-request test runs
 do not make this GHCR request.
