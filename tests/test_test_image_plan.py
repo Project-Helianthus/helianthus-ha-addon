@@ -36,13 +36,13 @@ def test_architectures_match_declared_config() -> None:
     assert sorted(module.ARCHES) == sorted(config["arch"])
 
 
-@pytest.mark.parametrize("sha", ["", "80cdb400", SHA.upper(), SHA[:-1] + "g", SHA + "0", "main"])
+@pytest.mark.parametrize("sha", ["", "80cdb400", SHA.upper(), SHA[:-1] + "g", SHA + "0", "main", SHA + "\n", " " + SHA, SHA + " ", SHA + "\r"])
 def test_rejects_bad_sha(sha: str) -> None:
     with pytest.raises(ValueError):
         module.plan(sha, "second-site")
 
 
-@pytest.mark.parametrize("label", ["", "Second", "a b", "-x", "a/b", "x" * 32, "latest:1"])
+@pytest.mark.parametrize("label", ["", "Second", "a b", "-x", "a/b", "x" * 32, "latest:1", "second-site\n", "second-site ", " second-site"])
 def test_rejects_bad_label(label: str) -> None:
     with pytest.raises(ValueError):
         module.plan(SHA, label)
@@ -83,3 +83,40 @@ def test_stable_build_workflow_untouched_by_test_inputs() -> None:
     build = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
     assert "gateway_sha" not in build
     assert "test_image_plan" not in build and "io.helianthus.test-image" not in build
+
+
+def _workflow() -> dict:
+    import yaml
+
+    return yaml.safe_load((ROOT / ".github/workflows/test-image.yml").read_text(encoding="utf-8"))
+
+
+def test_workflow_matrix_is_exactly_the_declared_architectures() -> None:
+    matrix = _workflow()["jobs"]["build"]["strategy"]["matrix"]["include"]
+    assert [entry["arch"] for entry in matrix] == list(module.ARCHES)
+    assert {entry["platform"] for entry in matrix} == {"linux/amd64", "linux/arm64"}
+
+
+def test_workflow_build_tags_are_exactly_the_planned_arch_tags() -> None:
+    steps = _workflow()["jobs"]["build"]["steps"]
+    pushes = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action")]
+    assert len(pushes) == 1
+    tags = [line.strip() for line in pushes[0]["with"]["tags"].splitlines() if line.strip()]
+    assert tags == ["${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}"]
+    assert pushes[0]["with"]["push"] is True
+
+
+def test_workflow_manifest_destination_and_sources_come_only_from_the_plan() -> None:
+    jobs = _workflow()["jobs"]
+    steps = jobs["manifest"]["steps"]
+    runs = [step["run"] for step in steps if "run" in step]
+    assert len(runs) == 1
+    run = runs[0]
+    assert run.count("imagetools create") == 1
+    assert '-t "${IMAGE_NAME}:${TAG}" "${refs[@]}"' in run
+    env = next(step for step in steps if "run" in step)["env"]
+    assert env["TAG"] == "${{ needs.plan.outputs.tag }}"
+    assert env["SOURCES"] == "${{ needs.plan.outputs.manifest_sources }}"
+    assert 'refs+=("${IMAGE_NAME}:${source}")' in run
+    for forbidden in ("0.6.", "version", "latest"):
+        assert forbidden not in run

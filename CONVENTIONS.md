@@ -52,18 +52,29 @@ never reads or changes `config.json`, the BOM or the stable gateway pin. The tag
 logic lives in `scripts/test_image_plan.py` (tested by
 `tests/test_test_image_plan.py`).
 
-Install on an existing installation by retag (operator-run, after OK):
+Install on an existing installation by retag (operator-run, after OK). Before
+retagging, record the installed image digest and keep a local rollback tag, so
+rollback never depends on a mutable version tag in the registry:
 
 ```sh
 ha addons stop local_helianthus
 ha addons info local_helianthus          # note the image and version the Supervisor uses
 docker inspect <container or image>      # confirm the installed image reference
+docker inspect --format '{{index .RepoDigests 0}}' <installed image>:<installed version>   # record this digest
+docker tag <installed image>:<installed version> <installed image>:rollback-<date>
 docker pull ghcr.io/project-helianthus/helianthus-ha-addon:test-<label>-<short>
 docker tag ghcr.io/project-helianthus/helianthus-ha-addon:test-<label>-<short> <installed image>:<installed version>
 ha addons start local_helianthus
 ```
 
 Verify with `ha addons info local_helianthus` and the gateway's build/commit
-field (the gateway `buildID` is the pinned commit). Roll back with
-`docker pull <installed image>:<installed version>`, which restores the original
-image under the same reference; then stop and start the add-on again.
+field (the gateway `buildID` is the pinned commit). Roll back with the local tag
+(`docker tag <installed image>:rollback-<date> <installed image>:<installed version>`)
+or by digest (`docker pull <recorded digest>`, then tag it as
+`<installed image>:<installed version>`), then stop and start the add-on again.
+Do not roll back by re-pulling `<installed image>:<installed version>`: that tag
+is mutable and may no longer match what was installed.
+
+PyYAML in `pr-ci.yml` (used by the workflow test) is installed unpinned, like the
+other Python tools in that workflow; the repository has no lockfile, so this is
+not a new class of risk.

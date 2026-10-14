@@ -15,8 +15,8 @@ import argparse
 import re
 import sys
 
-SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
+SHA_RE = re.compile(r"[0-9a-f]{40}")
+LABEL_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,30}")
 SHORT_LEN = 8
 # Architectures the add-on declares in config.json; the test image builds only these.
 ARCHES = ("amd64", "aarch64")
@@ -25,9 +25,9 @@ SEMVER_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+")
 
 
 def plan(gateway_sha: str, label: str) -> dict[str, object]:
-    if not SHA_RE.match(gateway_sha):
+    if not SHA_RE.fullmatch(gateway_sha):
         raise ValueError("gateway_sha must be a 40-character lowercase hex commit")
-    if not LABEL_RE.match(label):
+    if not LABEL_RE.fullmatch(label):
         raise ValueError("test_label must match [a-z0-9][a-z0-9-]{0,30}")
     short = gateway_sha[:SHORT_LEN]
     tag = f"test-{label}-{short}"
