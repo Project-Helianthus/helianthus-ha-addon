@@ -17,6 +17,10 @@ venv=".venv-ci"
 ./scripts/ci_bootstrap.sh "${venv}" requirements-ci.txt
 export PATH="${repo_root}/${venv}/bin:${PATH}"
 
+echo "==> offline release cohort guard"
+python3 scripts/check_release_cohort.py
+python3 -m pytest -q tests/test_release_cohort.py
+
 echo "==> validate JSON syntax"
 found=0
 while IFS= read -r file; do
