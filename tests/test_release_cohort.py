@@ -142,6 +142,8 @@ def test_legacy_packaging_is_not_reclassified(tmp_path, explorer):
 @pytest.mark.parametrize("declaration", [
     "", "ARG VRCEXPLORER_VERSION", "ARG VRCEXPLORER_VERSION=v0.6.1",
     "ARG VRCEXPLORER_VERSION=${RELEASE}",
+    "ARG VRCEXPLORER_VERSION=v0.7.0#invalid",
+    "ARG VRCEXPLORER_VERSION=v0.7.0 # note",
 ])
 def test_missing_or_conflicting_explorer_defaults_fail(tmp_path, declaration):
     dockerfile = f"ARG EBUSGATEWAY_VERSION=opaque-test-pin\n{declaration}\n"

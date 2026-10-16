@@ -41,7 +41,9 @@ def arg_default(dockerfile: str, name: str) -> str:
     for line in instructions.splitlines():
         if not re.match(r"^\s*ARG\s+" + re.escape(name) + r"(?:\s|=|$)", line, re.I):
             continue
-        parts = shlex.split(line, comments=True)
+        # Docker treats "#" as a comment only at the start of a line; inline "#" text
+        # is part of the instruction, so keep it and let validation reject it.
+        parts = shlex.split(line, comments=False)
         if len(parts) != 2 or not parts[1].startswith(name + "="):
             raise ValueError(f"{name} must have a literal default in every declaration")
         values.append(parts[1].split("=", 1)[1])
