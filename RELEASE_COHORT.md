@@ -4,6 +4,11 @@ The [PR workflow](https://github.com/Project-Helianthus/helianthus-ha-addon/blob
 and `./scripts/ci_local.sh` both run `scripts/check_release_cohort.py` and its
 focused tests. For an add-on declaring the 0.7 cohort, a conflicting Explorer
 release cohort fails validation automatically on pull requests.
+This includes the Dockerfile default and every Explorer build-argument override
+in the [test-image workflow](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/.github/workflows/test-image.yml).
+An omitted override uses the checked Dockerfile default; an invalid or conflicting
+override fails the guard. Use `--test-image-workflow path/test-image.yml` to check
+an alternate workflow alongside `--addon-config` and `--dockerfile`.
 
 The guard checks declared packaging metadata offline. An opaque gateway pin
 leaves its release cohort Unknown unless release metadata is supplied; a passing

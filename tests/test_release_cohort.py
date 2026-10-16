@@ -14,23 +14,33 @@ SCRIPT = ROOT / "scripts/check_release_cohort.py"
 
 
 def run_guard(tmp_path, addon="0.7.0", explorer="v0.7.1", gateway=None,
-              declared=None, dockerfile=None):
+              declared=None, dockerfile=None, test_explorer="v0.7.1"):
     config = tmp_path / "config.json"
     docker = tmp_path / "Dockerfile"
+    workflow = tmp_path / "test-image.yml"
+    source = yaml.safe_load((ROOT / ".github/workflows/test-image.yml").read_text(encoding="utf-8"))
+    for step in source["jobs"]["build"]["steps"]:
+        if step.get("uses", "").startswith("docker/build-push-action@"):
+            args = step["with"]["build-args"].splitlines()
+            args = [line for line in args if not line.startswith("VRCEXPLORER_VERSION=")]
+            if test_explorer is not None:
+                args.append(f"VRCEXPLORER_VERSION={test_explorer}")
+            step["with"]["build-args"] = "\n".join(args)
+    workflow.write_text(yaml.safe_dump(source), encoding="utf-8")
     config.write_text(json.dumps({"version": addon}), encoding="utf-8")
     docker.write_text(dockerfile if dockerfile is not None else (
         f"ARG VRCEXPLORER_VERSION={explorer}\n"
         "FROM synthetic\n"
-        f"ARG EBUSGATEWAY_VERSION={gateway or 'a' * 40}\n"
+        f"ARG EBUSGATEWAY_VERSION={gateway or 'opaque-test-pin'}\n"
         f"ARG VRCEXPLORER_VERSION={explorer}\n"
     ), encoding="utf-8")
-    before = (config.read_bytes(), docker.read_bytes())
+    before = (config.read_bytes(), docker.read_bytes(), workflow.read_bytes())
     command = [sys.executable, str(SCRIPT), "--addon-config", str(config),
-               "--dockerfile", str(docker)]
+               "--dockerfile", str(docker), "--test-image-workflow", str(workflow)]
     if declared is not None:
         command.extend(["--gateway-release-version", declared])
     result = subprocess.run(command, capture_output=True, text=True, timeout=10)
-    assert (config.read_bytes(), docker.read_bytes()) == before
+    assert (config.read_bytes(), docker.read_bytes(), workflow.read_bytes()) == before
     return result
 
 
@@ -49,7 +59,29 @@ def test_explorer_mismatch_or_unknown_fails(tmp_path, explorer):
     assert "FAIL:" in result.stdout
 
 
-@pytest.mark.parametrize("declared", ["0.6.9", "v0.8.0", "latest", "", "a" * 40])
+@pytest.mark.parametrize("test_explorer", [
+    "v0.6.1", "v0.8.0", "latest", "", "${{ inputs.explorer }}",
+    "v0.7.1\nVRCEXPLORER_VERSION=v0.6.1",
+])
+def test_test_image_explorer_override_conflict_or_unknown_fails(tmp_path, test_explorer):
+    result = run_guard(tmp_path, declared="0.7.0", test_explorer=test_explorer)
+    assert result.returncode == 1
+    assert "FAIL:" in result.stdout
+
+
+@pytest.mark.parametrize("test_explorer", ["v0.7.9", "v0.7.0-rc.1", None])
+def test_test_image_matching_override_or_dockerfile_default_passes(tmp_path, test_explorer):
+    result = run_guard(tmp_path, declared="0.7.0", test_explorer=test_explorer)
+    assert result.returncode == 0, result.stdout
+
+
+def test_legacy_test_image_override_remains_unchanged(tmp_path):
+    result = run_guard(tmp_path, addon="0.6.58", explorer="v0.6.1", test_explorer="v0.6.1")
+    assert result.returncode == 0, result.stdout
+    assert "NOT_APPLICABLE" in result.stdout
+
+
+@pytest.mark.parametrize("declared", ["0.6.9", "v0.8.0", "latest", "", "opaque-test-pin"])
 def test_explicit_gateway_conflict_or_invalid_release_fails(tmp_path, declared):
     result = run_guard(tmp_path, declared=declared)
     assert result.returncode == 1
@@ -88,7 +120,7 @@ def test_legacy_packaging_is_not_reclassified(tmp_path, explorer):
     "ARG VRCEXPLORER_VERSION=${RELEASE}",
 ])
 def test_missing_or_conflicting_explorer_defaults_fail(tmp_path, declaration):
-    dockerfile = f"ARG EBUSGATEWAY_VERSION={'a' * 40}\n{declaration}\n"
+    dockerfile = f"ARG EBUSGATEWAY_VERSION=opaque-test-pin\n{declaration}\n"
     if declaration:
         dockerfile += "ARG VRCEXPLORER_VERSION=v0.7.0\n"
     result = run_guard(tmp_path, dockerfile=dockerfile)

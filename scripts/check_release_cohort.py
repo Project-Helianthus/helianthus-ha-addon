@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import shlex
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = re.compile(
@@ -46,7 +48,8 @@ def arg_default(dockerfile: str, name: str) -> str:
     return values[0]
 
 
-def check(config: dict, dockerfile: str, gateway_release: str | None) -> list[str]:
+def check(config: dict, dockerfile: str, gateway_release: str | None,
+          test_image_workflow: dict) -> list[str]:
     version = config.get("version")
     if not isinstance(version, str):
         raise ValueError("add-on config must contain a release version string")
@@ -57,6 +60,15 @@ def check(config: dict, dockerfile: str, gateway_release: str | None) -> list[st
     explorer = arg_default(dockerfile, "VRCEXPLORER_VERSION")
     if cohort(explorer) != addon_cohort:
         raise ValueError("Explorer release cohort differs from add-on 0.7")
+    for job in test_image_workflow["jobs"].values():
+        for step in job.get("steps", []):
+            if not step.get("uses", "").startswith("docker/build-push-action@"):
+                continue
+            for line in step.get("with", {}).get("build-args", "").splitlines():
+                name, separator, value = line.strip().partition("=")
+                if name.strip() == "VRCEXPLORER_VERSION":
+                    if not separator or cohort(value.strip()) != addon_cohort:
+                        raise ValueError("test-image Explorer override cohort differs from add-on 0.7")
     gateway_pin = arg_default(dockerfile, "EBUSGATEWAY_VERSION")
     try:
         pin_cohort = cohort(gateway_pin)
@@ -92,14 +104,17 @@ def main() -> int:
     )
     parser.add_argument("--addon-config", type=Path, default=ROOT / "helianthus/config.json")
     parser.add_argument("--dockerfile", type=Path, default=ROOT / "helianthus/Dockerfile")
+    parser.add_argument("--test-image-workflow", type=Path, default=ROOT / ".github/workflows/test-image.yml")
     parser.add_argument("--gateway-release-version", help="optional declared gateway release; never inferred from an opaque commit")
     args = parser.parse_args()
     try:
         config = json.loads(args.addon_config.read_text(encoding="utf-8"))
         if not isinstance(config, dict):
             raise ValueError("add-on config must be a JSON object")
-        messages = check(config, args.dockerfile.read_text(encoding="utf-8"), args.gateway_release_version)
-    except (OSError, ValueError) as exc:
+        workflow = yaml.safe_load(args.test_image_workflow.read_text(encoding="utf-8"))
+        messages = check(config, args.dockerfile.read_text(encoding="utf-8"),
+                         args.gateway_release_version, workflow)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"FAIL: {exc}")
         return 1
     print("\n".join(messages))
