@@ -87,6 +87,10 @@ def test_test_image_matching_override_or_dockerfile_default_passes(tmp_path, tes
     ('"VRCEXPLORER_VERSION=v0.7.1",suffix', 1),
     ('"OTHER=some ""quoted"" text"\n"VRCEXPLORER_VERSION=v0.6.1"', 1),
     ('"VRCEXPLORER_VERSION=v0.6.1', 1),
+    ("${{ inputs.build_args }}", 1),
+    ("OTHER=x\n${{ inputs.extra_build_args }}\nVRCEXPLORER_VERSION=v0.7.1", 1),
+    ("VRCEXPLORER_VERSION=${{ inputs.explorer }}", 1),
+    ("BUILD_FROM=${{ matrix.base }}\nVRCEXPLORER_VERSION=v0.7.1", 0),
 ])
 def test_test_image_csv_build_arguments(tmp_path, build_args, code):
     result = run_guard(tmp_path, declared="0.7.0", build_args=build_args)

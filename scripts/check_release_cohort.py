@@ -71,6 +71,12 @@ def check(config: dict, dockerfile: str, gateway_release: str | None,
             build_args = step.get("with", {}).get("build-args", "").strip()
             for record in csv.reader(io.StringIO(build_args, newline=""), strict=True):
                 name, separator, value = ",".join(record).strip().partition("=")
+                # An expression in the name position (or a record without "=") can expand
+                # to any assignment at run time, including a 0.6 Explorer override.
+                if "${{" in name:
+                    raise ValueError("test-image build-args contain an opaque expression record")
+                if name.strip() == "VRCEXPLORER_VERSION" and "${{" in value:
+                    raise ValueError("test-image Explorer override must be a literal release")
                 if name.strip() == "VRCEXPLORER_VERSION":
                     if not separator or cohort(value.strip()) != addon_cohort:
                         raise ValueError("test-image Explorer override cohort differs from add-on 0.7")
