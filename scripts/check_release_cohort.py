@@ -27,8 +27,14 @@ def cohort(value: str) -> tuple[int, int]:
 
 def arg_default(dockerfile: str, name: str) -> str:
     """Require every declaration to agree, including defaults in later stages."""
+    # Docker ignores comment/blank lines even within a continued instruction.
+    instructions = "\n".join(
+        line for line in dockerfile.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    instructions = re.sub(r"\\[ \t]*\n", "", instructions)
     values = []
-    for line in dockerfile.splitlines():
+    for line in instructions.splitlines():
         if not re.match(r"^\s*ARG\s+" + re.escape(name) + r"(?:\s|=|$)", line, re.I):
             continue
         parts = shlex.split(line, comments=True)

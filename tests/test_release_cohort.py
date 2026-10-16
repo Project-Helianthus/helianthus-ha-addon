@@ -95,6 +95,24 @@ def test_missing_or_conflicting_explorer_defaults_fail(tmp_path, declaration):
     assert result.returncode == 1
 
 
+@pytest.mark.parametrize("name", ["VRCEXPLORER_VERSION", "EBUSGATEWAY_VERSION"])
+@pytest.mark.parametrize("later_version,code", [("v0.7.0", 0), ("v0.6.9", 1)])
+@pytest.mark.parametrize("continuation", ["\\\n", "\\\r\n", "\\\n# stage default\n\n"])
+def test_continued_stage_defaults_are_checked(tmp_path, name, later_version, code, continuation):
+    dockerfile = (
+        "ARG VRCEXPLORER_VERSION=v0.7.0\n"
+        "ARG EBUSGATEWAY_VERSION=v0.7.0\n"
+        "FROM synthetic\n"
+        f"ARG {continuation}    {name}={later_version}\n"
+    )
+    result = run_guard(tmp_path, dockerfile=dockerfile)
+    assert result.returncode == code, result.stdout
+    if code:
+        assert f"{name} must have one consistent nonempty default" in result.stdout
+    else:
+        assert "CONSISTENT: declared add-on, Explorer and gateway" in result.stdout
+
+
 @pytest.mark.parametrize("addon", [None, 7, "", "0.7", "0.7.0oops"])
 def test_invalid_addon_version_fails(tmp_path, addon):
     assert run_guard(tmp_path, addon=addon).returncode == 1
