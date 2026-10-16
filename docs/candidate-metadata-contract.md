@@ -47,7 +47,7 @@ are not integers. No free-form extension fields are allowed in this revision.
 | `kind` | `preparatory` or `candidate`; preparation alone never means accepted. |
 | `cohort` | Literal `0.7` for this revision; other cohorts are unsupported, not implicitly accepted. |
 | `components` | Object with exactly `addon`, `gateway`, `explorer`, `ha_integration`, `native_dependencies`. |
-| `architectures` | Nonempty unique array drawn from `aarch64`, `amd64`, matching the reviewed package configuration. |
+| `architectures` | Nonempty unique array drawn from `aarch64`, `amd64`, `armv7`, `armhf`, `i386`; must equal the complete set published by the reviewed build workflow for the version tag before readiness. |
 | `output_binding` | Object described below. |
 | `exact_bom` | Object described below. |
 | `acceptance` | Object with exactly `INT-12`, `INT-13`, `INT-14`, `Portal`, `naming`, `identity`. |
@@ -117,21 +117,41 @@ accepted. No acceptance entry is optional or silently not applicable.
 
 1. Parse strictly and check the complete schema and publication constraints.
    Malformed documents fail validation; no disposition can be trusted.
-2. Compare public inventory to provisioned package metadata. Apply K25 to the
-   add-on release, all Explorer Dockerfile defaults and test-image overrides,
-   and declared gateway release. All three must declare the 0.7 cohort here.
-   A conflicting release fails; an opaque gateway pin needs privately verified
-   release mapping. HA integration and native dependencies retain their own
-   release series: do not impose the add-on cohort on them. Require every
-   release label and public reference to be available before readiness.
+2. Compare public inventory to provisioned package metadata. Pass the reviewed
+   `helianthus/config.json`, `helianthus/Dockerfile` and
+   `.github/workflows/test-image.yml` to K25 as `--addon-config`, `--dockerfile`
+   and `--test-image-workflow`. A non-null `components.addon.release_label`
+   must equal the config's `version` literally (also the build workflow's
+   `BUILD_VERSION`).
+   Pass non-null `components.gateway.release_label` as
+   `--gateway-release-version`; privately verify its mapping to the effective
+   `EBUSGATEWAY_VERSION` Dockerfile ARG, including build-workflow overrides.
+   A non-null `components.explorer.release_label` must equal the effective
+   `VRCEXPLORER_VERSION` ARG for the bound output literally, using the Dockerfile
+   default when no override applies. Sharing a cohort alone is insufficient for
+   that identity check. K25 still checks all Explorer Dockerfile defaults and
+   test-image overrides for cohort consistency; a differently labelled override
+   needs its own bundle to bind its outputs. Add-on, Explorer and gateway must
+   all declare the 0.7 cohort here. A conflicting release fails; an opaque
+   gateway pin needs privately verified release mapping. HA integration and
+   native dependencies retain their own release series: do not impose the
+   add-on cohort on them. Require every release label and public reference to
+   be available before readiness.
 3. Check architecture coverage, complete dependency inventory and all output
-   bindings against the private record. Require `bound` and verified exact-BOM
+   bindings against the private record. The declared architecture set must equal
+   the set published under the version tag by the provisioned
+   `.github/workflows/build.yml`, including its matrix and manifest members.
+   The current workflow publishes `aarch64`, `amd64`, `armv7`, `armhf`, `i386`;
+   matching only `config.json`'s two architectures leaves the bundle `not-ready`.
+   Bind and verify every published architecture, including those outside the
+   Supervisor configuration. Require `bound` and verified exact-BOM
    equality before review. Public references and release labels must agree with
    the mapped artifacts. Missing, stale or mismatched private evidence fails
    closed even if all public status strings say otherwise.
-4. Check every acceptance association. Derive `not-ready` for a preparatory
-   bundle, unavailable component metadata, incomplete bindings, unverified or
-   mismatched equality, or any pending/rejected/missing INT-12, INT-13, INT-14,
+4. Check every acceptance association and the provisioned `helianthus/bom.json`
+   freeze record described below. Derive `not-ready` for a preparatory bundle,
+   an unfrozen BOM, unavailable component metadata, incomplete bindings,
+   unverified or mismatched equality, or any pending/rejected/missing INT-12, INT-13, INT-14,
    Portal, naming or identity acceptance. For a candidate with all these checks
    satisfied, derive `ready-for-review` while independent review is pending.
    Derive `accepted-candidate` only after the orchestrator additionally verifies
@@ -140,14 +160,60 @@ accepted. No acceptance entry is optional or silently not applicable.
    promote the result. A claimed disposition differing from the derived result
    fails validation.
 
+### Offline verification context and M45 results
+
+The validator receives the public JSON and provisioned packaging/evidence files
+as local inputs. A separate optional private verification context is supplied
+by the orchestrator through a trusted local adapter, never through fields in the
+public JSON. The adapter reads the private record offline and reports the
+current association, attestation, component/output IDs, expected and bound
+architecture/dependency/output inventories, exact-BOM comparison result,
+per-entry acceptance verification, and independent-review/full-gate results.
+Each check has a result of satisfied, missing/stale, or mismatch, scoped to the
+same association and exact bundle. Omitted checks default to missing; the
+validator compares context IDs and inventories to the public document. The
+adapter must verify the underlying record, not echo public status strings.
+Raw private coordinates remain private; this contract specifies the context's
+logical inputs without prescribing a private record serialization or storage
+location. No private context means public-only mode.
+
+In public-only mode, check all available schema, publication and packaging
+constraints, report private equality, bindings and acceptance as unverified,
+and derive `not-ready`. A valid document claiming `not-ready` succeeds with
+that result; a claim of `ready-for-review` or `accepted-candidate` reports
+`PRIVATE_EVIDENCE_REQUIRED` and cannot succeed. This is an inability to verify
+the claim, not proof of a mismatch. Never promote a public-only result.
+
+M45 must use these exit codes and diagnostic classes (with sanitized reasons):
+
+| Exit | Message class and meaning |
+| --- | --- |
+| `0` | `VALID: <disposition>` when the claim equals the derived result, including `not-ready`; success does not itself mean readiness. Include `NOT_READY` reasons for unmet prerequisites. |
+| `1` | `INVALID_DOCUMENT` for syntax/schema/publication violations; `METADATA_CONFLICT` for conflicting labels or K25 failure; `EVIDENCE_MISMATCH` for contradictory private evidence; `DISPOSITION_MISMATCH` for a claim inconsistent with the derived result when missing private verification is not the cause. |
+| `2` | `PRIVATE_EVIDENCE_REQUIRED` when missing/stale private context prevents verifying an elevated disposition claim; or `INPUT_UNAVAILABLE` when a required local packaging/evidence input cannot be read. |
+
+Definite invalidity or conflict takes precedence over missing verification.
+Missing private checks leave a correctly claimed `not-ready` document valid;
+private mismatches fail validation even when it claims `not-ready`. With a
+complete trusted context, derive and compare dispositions in steps 3–4 above.
+Required local input failures use `INPUT_UNAVAILABLE` in either mode. These
+results belong to the proposed M45 validator, not the existing K25 checker.
+
 K25's exit zero means no declared cohort conflict and can include `UNVERIFIED`
 or `NOT_APPLICABLE`; neither establishes candidate readiness. Its existing
 behavior outside 0.7 remains unchanged. Current package versions are not
-rewritten by this proposal. The existing
-[BOM checker](../scripts/bom_manifest.py) checks packaging consistency but does
-not authenticate build outputs or provide this new validation contract. Its
-legacy manifest is not a public candidate metadata template: do not copy its
-exact coordinates, timestamps or digests into a candidate document.
+rewritten by this proposal. The current
+[BOM checker](../scripts/bom_manifest.py) and [packaging BOM](../helianthus/bom.json)
+remain gated by `scripts/ci_local.sh`: they check packaging consistency and
+carry the INT-16 freeze record (`freeze.owner` and `freeze.status`).
+`kind: preparatory` may describe an `unfrozen` BOM; `kind: candidate` requires
+`freeze.status: frozen` with `freeze.owner: INT-16` before readiness. A frozen
+BOM alone establishes neither verified output identity nor candidate acceptance.
+The candidate metadata prohibition on exact coordinates, timestamps and digests
+applies to candidate metadata only; the existing packaging BOM intentionally
+records exact revisions and is not a candidate metadata template. Do not copy
+those values into candidate metadata. This distinction does not authorize new
+publication of restricted values in other files.
 
 Any input, resolved dependency, configuration, wrapper, build toolchain,
 container base, architecture or output change creates a new bundle and
@@ -169,6 +235,9 @@ trust safeguards remain required by their owning contracts. All MCP namespaces
 remain pre-stable; this format creates no namespace or authorization gate.
 Nothing here declares stability before 1.0. Candidate acceptance does not
 publish a release, deploy, install or mutate a live system.
+`accepted-candidate` does not imply hardware qualification; reference the
+[consolidated hardware session](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1099)
+results under the same `association_id`, without duplicating them here.
 
 ## Synthetic preparatory example
 
