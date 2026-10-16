@@ -35,7 +35,20 @@ and minimal installation. Output participation/publication also depends on
 and [Matter binding #4](https://github.com/Project-Helianthus/helianthus-matter-binding/issues/4).
 This slice supplies none of those implementations or their completion evidence.
 
-## Routing observations to collect
+## Gateway owner acceptance handoff
+
+The routing and trust cases below are requirements handed to
+[gateway #999](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/999)
+and [gateway #1002](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1002).
+Executable implementation acceptance belongs in that repository, together with
+its candidate handler, synthetic providers, proxy/browser fixtures and CI
+registration. These cases are not steps in this add-on's local procedure and
+cannot be marked complete by its URL oracle. The gateway owners must publish
+their executable procedure and results before add-on integration acceptance;
+until then, implementation acceptance is Unknown and parent acceptance stays open.
+Public source links above provide context only, not a reproducible test artifact.
+
+### Routing observations to collect
 
 Use only a synthetic fixture prefix `P = /fixture-ingress` (no trailing slash).
 The table names browser-visible paths; a fixture proxy strips `P` exactly once
@@ -61,7 +74,7 @@ record the mapping explicitly and apply it consistently to every row.
   evidence or the existing eBUS MCP behavior. Namespaces remain pre-stable
   before 1.0; intentional changes require owner documentation and goldens.
 
-## Trust and publication boundaries
+### Trust and publication boundaries
 
 - [ ] Obtain the accepted #999 trust contract first: which proxy peer is trusted,
   how identity is supplied and sanitized, and how direct/untrusted access is
@@ -85,6 +98,14 @@ record the mapping explicitly and apply it consistently to every row.
   and stale/unavailable markers across failures. Unknown native facts remain
   Unknown; Proven/Hypothesis/Unknown evidence is separate from qualification.
   Do not infer qualification or write authority from visibility in Portal.
+
+The gateway owner handoff also includes zero-device onboarding with optional
+families/output bindings absent, saved configuration surviving a synthetic
+store restart, fresh-store defaults, and fail-closed handling of corrupt saved
+configuration. Instance identity persistence must be checked separately from
+Portal settings, snapshots and sessions. The gateway owners must define recovery
+behavior and register implementation tests in their own CI; this add-on document
+adds no executable gateway acceptance or CI registration.
 
 ## Offline fixture procedure (no Home Assistant or devices)
 
@@ -110,39 +131,16 @@ print("PASS: synthetic URL oracle; implementation acceptance remains unexecuted"
 PY
 ```
 
-- [ ] In the gateway owner's checkout, inventory existing Portal tests before
-  adding coverage. Reuse synthetic providers and in-process request/response
-  recorders for HTML, assets, bootstrap, nil/empty capabilities and trust cases.
-  Do not require an external checkout to validate this add-on document. Public
-  [Portal tests](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/handler_test.go)
-  provide existing root handler/asset/bootstrap/stream/session examples, not a
-  claim of prefixed/authentication acceptance.
-- [ ] Compose the real candidate handler with a fixture proxy for both mounts
-  and run the routing and trust tables. Use an owner-approved isolated browser
-  and fake websocket/SSE producers for browser behavior. If local sockets are
-  denied, record that failure and leave streaming/browser cases UNVERIFIED;
-  request recorders do not prove websocket upgrade support.
-- [ ] Exercise minimal installation with zero discovered devices, no attached
-  adapters, no credentials and all optional families/output bindings absent.
-  Expect a responsive shell/onboarding view with explicit unavailable/disabled
-  capabilities, no invented devices, no repeated background acquisition and no
-  forced credential/device setup just to view the shell. This is pending owner
-  behavior, not a statement that the current wrapper boots device-free.
-- [ ] In a temporary synthetic data store, save one admitted Portal setting,
-  restart the fixture with that store, then repeat with a fresh store. Expect
-  admitted configuration to survive the first restart and documented defaults
-  on the fresh install. Verify invalid/corrupt saved configuration fails closed
-  without silently admitting it or erasing valid retained state. The owning
-  configuration contract determines recovery; do not invent a reset policy.
-- [ ] Separately test instance identity persistence using synthetic state.
-  Preserving the data directory must preserve identity across restart/update;
-  a fresh directory creates a new identity. Do not assume in-memory snapshots
-  or sessions survive restart unless an owner explicitly implements persistence.
-- [ ] Record command, exit status, fixture case and sanitized observation for
-  each test. Confirm any newly added test is in its repository's actual CI
-  invocation; missing registration is a handoff blocker. This document adds no
-  test module or CI registration. Run this repository's full
-  [local gate](../scripts/ci_local.sh) separately from focused document checks.
+The remaining local validation is this repository's
+[local gate](../scripts/ci_local.sh), run from the checkout root:
+
+```bash
+./scripts/ci_local.sh
+```
+
+Record each command, exit status and sanitized observation. Both local checks
+are runnable from this checkout alone; neither establishes gateway routing,
+trust, browser streaming or persistence acceptance.
 
 ## HA / Ingress smoke (separate, not executed here)
 
