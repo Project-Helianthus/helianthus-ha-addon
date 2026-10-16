@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,3 +123,23 @@ def test_required_gate_registers_guard_and_tests_once():
     assert gate.count("python3 scripts/check_release_cohort.py\n") == 1
     assert gate.count("tests/test_release_cohort.py") == 1
     assert "python3 -m pytest -q tests/test_release_cohort.py\n" in gate
+
+
+def test_pr_workflow_enforces_release_cohort():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/pr-ci.yml").read_text(encoding="utf-8"))
+    job = workflow["jobs"]["syntax-checks"]
+    steps = [step for step in job["steps"] if step.get("name") == "Validate release cohort"]
+    assert len(steps) == 1
+    step = steps[0]
+    for scope in (job, step):
+        assert "if" not in scope
+        assert not scope.get("continue-on-error", False)
+    assert step["shell"] == "bash"
+    commands = [line.strip() for line in step["run"].splitlines()]
+    expected = [
+        "set -euo pipefail",
+        "python3 -m pip install --quiet --user -r requirements-ci.txt",
+        "python3 scripts/check_release_cohort.py",
+        "python3 -m pytest -q tests/test_release_cohort.py",
+    ]
+    assert commands == expected

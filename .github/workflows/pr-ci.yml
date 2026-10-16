@@ -124,6 +124,14 @@ jobs:
           python3 -m pytest tests/test_bom_manifest.py -q
           python3 -m pytest tests/test_test_image_plan.py tests/test_ci_bootstrap.py -q
 
+      - name: Validate release cohort
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --user -r requirements-ci.txt
+          python3 scripts/check_release_cohort.py
+          python3 -m pytest -q tests/test_release_cohort.py
+
       - name: Validate gateway parity gate artifact
         shell: bash
         run: |
