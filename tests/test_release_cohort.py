@@ -14,7 +14,7 @@ SCRIPT = ROOT / "scripts/check_release_cohort.py"
 
 
 def run_guard(tmp_path, addon="0.7.0", explorer="v0.7.1", gateway=None,
-              declared=None, dockerfile=None, test_explorer="v0.7.1"):
+              declared=None, dockerfile=None, test_explorer="v0.7.1", build_args=None):
     config = tmp_path / "config.json"
     docker = tmp_path / "Dockerfile"
     workflow = tmp_path / "test-image.yml"
@@ -25,7 +25,7 @@ def run_guard(tmp_path, addon="0.7.0", explorer="v0.7.1", gateway=None,
             args = [line for line in args if not line.startswith("VRCEXPLORER_VERSION=")]
             if test_explorer is not None:
                 args.append(f"VRCEXPLORER_VERSION={test_explorer}")
-            step["with"]["build-args"] = "\n".join(args)
+            step["with"]["build-args"] = "\n".join(args) if build_args is None else build_args
     workflow.write_text(yaml.safe_dump(source), encoding="utf-8")
     config.write_text(json.dumps({"version": addon}), encoding="utf-8")
     docker.write_text(dockerfile if dockerfile is not None else (
@@ -73,6 +73,26 @@ def test_test_image_explorer_override_conflict_or_unknown_fails(tmp_path, test_e
 def test_test_image_matching_override_or_dockerfile_default_passes(tmp_path, test_explorer):
     result = run_guard(tmp_path, declared="0.7.0", test_explorer=test_explorer)
     assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("build_args,code", [
+    ('"VRCEXPLORER_VERSION=v0.6.1"', 1),
+    ('"VRCEXPLORER_VERSION=v0.7.9"', 0),
+    ('"VRCEXPLORER_VERSION=latest"', 1),
+    ('"VRCEXPLORER_VERSION="', 1),
+    ('VRCEXPLORER_VERSION=v0.7.1\n"VRCEXPLORER_VERSION=v0.6.1"', 1),
+    ('\r\n"OTHER=first\r\nsecond"\r\n"VRCEXPLORER_VERSION=v0.6.1"\r\n', 1),
+    ('"OTHER=first,second"\n"VRCEXPLORER_VERSION=v0.7.1"', 0),
+    ('OTHER=first,VRCEXPLORER_VERSION=v0.6.1', 0),
+    ('"VRCEXPLORER_VERSION=v0.7.1",suffix', 1),
+    ('"OTHER=some ""quoted"" text"\n"VRCEXPLORER_VERSION=v0.6.1"', 1),
+    ('"VRCEXPLORER_VERSION=v0.6.1', 1),
+])
+def test_test_image_csv_build_arguments(tmp_path, build_args, code):
+    result = run_guard(tmp_path, declared="0.7.0", build_args=build_args)
+    assert result.returncode == code, result.stdout
+    if code:
+        assert "FAIL:" in result.stdout
 
 
 def test_legacy_test_image_override_remains_unchanged(tmp_path):

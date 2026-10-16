@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 from pathlib import Path
 import re
@@ -64,8 +66,11 @@ def check(config: dict, dockerfile: str, gateway_release: str | None,
         for step in job.get("steps", []):
             if not step.get("uses", "").startswith("docker/build-push-action@"):
                 continue
-            for line in step.get("with", {}).get("build-args", "").splitlines():
-                name, separator, value = line.strip().partition("=")
+            # The action reads CSV records with ignoreComma: true: unquote
+            # fields, then rejoin each record so commas remain in the argument.
+            build_args = step.get("with", {}).get("build-args", "").strip()
+            for record in csv.reader(io.StringIO(build_args, newline=""), strict=True):
+                name, separator, value = ",".join(record).strip().partition("=")
                 if name.strip() == "VRCEXPLORER_VERSION":
                     if not separator or cohort(value.strip()) != addon_cohort:
                         raise ValueError("test-image Explorer override cohort differs from add-on 0.7")
@@ -114,7 +119,7 @@ def main() -> int:
         workflow = yaml.safe_load(args.test_image_workflow.read_text(encoding="utf-8"))
         messages = check(config, args.dockerfile.read_text(encoding="utf-8"),
                          args.gateway_release_version, workflow)
-    except (OSError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, ValueError, csv.Error, yaml.YAMLError) as exc:
         print(f"FAIL: {exc}")
         return 1
     print("\n".join(messages))
