@@ -1,6 +1,6 @@
 # Offline candidate metadata contract
 
-This proposal extends [K25 cohort validation](../RELEASE_COHORT.md) for
+This proposal extends [K25 cohort validation](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/RELEASE_COHORT.md) for
 [issue #252](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/252).
 It is a partial INT-16 / INT-17 acceptance slice in
 [Project #2](https://github.com/orgs/Project-Helianthus/projects/2).
@@ -162,20 +162,99 @@ accepted. No acceptance entry is optional or silently not applicable.
 
 ### Offline verification context and M45 results
 
-The validator receives the public JSON and provisioned packaging/evidence files
-as local inputs. A separate optional private verification context is supplied
-by the orchestrator through a trusted local adapter, never through fields in the
-public JSON. The adapter reads the private record offline and reports the
-current association, attestation, component/output IDs, expected and bound
-architecture/dependency/output inventories, exact-BOM comparison result,
-per-entry acceptance verification, and independent-review/full-gate results.
-Each check has a result of satisfied, missing/stale, or mismatch, scoped to the
-same association and exact bundle. Omitted checks default to missing; the
-validator compares context IDs and inventories to the public document. The
-adapter must verify the underlying record, not echo public status strings.
-Raw private coordinates remain private; this contract specifies the context's
-logical inputs without prescribing a private record serialization or storage
-location. No private context means public-only mode.
+M45's proposed offline interface is `validate(metadata, package_root,
+verification_context=None)`. `metadata` and `verification_context` are paths to
+UTF-8 JSON files; `package_root` is the standalone checkout containing the
+packaging files named in steps 2–4. All paths are explicit caller inputs; no
+sibling checkout, environment variable, home-directory file, network lookup or
+installed adapter is consulted. This is an implementation contract, not an
+available command in this PR.
+
+The optional context file is a private verification receipt in format
+`helianthus-candidate-verification/1`. It is the complete input boundary for
+private verification: M45 consumes this receipt, not an unspecified private
+record or adapter. Before invoking M45, the operator obtains it from the
+orchestrator responsible for the bundle, together with the reviewed bundle's
+local inputs and outputs. The orchestrator checks its underlying source/build
+and acceptance records against those exact bytes offline, then exports the
+receipt below directly as JSON; no exporter or adapter installation is assumed.
+If it cannot supply that verified receipt, use public-only mode; no private
+store or export service is required for that mode.
+
+The operator must provision the receipt through a trusted channel separately
+from the candidate metadata and confirm it covers the actual local bundle.
+M45 does not authenticate a receipt or reproduce the orchestrator's underlying
+source/build verification. An arbitrary candidate-supplied JSON file is not
+trusted verification. A receipt is valid only for that invocation's unchanged
+bundle and package inputs; any change requires re-verification and a new
+association as specified below. Keep receipts outside the checkout and never
+commit them. The receipt uses opaque IDs and sanitized results only; underlying
+private coordinates stay in the orchestrator's private records.
+
+The receipt is one object with exactly the following required fields. Apply the
+public JSON's duplicate-key, type, unknown-field and opaque-ID rules. Arrays
+are unique sets; compare them without regard to order. Inventories describe the
+complete expected inventory even when a check is missing; use an empty array
+when it cannot be established and report that check as `missing`.
+
+| Field | Type and rule |
+| --- | --- |
+| `format` | Literal `helianthus-candidate-verification/1`. |
+| `bundle_id`, `association_id` | Opaque IDs; each must equal the corresponding public field. |
+| `attestation_id` | Opaque ID for satisfied exact-BOM equality, otherwise `null`; must equal the public attestation when equality is satisfied. |
+| `components` | Object with exactly `addon`, `gateway`, `explorer`, `ha_integration`, `native_dependencies`; each value has the same shape and publication rules as its public counterpart and must equal it, including names, release labels, references and artifact IDs. |
+| `expected_architectures` | Array of architecture values allowed by the public schema, derived from the provisioned build workflow. |
+| `bound_architectures` | Array of those architecture values whose complete outputs were verified. |
+| `expected_output_ids` | Array of opaque IDs for every required output of every expected architecture, including separately distributed artifacts. |
+| `bound_output_ids` | Array of opaque IDs whose input/output bindings were verified. |
+| `checks` | Object with exactly `package_mapping`, `public_references`, `inventory`, `output_binding`, `exact_bom`, `acceptance`, `independent_review`, `required_gates`. |
+
+Every check value is `satisfied`, `missing` or `mismatch`, except `acceptance`,
+which is an object with exactly the six public acceptance keys and one such
+value for each. `missing` includes stale, unavailable or unmet verification
+prerequisites. These are verification results, not evidence grades; vocabulary remains
+`Proven`, `Hypothesis`, `Unknown`. The entire receipt, including every check,
+is scoped to its top-level bundle and association IDs.
+
+- `package_mapping` verifies component release/artifact mappings against the
+  provisioned packaging and effective build arguments in step 2.
+- `public_references` verifies the existence and suitability of every non-null
+  public reference against offline copies and binds them to the mapped artifacts;
+  it includes output and acceptance references. M45 never resolves them online.
+- `inventory` verifies complete source, dependency (including transitive and
+  replacement), container-base and toolchain coverage described above.
+- `output_binding` verifies every output's binding to that complete inventory.
+- `exact_bom` reports the exact input/output equality comparison.
+- Each `acceptance` value verifies the owning contract's acceptance evidence and
+  its public reference for this association. Pending or rejected acceptance
+  cannot be `satisfied`; use `missing` when no accepted result is established,
+  or `mismatch` when the evidence contradicts the public acceptance claim.
+- `independent_review` and `required_gates` verify the required independent
+  exact-bundle review and complete required gates respectively; pending review
+  or gates, blocking findings and failed gates cannot be `satisfied`. Use
+  `missing` for unmet prerequisites and `mismatch` for contradictory evidence.
+
+M45 strictly validates the receipt before using it. A malformed receipt is
+`INVALID_DOCUMENT`; unreadable explicitly supplied inputs are `INPUT_UNAVAILABLE`.
+An ID/component conflict or contradictory inventory is `EVIDENCE_MISMATCH`.
+Bound inventories must be subsets of expected inventories. To satisfy readiness,
+expected and bound architecture sets must both equal the public architecture
+set and the provisioned build workflow's published set; expected and bound output
+sets must both equal public `output_binding.artifact_ids`. An incomplete subset
+is missing verification, never a satisfied binding. A `satisfied` check with
+incomplete required inventories or a missing required public reference is a
+contradiction and fails with `EVIDENCE_MISMATCH`. An empty expected inventory
+cannot satisfy its check. Public `verified`, `bound` and `accepted` claims
+require the corresponding satisfied checks to be verified; strings alone never
+supply evidence. Missing checks leave those claims unverified.
+
+Readiness requires satisfied `package_mapping`, `public_references`, `inventory`,
+`output_binding`, `exact_bom` and every acceptance check, plus all public
+prerequisites in steps 2–4. Missing independent review or gates leaves an
+otherwise ready candidate `ready-for-review`; both must be satisfied for
+`accepted-candidate`. Any `mismatch` fails validation, including for `not-ready`.
+Omitting the context file selects public-only mode; omitting a required field
+inside a supplied receipt is malformed, not an implicit pass.
 
 In public-only mode, check all available schema, publication and packaging
 constraints, report private equality, bindings and acceptance as unverified,
@@ -203,7 +282,7 @@ K25's exit zero means no declared cohort conflict and can include `UNVERIFIED`
 or `NOT_APPLICABLE`; neither establishes candidate readiness. Its existing
 behavior outside 0.7 remains unchanged. Current package versions are not
 rewritten by this proposal. The current
-[BOM checker](../scripts/bom_manifest.py) and [packaging BOM](../helianthus/bom.json)
+[BOM checker](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/bom_manifest.py) and [packaging BOM](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/bom.json)
 remain gated by `scripts/ci_local.sh`: they check packaging consistency and
 carry the INT-16 freeze record (`freeze.owner` and `freeze.status`).
 `kind: preparatory` may describe an `unfrozen` BOM; `kind: candidate` requires
