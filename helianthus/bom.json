@@ -257,6 +257,7 @@
     "instance-guid",
     "instance-guid-source",
     "m2m-graphql-allowed-assets",
+    "m2m-graphql-client-ca",
     "m2m-graphql-listen",
     "m2m-graphql-server-cert",
     "m2m-graphql-server-key",

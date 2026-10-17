@@ -38,7 +38,7 @@ def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() 
     )
 
 
-def test_wrapper_uses_fixed_tls_files_without_listener_client_auth_flags() -> None:
+def test_wrapper_uses_fixed_tls_files_with_optional_listener_client_ca() -> None:
     run = RUN.read_text(encoding="utf-8")
 
     fixed_files = (
@@ -67,8 +67,8 @@ def test_wrapper_uses_fixed_tls_files_without_listener_client_auth_flags() -> No
     for flag in required_flags:
         assert f'gateway_supports_flag "{flag}"' in run or flag in run
         assert f'-{flag}' in run
-    for flag in ("m2m-graphql-client-ca", "m2m-graphql-denied-principals"):
-        assert flag not in run
+    assert '-m2m-graphql-client-ca "${m2m_portal_ca}"' in run
+    assert "m2m-graphql-denied-principals" not in run
     assert 'gateway_args+=("${m2m_args[@]}")' in run
     assert run.index('gateway_args+=("${m2m_args[@]}")') < run.index(
         'exec "${gateway_bin}" "${gateway_args[@]}"'
@@ -150,7 +150,7 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
     argv = tmp_path / "argv"
     log = tmp_path / "log"
     options = tmp_path / "options.json"
-    tls_root = tmp_path / "tls"
+    tls_root = tmp_path / "tls bundle"
     tls_root.mkdir()
     for name in ("server-cert.pem", "server-key.pem", *client_files):
         if name != missing_server_file:
@@ -181,16 +181,23 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
         "instance-guid",
         "instance-guid-source",
     )
+    if "ca.pem" in client_files:
+        flags += ("m2m-graphql-client-ca",)
     portal_enabled = len(client_files) == 3
     if not portal_enabled:
         flags = tuple(flag for flag in flags if not flag.startswith("portal-pv-"))
     gateway.write_text(
         "#!/usr/bin/env python3\n"
-        "import os, pathlib, sys\n"
+        "import json, os, pathlib, sys\n"
         f"flags = {flags!r}\n"
         "if '--help' in sys.argv:\n"
         "    sys.stderr.write('\\n'.join('-' + value for value in flags) + '\\n')\n"
         "    raise SystemExit(0)\n"
+        "actual = [arg for arg in sys.argv[1:] if arg.startswith(('-m2m-graphql-', '-portal-pv-'))]\n"
+        "expected = json.loads(os.environ['TEST_EXPECTED_M2M'])\n"
+        "assert actual == [arg for arg in expected if arg.startswith(('-m2m-graphql-', '-portal-pv-'))], (actual, expected)\n"
+        "if expected:\n"
+        "    assert sys.argv[sys.argv.index('-m2m-graphql-listen'):] == expected, sys.argv\n"
         "pathlib.Path(os.environ['TEST_ARGV']).write_text('\\n'.join(sys.argv[1:]), encoding='utf-8')\n",
         encoding="utf-8",
     )
@@ -249,16 +256,6 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
         "HELIANTHUS_M2M_IDENTITY_VALIDATOR": str(M2M_IDENTITY_VALIDATOR),
     }
-    result = subprocess.run(
-        ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False, timeout=15
-    )
-    if m2m_enabled and missing_server_file:
-        assert result.returncode != 0
-        assert "requires the fixed server TLS certificate and key" in result.stderr
-        assert not argv.exists()
-        return
-    assert result.returncode == 0, result.stderr
-    executed = argv.read_text(encoding="utf-8").splitlines()
     m2m_argv = [
         "-m2m-graphql-listen",
         "0.0.0.0:8443",
@@ -271,6 +268,8 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "-m2m-graphql-allowed-assets",
         "pv-asset-fixture",
     ]
+    if "ca.pem" in client_files:
+        m2m_argv += ["-m2m-graphql-client-ca", str(tls_root / "ca.pem")]
     if portal_enabled:
         m2m_argv += [
             "-portal-pv-semantic-enabled=true",
@@ -287,10 +286,21 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
             "-portal-pv-asset-ref",
             "pv-asset-fixture",
         ]
+    env["TEST_EXPECTED_M2M"] = json.dumps(m2m_argv if m2m_enabled else [])
+    result = subprocess.run(
+        ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False, timeout=15
+    )
+    if m2m_enabled and missing_server_file:
+        assert result.returncode != 0
+        assert f"requires the fixed server TLS certificate and key: {tls_root / missing_server_file}" in result.stderr
+        assert not argv.exists()
+        return
+    assert result.returncode == 0, result.stderr
+    executed = argv.read_text(encoding="utf-8").splitlines()
     if m2m_enabled:
         assert executed[executed.index("-m2m-graphql-listen") :] == m2m_argv
         assert "M2M GraphQL runtime: enabled" in log.read_text(encoding="utf-8")
-        assert "-m2m-graphql-client-ca" not in executed
+        assert ("-m2m-graphql-client-ca" in executed) == ("ca.pem" in client_files)
         assert "-m2m-graphql-denied-principals" not in executed
         if not portal_enabled:
             assert "Portal PV semantic runtime: disabled" in log.read_text(encoding="utf-8")
