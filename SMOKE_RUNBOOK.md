@@ -180,13 +180,27 @@ Run these checks only against the exact add-on, gateway, and Home Assistant
 integration revisions recorded by the rollout artifact. Keep every Modbus
 operation read-only and keep endpoint values out of the public artifact.
 
-Before enabling `m2m_graphql_enabled`, create the fixed TLS bundle below
-`/ssl/helianthus-pv-m2m`. The add-on reads `ca.pem`, `server-cert.pem`,
-`server-key.pem`, `portal-client-cert.pem`, and `portal-client-key.pem` through
-the read-only `/ssl` mount. Home Assistant uses the same `ca.pem` plus its
-own `ha-client-cert.pem` and `ha-client-key.pem`. Set the server identity option
-to an exact DNS name or IP SAN in `server-cert.pem`, and use one opaque asset
-reference consistently in the add-on and Home Assistant options.
+Before enabling `m2m_graphql_enabled`, provide readable `server-cert.pem`
+and `server-key.pem` (plus optional `ca.pem`) under `/ssl/helianthus-pv-m2m`
+through the read-only `/ssl` mount. Set the server identity option to an exact DNS name
+or IP SAN in the server certificate, and use one opaque asset reference
+consistently in the add-on and Home Assistant options. Consumers must verify
+the server TLS certificate. The optional `ca.pem` is passed to the listener
+as the client CA when readable and omitted when absent; authentication and
+authorization frameworks arrive in a later release.
+
+For the packaging smoke check, confirm that a missing server certificate or
+key rejects startup and that a missing `ca.pem` still starts the server-only
+listener. With the server files supplied,
+verify that missing `portal-client-cert.pem` or `portal-client-key.pem`
+leaves the Portal PV semantic view disabled independently of listener startup.
+When the complete bundle is supplied, verify that it is still passed to the
+Portal BFF. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs are
+unchanged by [the transport decision](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1127).
+
+The historical M5-08 checklist and artifact below retain their original mTLS
+qualification contract. They do not establish transport qualification;
+record the listener TLS packaging checks separately.
 
 ```text
 - [ ] M5_08_RAW_MCP: bounded raw FC03 read succeeds through the authenticated raw Portal/MCP boundary

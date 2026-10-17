@@ -200,7 +200,7 @@ m2m_graphql_enabled=false
 m2m_graphql_server_name=""
 m2m_graphql_asset_ref=""
 m2m_tls_root="/ssl/helianthus-pv-m2m"
-m2m_client_ca="${m2m_tls_root}/ca.pem"
+m2m_portal_ca="${m2m_tls_root}/ca.pem"
 m2m_server_cert="${m2m_tls_root}/server-cert.pem"
 m2m_server_key="${m2m_tls_root}/server-key.pem"
 m2m_portal_client_cert="${m2m_tls_root}/portal-client-cert.pem"
@@ -771,52 +771,71 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     bashio::exit.nok "M2M GraphQL requires one opaque asset reference"
   fi
   for m2m_tls_file in \
-    "${m2m_client_ca}" \
     "${m2m_server_cert}" \
-    "${m2m_server_key}" \
-    "${m2m_portal_client_cert}" \
-    "${m2m_portal_client_key}"; do
+    "${m2m_server_key}"; do
     if [ ! -f "${m2m_tls_file}" ] || [ ! -r "${m2m_tls_file}" ]; then
-      bashio::exit.nok "M2M GraphQL requires the complete fixed TLS file bundle"
+      bashio::exit.nok "M2M GraphQL requires the fixed listener TLS files: ${m2m_tls_file}"
     fi
   done
   missing_m2m_flags=()
   for required_flag in \
     m2m-graphql-listen \
     m2m-graphql-server-name \
-    m2m-graphql-client-ca \
     m2m-graphql-server-cert \
     m2m-graphql-server-key \
-    m2m-graphql-allowed-assets \
-    portal-pv-semantic-enabled \
-    portal-pv-m2m-url \
-    portal-pv-m2m-server-name \
-    portal-pv-m2m-ca \
-    portal-pv-m2m-client-cert \
-    portal-pv-m2m-client-key \
-    portal-pv-asset-ref; do
+    m2m-graphql-allowed-assets; do
     if ! gateway_supports_flag "${required_flag}"; then
       missing_m2m_flags+=("${required_flag}")
     fi
   done
   if [ "${#missing_m2m_flags[@]}" -ne 0 ]; then
-    bashio::exit.nok "gateway does not support the complete M2M GraphQL and Portal PV flag set"
+    bashio::exit.nok "gateway does not support the complete M2M GraphQL flag set"
   fi
   m2m_args=(
     -m2m-graphql-listen "0.0.0.0:8443"
     -m2m-graphql-server-name "${m2m_graphql_server_name}"
-    -m2m-graphql-client-ca "${m2m_client_ca}"
     -m2m-graphql-server-cert "${m2m_server_cert}"
     -m2m-graphql-server-key "${m2m_server_key}"
     -m2m-graphql-allowed-assets "${m2m_graphql_asset_ref}"
-    -portal-pv-semantic-enabled=true
-    -portal-pv-m2m-url "https://127.0.0.1:8443/graphql/m2m/v1"
-    -portal-pv-m2m-server-name "${m2m_graphql_server_name}"
-    -portal-pv-m2m-ca "${m2m_client_ca}"
-    -portal-pv-m2m-client-cert "${m2m_portal_client_cert}"
-    -portal-pv-m2m-client-key "${m2m_portal_client_key}"
-    -portal-pv-asset-ref "${m2m_graphql_asset_ref}"
   )
+  # The client CA is optional: when present it is handed to the listener, which
+  # then verifies any presented client certificate; when absent the listener
+  # starts with server-only TLS.
+  if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ]; then
+    if ! gateway_supports_flag "m2m-graphql-client-ca"; then
+      bashio::exit.nok "gateway does not support the M2M GraphQL client CA flag"
+    fi
+    m2m_args+=(-m2m-graphql-client-ca "${m2m_portal_ca}")
+  fi
+  # The Portal BFF keeps its all-or-nothing client bundle (CA, certificate and
+  # key); it stays disabled when any of the three is absent.
+  if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ] && \
+    [ -f "${m2m_portal_client_cert}" ] && [ -r "${m2m_portal_client_cert}" ] && \
+    [ -f "${m2m_portal_client_key}" ] && [ -r "${m2m_portal_client_key}" ]; then
+    for required_flag in \
+      portal-pv-semantic-enabled \
+      portal-pv-m2m-url \
+      portal-pv-m2m-server-name \
+      portal-pv-m2m-ca \
+      portal-pv-m2m-client-cert \
+      portal-pv-m2m-client-key \
+      portal-pv-asset-ref; do
+      if ! gateway_supports_flag "${required_flag}"; then
+        bashio::exit.nok "gateway does not support the complete Portal PV flag set"
+      fi
+    done
+    m2m_args+=(
+      -portal-pv-semantic-enabled=true
+      -portal-pv-m2m-url "https://127.0.0.1:8443/graphql/m2m/v1"
+      -portal-pv-m2m-server-name "${m2m_graphql_server_name}"
+      -portal-pv-m2m-ca "${m2m_portal_ca}"
+      -portal-pv-m2m-client-cert "${m2m_portal_client_cert}"
+      -portal-pv-m2m-client-key "${m2m_portal_client_key}"
+      -portal-pv-asset-ref "${m2m_graphql_asset_ref}"
+    )
+  else
+    bashio::log.info "Portal PV semantic runtime: disabled (optional TLS client bundle unavailable)"
+  fi
   bashio::log.info "M2M GraphQL runtime: enabled"
 else
   bashio::log.info "M2M GraphQL runtime: disabled"

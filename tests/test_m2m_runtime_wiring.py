@@ -38,7 +38,7 @@ def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() 
     )
 
 
-def test_wrapper_uses_fixed_tls_files_and_complete_m2m_flag_bundle() -> None:
+def test_wrapper_requires_server_tls_with_optional_client_ca_and_portal_credentials() -> None:
     run = RUN.read_text(encoding="utf-8")
 
     fixed_files = (
@@ -54,7 +54,6 @@ def test_wrapper_uses_fixed_tls_files_and_complete_m2m_flag_bundle() -> None:
     required_flags = (
         "m2m-graphql-listen",
         "m2m-graphql-server-name",
-        "m2m-graphql-client-ca",
         "m2m-graphql-server-cert",
         "m2m-graphql-server-key",
         "m2m-graphql-allowed-assets",
@@ -68,6 +67,11 @@ def test_wrapper_uses_fixed_tls_files_and_complete_m2m_flag_bundle() -> None:
     for flag in required_flags:
         assert f'gateway_supports_flag "{flag}"' in run or flag in run
         assert f'-{flag}' in run
+    assert '-m2m-graphql-client-ca "${m2m_portal_ca}"' in run
+    assert "m2m-graphql-client-ca \\" not in run  # not a mandatory flag
+    mandatory = run[run.index("for m2m_tls_file in"):run.index("done", run.index("for m2m_tls_file in"))]
+    assert "m2m_portal_ca" not in mandatory
+    assert "m2m-graphql-denied-principals" not in run
     assert 'gateway_args+=("${m2m_args[@]}")' in run
     assert run.index('gateway_args+=("${m2m_args[@]}")') < run.index(
         'exec "${gateway_bin}" "${gateway_args[@]}"'
@@ -128,24 +132,33 @@ def test_m2m_tls_identity_validator_accepts_ip_sans_and_rejects_malformed_values
 
 
 @pytest.mark.parametrize("m2m_enabled", (False, True))
+@pytest.mark.parametrize(
+    "client_files",
+    (
+        (),
+        ("ca.pem",),
+        ("ca.pem", "portal-client-cert.pem", "portal-client-key.pem"),
+        ("portal-client-cert.pem", "portal-client-key.pem"),
+        ("ca.pem", "portal-client-key.pem"),
+        ("ca.pem", "portal-client-cert.pem"),
+    ),
+    ids=("absent", "ca-only", "complete", "missing-ca", "missing-client-cert", "missing-client-key"),
+)
+@pytest.mark.parametrize("missing_server_file", (None, "server-cert.pem", "server-key.pem"))
 def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
-    tmp_path: Path, m2m_enabled: bool
+    tmp_path: Path, m2m_enabled: bool, client_files: tuple[str, ...],
+    missing_server_file: str | None,
 ) -> None:
     wrapper = tmp_path / "run-under-test.sh"
     gateway = tmp_path / "gateway.py"
     argv = tmp_path / "argv"
     log = tmp_path / "log"
     options = tmp_path / "options.json"
-    tls_root = tmp_path / "tls"
+    tls_root = tmp_path / "tls bundle"
     tls_root.mkdir()
-    for name in (
-        "ca.pem",
-        "server-cert.pem",
-        "server-key.pem",
-        "portal-client-cert.pem",
-        "portal-client-key.pem",
-    ):
-        (tls_root / name).write_text("fixture\n", encoding="utf-8")
+    for name in ("server-cert.pem", "server-key.pem", *client_files):
+        if name != missing_server_file:
+            (tls_root / name).write_text("fixture\n", encoding="utf-8")
     options.write_text(
         json.dumps(
             {
@@ -159,7 +172,6 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
     flags = (
         "m2m-graphql-listen",
         "m2m-graphql-server-name",
-        "m2m-graphql-client-ca",
         "m2m-graphql-server-cert",
         "m2m-graphql-server-key",
         "m2m-graphql-allowed-assets",
@@ -173,13 +185,23 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
         "instance-guid",
         "instance-guid-source",
     )
+    if "ca.pem" in client_files:
+        flags += ("m2m-graphql-client-ca",)
+    portal_enabled = len(client_files) == 3
+    if not portal_enabled:
+        flags = tuple(flag for flag in flags if not flag.startswith("portal-pv-"))
     gateway.write_text(
         "#!/usr/bin/env python3\n"
-        "import os, pathlib, sys\n"
+        "import json, os, pathlib, sys\n"
         f"flags = {flags!r}\n"
         "if '--help' in sys.argv:\n"
         "    sys.stderr.write('\\n'.join('-' + value for value in flags) + '\\n')\n"
         "    raise SystemExit(0)\n"
+        "actual = [arg for arg in sys.argv[1:] if arg.startswith(('-m2m-graphql-', '-portal-pv-'))]\n"
+        "expected = json.loads(os.environ['TEST_EXPECTED_M2M'])\n"
+        "assert actual == [arg for arg in expected if arg.startswith(('-m2m-graphql-', '-portal-pv-'))], (actual, expected)\n"
+        "if expected:\n"
+        "    assert sys.argv[sys.argv.index('-m2m-graphql-listen'):] == expected, sys.argv\n"
         "pathlib.Path(os.environ['TEST_ARGV']).write_text('\\n'.join(sys.argv[1:]), encoding='utf-8')\n",
         encoding="utf-8",
     )
@@ -238,44 +260,88 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "HELIANTHUS_MODBUS_ENDPOINT_FILE": str(tmp_path / "modbus-endpoint"),
         "HELIANTHUS_M2M_IDENTITY_VALIDATOR": str(M2M_IDENTITY_VALIDATOR),
     }
-    result = subprocess.run(
-        ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False
-    )
-    assert result.returncode == 0, result.stderr
-    executed = argv.read_text(encoding="utf-8").splitlines()
     m2m_argv = [
         "-m2m-graphql-listen",
         "0.0.0.0:8443",
         "-m2m-graphql-server-name",
         "2001:db8::10",
-        "-m2m-graphql-client-ca",
-        str(tls_root / "ca.pem"),
         "-m2m-graphql-server-cert",
         str(tls_root / "server-cert.pem"),
         "-m2m-graphql-server-key",
         str(tls_root / "server-key.pem"),
         "-m2m-graphql-allowed-assets",
         "pv-asset-fixture",
-        "-portal-pv-semantic-enabled=true",
-        "-portal-pv-m2m-url",
-        "https://127.0.0.1:8443/graphql/m2m/v1",
-        "-portal-pv-m2m-server-name",
-        "2001:db8::10",
-        "-portal-pv-m2m-ca",
-        str(tls_root / "ca.pem"),
-        "-portal-pv-m2m-client-cert",
-        str(tls_root / "portal-client-cert.pem"),
-        "-portal-pv-m2m-client-key",
-        str(tls_root / "portal-client-key.pem"),
-        "-portal-pv-asset-ref",
-        "pv-asset-fixture",
     ]
+    if "ca.pem" in client_files:
+        m2m_argv += ["-m2m-graphql-client-ca", str(tls_root / "ca.pem")]
+    if portal_enabled:
+        m2m_argv += [
+            "-portal-pv-semantic-enabled=true",
+            "-portal-pv-m2m-url",
+            "https://127.0.0.1:8443/graphql/m2m/v1",
+            "-portal-pv-m2m-server-name",
+            "2001:db8::10",
+            "-portal-pv-m2m-ca",
+            str(tls_root / "ca.pem"),
+            "-portal-pv-m2m-client-cert",
+            str(tls_root / "portal-client-cert.pem"),
+            "-portal-pv-m2m-client-key",
+            str(tls_root / "portal-client-key.pem"),
+            "-portal-pv-asset-ref",
+            "pv-asset-fixture",
+        ]
+    env["TEST_EXPECTED_M2M"] = json.dumps(m2m_argv if m2m_enabled else [])
+    result = subprocess.run(
+        ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False, timeout=15
+    )
+    if m2m_enabled and missing_server_file:
+        assert result.returncode != 0
+        assert f"requires the fixed listener TLS files: {tls_root / missing_server_file}" in result.stderr
+        assert not argv.exists()
+        return
+    assert result.returncode == 0, result.stderr
+    executed = argv.read_text(encoding="utf-8").splitlines()
     if m2m_enabled:
         assert executed[executed.index("-m2m-graphql-listen") :] == m2m_argv
         assert "M2M GraphQL runtime: enabled" in log.read_text(encoding="utf-8")
+        assert ("-m2m-graphql-client-ca" in executed) == ("ca.pem" in client_files)
+        assert "-m2m-graphql-denied-principals" not in executed
+        if not portal_enabled:
+            assert "Portal PV semantic runtime: disabled" in log.read_text(encoding="utf-8")
     else:
         assert not any(
             arg.startswith("-m2m-graphql-") or arg.startswith("-portal-pv-")
             for arg in executed
         )
         assert "M2M GraphQL runtime: disabled" in log.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("files", "client_ca", "portal", "aborts"),
+    (
+        (("server-cert.pem", "server-key.pem", "ca.pem",
+          "portal-client-cert.pem", "portal-client-key.pem"), True, True, None),
+        (("server-cert.pem", "server-key.pem"), False, False, None),
+        (("server-cert.pem", "ca.pem"), None, None, "server-key.pem"),
+        (("server-cert.pem", "server-key.pem", "ca.pem"), True, False, None),
+    ),
+    ids=("full-bundle", "server-only-no-ca", "server-key-absent", "ca-without-portal-client"),
+)
+def test_m2m_start_outcome_and_exact_flag_set(
+    tmp_path: Path, files: tuple[str, ...], client_ca: bool | None,
+    portal: bool | None, aborts: str | None,
+) -> None:
+    """Named cases: the exact listener and Portal flag sets, or the abort."""
+    # Reuse the matrix harness by running it through a single parameter set.
+    server_missing = next((n for n in ("server-cert.pem", "server-key.pem") if n not in files), None)
+    client = tuple(n for n in files if not n.startswith("server-"))
+    assert server_missing == aborts
+    test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
+        tmp_path, True, client, server_missing
+    )
+    if aborts is None:
+        executed = (tmp_path / "argv").read_text(encoding="utf-8").splitlines()
+        assert ("-m2m-graphql-client-ca" in executed) is client_ca
+        assert ("-portal-pv-semantic-enabled=true" in executed) is portal
+        assert "-m2m-graphql-denied-principals" not in executed
+        assert "-m2m-graphql-server-cert" in executed
