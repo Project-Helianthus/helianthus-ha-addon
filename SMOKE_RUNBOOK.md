@@ -180,15 +180,18 @@ Run these checks only against the exact add-on, gateway, and Home Assistant
 integration revisions recorded by the rollout artifact. Keep every Modbus
 operation read-only and keep endpoint values out of the public artifact.
 
-Before enabling `m2m_graphql_enabled`, provide readable `server-cert.pem`,
-`server-key.pem`, and `ca.pem` under `/ssl/helianthus-pv-m2m` through the
-read-only `/ssl` mount. Set the server identity option to an exact DNS name
+Before enabling `m2m_graphql_enabled`, provide readable `server-cert.pem`
+and `server-key.pem` (plus optional `ca.pem`) under `/ssl/helianthus-pv-m2m`
+through the read-only `/ssl` mount. Set the server identity option to an exact DNS name
 or IP SAN in the server certificate, and use one opaque asset reference
 consistently in the add-on and Home Assistant options. Consumers must verify
-the server TLS certificate. The packaged gateway requires the client CA.
+the server TLS certificate. The optional `ca.pem` is passed to the listener
+as the client CA when readable and omitted when absent; authentication and
+authorization frameworks arrive in a later release.
 
-For the packaging smoke check, confirm that missing listener TLS files,
-including `ca.pem`, reject startup. With all listener TLS files supplied,
+For the packaging smoke check, confirm that a missing server certificate or
+key rejects startup and that a missing `ca.pem` still starts the server-only
+listener. With the server files supplied,
 verify that missing `portal-client-cert.pem` or `portal-client-key.pem`
 leaves the Portal PV semantic view disabled independently of listener startup.
 When the complete bundle is supplied, verify that it is still passed to the

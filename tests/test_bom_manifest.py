@@ -52,7 +52,8 @@ def test_listener_client_ca_is_supported_but_denied_principals_is_removed() -> N
     used = bom_manifest.gateway_flag_mentions(
         bom_manifest.WRAPPER.read_text(encoding="utf-8")
     )
-    # The manifest lists supported flags; runtime tests cover conditional CA use.
+    # The client CA is a conditional flag: the wrapper emits it only when the
+    # optional CA file is present (runtime tests cover both outcomes).
     assert "m2m-graphql-client-ca" in BOM["gateway_cli_flags"]
     assert "m2m-graphql-client-ca" in used
     assert "m2m-graphql-denied-principals" not in BOM["gateway_cli_flags"]
@@ -110,3 +111,12 @@ def test_parse_go_mod_reads_blocks_and_indirect_markers() -> None:
     ]
     assert parsed["requires"][0]["indirect"] is True
     assert parsed["requires"][1]["indirect"] is False
+
+
+def test_wrapper_scan_flags_denied_principals_and_accepts_conditional_client_ca() -> None:
+    wrapper = bom_manifest.WRAPPER.read_text(encoding="utf-8")
+    assert "m2m-graphql-client-ca" in bom_manifest.gateway_flag_mentions(wrapper)
+    injected = wrapper + '\n-m2m-graphql-denied-principals "x"\n'
+    used = bom_manifest.gateway_flag_mentions(injected)
+    assert "m2m-graphql-denied-principals" in used
+    assert not used <= set(BOM["gateway_cli_flags"])

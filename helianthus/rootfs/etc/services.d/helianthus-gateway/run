@@ -772,8 +772,7 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
   fi
   for m2m_tls_file in \
     "${m2m_server_cert}" \
-    "${m2m_server_key}" \
-    "${m2m_portal_ca}"; do
+    "${m2m_server_key}"; do
     if [ ! -f "${m2m_tls_file}" ] || [ ! -r "${m2m_tls_file}" ]; then
       bashio::exit.nok "M2M GraphQL requires the fixed listener TLS files: ${m2m_tls_file}"
     fi
@@ -784,7 +783,6 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     m2m-graphql-server-name \
     m2m-graphql-server-cert \
     m2m-graphql-server-key \
-    m2m-graphql-client-ca \
     m2m-graphql-allowed-assets; do
     if ! gateway_supports_flag "${required_flag}"; then
       missing_m2m_flags+=("${required_flag}")
@@ -800,10 +798,17 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     -m2m-graphql-server-key "${m2m_server_key}"
     -m2m-graphql-allowed-assets "${m2m_graphql_asset_ref}"
   )
-  m2m_args+=(-m2m-graphql-client-ca "${m2m_portal_ca}")
-  # The Portal BFF still requires its complete legacy client bundle. Keep it
-  # disabled when either client credential is absent.
-  # The listener still requires its CA.
+  # The client CA is optional: when present it is handed to the listener, which
+  # then verifies any presented client certificate; when absent the listener
+  # starts with server-only TLS.
+  if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ]; then
+    if ! gateway_supports_flag "m2m-graphql-client-ca"; then
+      bashio::exit.nok "gateway does not support the M2M GraphQL client CA flag"
+    fi
+    m2m_args+=(-m2m-graphql-client-ca "${m2m_portal_ca}")
+  fi
+  # The Portal BFF keeps its all-or-nothing client bundle (CA, certificate and
+  # key); it stays disabled when any of the three is absent.
   if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ] && \
     [ -f "${m2m_portal_client_cert}" ] && [ -r "${m2m_portal_client_cert}" ] && \
     [ -f "${m2m_portal_client_key}" ] && [ -r "${m2m_portal_client_key}" ]; then
