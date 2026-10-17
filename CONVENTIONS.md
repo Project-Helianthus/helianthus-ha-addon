@@ -52,9 +52,19 @@ never reads or changes `config.json`, the BOM or the stable gateway pin. The tag
 logic lives in `scripts/test_image_plan.py` (tested by
 `tests/test_test_image_plan.py`).
 
-Install on an existing installation by retag (operator-run, after OK). Before
-retagging, record the installed image digest and keep a local rollback tag, so
-rollback never depends on a mutable version tag in the registry:
+Install on an existing installation by retag only after the
+[pre-replacement compatibility requirements](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/cohort-upgrade-rollback.md)
+are satisfied: check options and persisted-state upgrade/downgrade readability
+for the exact installed and target artifacts, including state changes during a
+failed start. Retain a recoverable pre-replacement settings/data snapshot and
+establish the owner's supported restore path before replacement. Unknown
+compatibility means hold. Each live stop, replacement, start or restore requires
+explicit operator confirmation at action time.
+
+After those checks, record the installed image digest privately and keep a local
+rollback tag, so recovery never depends on a mutable registry version tag.
+The following commands retain and replace the image; they do not create the
+required snapshot or establish compatibility:
 
 ```sh
 ha addons stop local_helianthus
@@ -68,10 +78,21 @@ ha addons start local_helianthus
 ```
 
 Verify with `ha addons info local_helianthus` and the gateway's build/commit
-field (the gateway `buildID` is the pinned commit). Roll back with the local tag
+field (the gateway `buildID` is the pinned commit). Offer binary rollback only
+when the current persisted state is proven readable by the prior image. If
+downgrade readability is Unknown or incompatible, hold binary rollback and use
+only the owner's supported recovery decision. Restoring pre-replacement state
+with the prior image is a separate, explicitly confirmed operation; account for
+state lost since the snapshot and retain failed-attempt evidence separately.
+
+For a compatible, separately confirmed binary rollback, stop the add-on first,
+then restore the local tag
 (`docker tag <installed image>:rollback-<date> <installed image>:<installed version>`)
 or by digest (`docker pull <recorded digest>`, then tag it as
-`<installed image>:<installed version>`), then stop and start the add-on again.
+`<installed image>:<installed version>`), then start the add-on again.
+Verify the actual prior artifact, startup, preserved settings/identity and
+applicable interface checks before reporting recovery complete. Do not rewrite
+settings to force startup.
 Do not roll back by re-pulling `<installed image>:<installed version>`: that tag
 is mutable and may no longer match what was installed.
 

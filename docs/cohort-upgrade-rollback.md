@@ -39,15 +39,15 @@ It does not introduce a receipt, identity ledger or recovery implementation.
 | Exact candidate association | Existing opaque bundle, association and artifact IDs; never encoded source coordinates or digests. | Verify complete source, dependency, base, toolchain and output inventory using the metadata owner's contract. Include every published architecture and separately distributed HA integration; the latter retains its own release series. |
 | Acceptance | Report the existing metadata disposition and its verification limits. | A public status string or attestation token cannot establish private equality, required gates or independent review. Missing, stale or contradictory evidence prevents promotion. |
 | Recovery target | Public label plus opaque reference to the retained prior artifact and its compatibility result. | Retain the exact previously installed image locally or by an immutable private artifact reference; do not reconstruct it from a mutable version/latest tag. Keep exact coordinates private. |
-| Retained observations | Separate current, stale retained and unavailable state, with an age or explicit age Unknown; preserve Proven / Hypothesis / Unknown. | Age follows the original observation, never the restart, restore or upgrade time. If elapsed age cannot be established across a clock discontinuity or missing origin, report Unknown; do not reset it to fresh. |
 
-Evidence age is not a new TTL policy. Apply freshness limits from the owning
-data contract; where no limit is defined, do not invent one or declare retained
-data current. Preserve native provenance and partial last-known-good values,
-including unavailable fields. Neither retention nor a Proven observation grants
-qualification, acquisition success, admission or write authority. Keep those
-decisions separate. Do not copy private records or capture times into public
-examples or metadata.
+Observation presentation belongs to the published
+[semantic snapshot read contract](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/semantic-snapshot-read.md)
+and its referenced data owners. Consume that interface without defining age,
+freshness, provenance, availability, evidence grade, admission or write authority
+here. Any upgrade/restore behavior not covered by the owner's published contract
+needs owner clarification before replacement; this packaging proposal supplies
+no missing data semantics. Do not copy private records or capture times into
+public examples or metadata.
 
 The current [cohort checker](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/check_release_cohort.py)
 checks declared cohorts offline. Its exit zero can include `NOT_APPLICABLE`
@@ -95,9 +95,9 @@ requires explicit operator confirmation at action time.
 | Missing identity, compatibility, architecture coverage or acceptance before replacement | Hold replacement. | Keep the existing installation and last-known-good evidence; report the missing result as Unknown/unverified. |
 | Target fails to start; prior image retained and current persisted state proven readable by it | Offer separately approved rollback to that exact image. | Do not rewrite settings to force startup. Retain failure evidence; returning to a prior binary still needs startup and identity verification. |
 | Target fails to start or degrades; persisted-state downgrade compatibility Unknown or incompatible | Do not declare safe binary rollback, even with the prior image available. | Preserve settings, native evidence and retained data. Hold for the owner's supported recovery/restore decision; no automatic reset, deletion or speculative reverse migration. |
-| Supported restoration of pre-replacement state is available | Treat restore plus prior binary as a separate recovery operation requiring action-time confirmation and owner acceptance. | Explicitly account for state lost since the snapshot. Keep failed-attempt evidence separately; never present restored observations as newly acquired. |
+| Supported restoration of pre-replacement state is available | Treat restore plus prior binary as a separate recovery operation requiring action-time confirmation and owner acceptance. | Explicitly account for state lost since the snapshot. Keep failed-attempt evidence separately; validate restored data through its owning contract. |
 | Target starts but gateway/Explorer identity is missing or mixed, or parity/acceptance fails | Do not report a successful coherent upgrade. Apply the same compatibility conditions before offering rollback. | Keep the failure visible and fail closed under existing admission rules; process health cannot promote evidence or trust. |
-| Prior image restarted after rollback | Report rollback complete only after verifying actual prior artifacts, startup, preserved settings/identity and applicable interface checks. | Retained values keep their original provenance and age; unavailable fields remain unavailable. Binary rollback does not undo external effects or establish hardware qualification. |
+| Prior image restarted after rollback | Report rollback complete only after verifying actual prior artifacts, startup, preserved settings/identity and applicable interface checks. | Apply the owning data contract when checking restored output. Binary rollback does not undo external effects or establish hardware qualification. |
 
 ## Synthetic decision review and remaining acceptance
 
@@ -109,14 +109,22 @@ container, Supervisor, registry or device:
 | All three labels say 0.7, but `association-synthetic-alpha` lacks Explorer output binding | Hold: matching labels cannot prove a coherent binary cohort. |
 | A changed Explorer output keeps the same labels and old accepted association | Reject reuse of acceptance: create a new association and reverify under the metadata contract. |
 | Target startup fails; prior image exists; downgrade readability is Unknown | Hold safe-rollback claim: image availability cannot prove persisted-state compatibility. |
-| Prior binary is verified again, but retained observation age is Unknown | Binary recovery may be verified independently; the observation remains retained with age Unknown and unchanged evidence grade/admission. |
+| Prior binary is verified again, but owner-defined data recovery checks are missing | Hold the data recovery claim pending owner verification; binary identity alone does not complete recovery acceptance. |
 
-M34 and M44–M46 retain code, build and metadata ownership. This page implements
-none of their mechanisms and does not require an unmerged implementation before
-the requirements can be reviewed. G5 D1–D5/O8 remain J01–J17-owned; no principal
-boundary, receipts, idempotency ledger or recovery redesign is introduced.
+The [gateway repository](https://github.com/Project-Helianthus/helianthus-ebusgateway)
+owns gateway runtime and recovery implementation; the
+[Explorer repository](https://github.com/Project-Helianthus/helianthus-vrc-explorer)
+owns Explorer implementation. Add-on build and startup wiring remain with this
+repository, under the linked cohort guard and candidate metadata contracts.
+This page implements none of those mechanisms and does not require an unmerged
+implementation before the requirements can be reviewed. Principal boundaries,
+receipts, idempotency ledgers and recovery redesign remain outside this packaging
+proposal; their runtime contracts belong to the gateway owner.
 The [Portal / Ingress checklist](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/portal-ingress-offline-acceptance.md)
 keeps runtime persistence and HA acceptance separate from offline documentation.
 Full gates, exact-candidate review, wrapper regression, downgrade/failed-start
 acceptance and any separately approved runtime smoke remain outstanding. This
-partial contract closes neither parent #246 nor release or hardware acceptance.
+partial contract closes neither [parent #246](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/246)
+nor release or hardware acceptance. The requirements slice is tracked in
+[issue #256](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/256);
+the parent tracks the remaining cohort delivery work.
