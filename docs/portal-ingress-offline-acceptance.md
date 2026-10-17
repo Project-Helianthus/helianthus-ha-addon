@@ -16,11 +16,11 @@ Recheck these sources against the candidate before executing the checklist:
 
 | Source | Observed implementation / acceptance boundary |
 | --- | --- |
-| [Add-on metadata](../helianthus/config.json) | No Ingress metadata is declared. HTTP GraphQL and subscriptions have separate path options; MCP has its own path. Host networking and published ports are existing packaging, not proof of selective publication. |
-| [Startup wrapper](../helianthus/rootfs/etc/services.d/helianthus-gateway/run) | Wires GraphQL/subscription/MCP paths and persistent instance identity. This does not establish a trusted-proxy or prefix contract. |
-| [Add-on README](../helianthus/README.md) | Documents `/data/instance_guid` surviving restart/update when `/data` is preserved. No promise of durable Portal configuration or investigation sessions follows from that identity file. |
-| [Smoke runbook](../SMOKE_RUNBOOK.md) | Existing runtime smoke checks are separate from Ingress acceptance; do not run its install/start steps as part of this offline procedure. |
-| [Portal handler](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/handler.go) and [assets](https://github.com/Project-Helianthus/helianthus-ebusgateway/tree/main/portal/static) | Source serves a root-relative handler with relative HTML asset URLs and browser API/stream fetches. Bootstrap still supplies absolute `/portal/api/v1/...` paths plus configured GraphQL/subscription/MCP paths. Snapshot/session stores are constructed in memory. These are source observations, not verification of the packaged binary. |
+| [Add-on metadata](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/config.json) | No Ingress metadata is declared. HTTP GraphQL and subscriptions have separate path options; MCP has its own path. Host networking and published ports are existing packaging, not proof of selective publication. |
+| [Startup wrapper](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/rootfs/etc/services.d/helianthus-gateway/run) | Wires GraphQL/subscription/MCP paths and persistent instance identity. This does not establish a trusted-proxy or prefix contract. |
+| [Add-on README](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/README.md) | Documents `/data/instance_guid` surviving restart/update when `/data` is preserved. No promise of durable Portal configuration or investigation sessions follows from that identity file. |
+| [Smoke runbook](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/SMOKE_RUNBOOK.md) | Existing runtime smoke checks are separate from Ingress acceptance; do not run its install/start steps as part of this offline procedure. |
+| [Portal handler](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/handler.go) and [assets](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/static/assets/app.js) | Source serves a root-relative handler with relative HTML asset URLs and browser API/stream fetches. Bootstrap still supplies absolute `/portal/api/v1/...` paths plus configured GraphQL/subscription/MCP paths. Snapshot/session stores are constructed in memory. These are source observations, not verification of the packaged binary. |
 | [Gateway HTTP composition](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/cmd/gateway/main.go) | Source mounts the Portal handler under its Portal path using prefix stripping and redirects the path without a trailing slash. This alone does not implement arbitrary external Ingress prefixes. |
 
 The release-plan PORTAL work remains with its owners: #999 covers generic
@@ -132,7 +132,7 @@ PY
 ```
 
 The remaining local validation is this repository's
-[local gate](../scripts/ci_local.sh), run from the checkout root:
+[local gate](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/ci_local.sh), run from the checkout root:
 
 ```bash
 ./scripts/ci_local.sh
