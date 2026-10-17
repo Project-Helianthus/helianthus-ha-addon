@@ -35,7 +35,7 @@ It does not introduce a receipt, identity ledger or recovery implementation.
 
 | Decision information | Public presentation | Required private verification / limit |
 | --- | --- | --- |
-| Selected versus running cohort | Distinguish intended release labels from observed labels; state when the running artifact is Unknown. | Bind the actual installed output and architecture, including both bundled binaries, to the reviewed candidate. A requested tag or healthy process alone is insufficient. |
+| Selected versus running cohort | Distinguish intended release labels from observed labels; state when the running artifact is Unknown. | Bind the actual installed output and architecture, including the gateway binary and Explorer Python package, to the reviewed candidate. A requested tag or healthy process alone is insufficient. |
 | Exact candidate association | Existing opaque bundle, association and artifact IDs; never encoded source coordinates or digests. | Verify complete source, dependency, base, toolchain and output inventory using the metadata owner's contract. Include every published architecture and separately distributed HA integration; the latter retains its own release series. |
 | Acceptance | Report the existing metadata disposition and its verification limits. | A public status string or attestation token cannot establish private equality, required gates or independent review. Missing, stale or contradictory evidence prevents promotion. |
 | Recovery target | Public label plus opaque reference to the retained prior artifact and its compatibility result. | Retain the exact previously installed image locally or by an immutable private artifact reference; do not reconstruct it from a mutable version/latest tag. Keep exact coordinates private. |
