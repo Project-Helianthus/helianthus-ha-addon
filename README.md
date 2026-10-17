@@ -72,17 +72,13 @@ Modbus configuration.
 
 The dedicated M2M listener is also disabled by default. When enabled, the only
 Supervisor values are its server identity and opaque asset reference. Server
-TLS requires `server-cert.pem` and `server-key.pem` in
-`/ssl/helianthus-pv-m2m`. A readable `ca.pem` is still handed to the listener;
-gateways that include the optional-client-CA change verify presented client
-certificates and accept connections without a client certificate.
-Older gateways retain their previous client-CA requirement and fail closed
-when `ca.pem` is absent. Authentication and authorization frameworks arrive
-in a later release. The optional `ca.pem`,
-`portal-client-cert.pem`, and `portal-client-key.pem` bundle enables the Portal
-PV semantic view when all three files are readable; otherwise that view stays
-disabled independently of listener startup. Server identity and asset admission
-remain required. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs
+TLS requires readable `server-cert.pem`, `server-key.pem`, and `ca.pem` in
+`/ssl/helianthus-pv-m2m`. The packaged gateway requires the client CA;
+missing listener TLS files reject startup. The optional
+`portal-client-cert.pem` and `portal-client-key.pem` enable the Portal PV
+semantic view when both are readable alongside the required CA; otherwise
+that view stays disabled independently of listener startup. Server identity and
+asset admission remain required. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs
 are unchanged. See [the 0.7 transport decision](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1127).
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)

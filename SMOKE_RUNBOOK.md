@@ -180,30 +180,24 @@ Run these checks only against the exact add-on, gateway, and Home Assistant
 integration revisions recorded by the rollout artifact. Keep every Modbus
 operation read-only and keep endpoint values out of the public artifact.
 
-Before enabling `m2m_graphql_enabled`, provide `server-cert.pem` and
-`server-key.pem` under `/ssl/helianthus-pv-m2m` through the read-only `/ssl`
-mount. Set the server identity option to an exact DNS name or IP SAN in the
-server certificate, and use one opaque asset reference consistently in the
-add-on and Home Assistant options. Consumers must verify the server TLS
-certificate. A readable `ca.pem` is still handed to the listener; gateways
-that include the optional-client-CA change verify presented client certificates
-and accept connections without a client certificate.
-Authentication and authorization frameworks arrive in a later release.
+Before enabling `m2m_graphql_enabled`, provide readable `server-cert.pem`,
+`server-key.pem`, and `ca.pem` under `/ssl/helianthus-pv-m2m` through the
+read-only `/ssl` mount. Set the server identity option to an exact DNS name
+or IP SAN in the server certificate, and use one opaque asset reference
+consistently in the add-on and Home Assistant options. Consumers must verify
+the server TLS certificate. The packaged gateway requires the client CA.
 
-For the 0.7 packaging smoke check, verify that the listener starts with only
-the server certificate and key when `ca.pem` is absent on gateways with the
-optional-client-CA change; older gateways continue to fail closed without it.
-Confirm that missing server TLS files still reject startup. The optional
-`ca.pem`, `portal-client-cert.pem`, and `portal-client-key.pem` bundle enables
-the Portal PV semantic view only when all three files are readable; a missing
-or partial bundle leaves that view disabled independently of listener startup.
+For the packaging smoke check, confirm that missing listener TLS files,
+including `ca.pem`, reject startup. With all listener TLS files supplied,
+verify that missing `portal-client-cert.pem` or `portal-client-key.pem`
+leaves the Portal PV semantic view disabled independently of listener startup.
 When the complete bundle is supplied, verify that it is still passed to the
 Portal BFF. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs are
 unchanged by [the transport decision](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1127).
 
 The historical M5-08 checklist and artifact below retain their original mTLS
-qualification contract. They do not establish 0.7 transport qualification;
-record the server-TLS packaging checks separately.
+qualification contract. They do not establish transport qualification;
+record the listener TLS packaging checks separately.
 
 ```text
 - [ ] M5_08_RAW_MCP: bounded raw FC03 read succeeds through the authenticated raw Portal/MCP boundary

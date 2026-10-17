@@ -38,7 +38,7 @@ def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() 
     )
 
 
-def test_wrapper_uses_fixed_tls_files_with_optional_listener_client_ca() -> None:
+def test_wrapper_requires_listener_ca_with_optional_portal_client_credentials() -> None:
     run = RUN.read_text(encoding="utf-8")
 
     fixed_files = (
@@ -133,12 +133,13 @@ def test_m2m_tls_identity_validator_accepts_ip_sans_and_rejects_malformed_values
     "client_files",
     (
         (),
+        ("ca.pem",),
         ("ca.pem", "portal-client-cert.pem", "portal-client-key.pem"),
         ("portal-client-cert.pem", "portal-client-key.pem"),
         ("ca.pem", "portal-client-key.pem"),
         ("ca.pem", "portal-client-cert.pem"),
     ),
-    ids=("absent", "complete", "missing-ca", "missing-client-cert", "missing-client-key"),
+    ids=("absent", "ca-only", "complete", "missing-ca", "missing-client-cert", "missing-client-key"),
 )
 @pytest.mark.parametrize("missing_server_file", (None, "server-cert.pem", "server-key.pem"))
 def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
@@ -290,9 +291,10 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     result = subprocess.run(
         ["bash", str(wrapper)], text=True, capture_output=True, env=env, check=False, timeout=15
     )
-    if m2m_enabled and missing_server_file:
+    missing_listener_file = missing_server_file or (None if "ca.pem" in client_files else "ca.pem")
+    if m2m_enabled and missing_listener_file:
         assert result.returncode != 0
-        assert f"requires the fixed server TLS certificate and key: {tls_root / missing_server_file}" in result.stderr
+        assert f"requires the fixed listener TLS files: {tls_root / missing_listener_file}" in result.stderr
         assert not argv.exists()
         return
     assert result.returncode == 0, result.stderr
