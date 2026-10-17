@@ -333,7 +333,6 @@ def test_m2m_start_outcome_and_exact_flag_set(
 ) -> None:
     """Named cases: the exact listener and Portal flag sets, or the abort."""
     # Reuse the matrix harness by running it through a single parameter set.
-    tls = tmp_path / "tls bundle"
     server_missing = next((n for n in ("server-cert.pem", "server-key.pem") if n not in files), None)
     client = tuple(n for n in files if not n.startswith("server-"))
     assert server_missing == aborts
