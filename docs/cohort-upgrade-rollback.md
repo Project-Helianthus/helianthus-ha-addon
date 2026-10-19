@@ -6,6 +6,10 @@ runtime behavior. Refs parent #246: packaging, wrapper regression, candidate
 acceptance and release delivery remain outstanding with their owners.
 Nothing is stable before Helianthus 1.0. This contract adds no authorization
 gate before 0.9 and does not change existing admission or trust safeguards.
+Future authorization and recovery redesign are roadmap work for 0.11, not
+requirements implemented by these notes. This reconciliation covers the
+[W28 / #257 notes](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/257)
+without assigning an operator action.
 
 ## Current contents versus proposed delivery
 
@@ -25,6 +29,19 @@ Explorer under the unchanged `0.6.58` catalog version. The current
 republishes version and latest tags on main pushes; that mechanism is not an
 immutability guarantee. [Test-image conventions](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/CONVENTIONS.md)
 describe the separate opt-in path, not candidate acceptance.
+
+The [Dockerfile](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/Dockerfile)
+packages one gateway binary and the Explorer Python package in the add-on
+image; Explorer is not a second gateway binary. Their distinct outputs still
+need binding to the same candidate association.
+
+Architecture coverage follows the build workflow's matrix and version-tag
+manifest: `aarch64`, `amd64`, `armv7`, `armhf` and `i386`. The Supervisor
+configuration advertises only `aarch64` and `amd64`. That subset, or a metadata
+example containing only those two, cannot establish complete candidate coverage;
+the metadata contract requires every architecture published for the reviewed
+version tag. Publication alone proves neither Supervisor support nor runtime or
+hardware qualification for any architecture.
 
 ## Identity and evidence presented to the operator
 
@@ -48,6 +65,12 @@ here. Any upgrade/restore behavior not covered by the owner's published contract
 needs owner clarification before replacement; this packaging proposal supplies
 no missing data semantics. Do not copy private records or capture times into
 public examples or metadata.
+
+Keep `Proven`, `Hypothesis` and `Unknown` as the owning contract's evidence
+vocabulary, separately from qualification, freshness and admission. An offline
+packaging observation, matching cohort labels or a rollback marker cannot
+promote native evidence or qualify a device family. Preserve partial
+last-known-good evidence without presenting it as current acceptance.
 
 The current [cohort checker](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/check_release_cohort.py)
 checks declared cohorts offline. Its exit zero can include `NOT_APPLICABLE`
@@ -82,11 +105,25 @@ exact source and target artifacts and the state they will read or write:
 Unknown compatibility means hold, not presumed compatibility. This is a
 packaging/release compatibility decision, not a new authorization feature.
 
+### Existing historical marker
+
+The [README source-address contract](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/README.md)
+documents `/data/source_addr.last` only as a retained historical rollback marker
+for older add-on versions. Current startup neither reads it as active source
+authority nor rewrites it; `source_addr=auto` does not reuse it. The marker is
+not a recovery mechanism, a settings/data snapshot, an artifact identity record
+or proof of downgrade compatibility. Its presence does not satisfy any
+replacement or rollback requirement above. These notes prescribe no marker
+creation, update, deletion or restoration and introduce no persistence contract.
+
 ## Upgrade, failure and rollback decisions
 
 These are proposed required outcomes, not claims of an available automatic
 rollback facility. Every live install, configuration write, stop/start or restore
 requires explicit operator confirmation at action time.
+Any such operation is operator-run under the owning supported procedure; this
+page neither schedules nor executes it, and no operator operation is assigned
+by this documentation change.
 
 | Transition / observation | Required decision | Settings, state and evidence outcome |
 | --- | --- | --- |
@@ -106,10 +143,12 @@ container, Supervisor, registry or device:
 
 | Synthetic case | Independent expected decision and reason |
 | --- | --- |
-| All three labels say 0.7, but `association-synthetic-alpha` lacks Explorer output binding | Hold: matching labels cannot prove a coherent binary cohort. |
+| All three labels say 0.7, but `association-synthetic-alpha` lacks Explorer output binding | Hold: matching labels cannot prove a coherent gateway-binary and Explorer-package cohort. |
 | A changed Explorer output keeps the same labels and old accepted association | Reject reuse of acceptance: create a new association and reverify under the metadata contract. |
 | Target startup fails; prior image exists; downgrade readability is Unknown | Hold safe-rollback claim: image availability cannot prove persisted-state compatibility. |
 | Prior binary is verified again, but owner-defined data recovery checks are missing | Hold the data recovery claim pending owner verification; binary identity alone does not complete recovery acceptance. |
+| Metadata covers only the two Supervisor architectures while the reviewed workflow publishes five | Hold: the three remaining published architectures also need complete output bindings. |
+| The historical source-address marker remains after a failed upgrade | Preserve it as historical evidence only; it supplies neither active authority nor a recovery path. |
 
 The [gateway repository](https://github.com/Project-Helianthus/helianthus-ebusgateway)
 owns gateway runtime and recovery implementation; the
