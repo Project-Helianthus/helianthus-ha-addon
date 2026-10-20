@@ -798,15 +798,6 @@ if bashio::var.true "${m2m_graphql_enabled}"; then
     -m2m-graphql-server-key "${m2m_server_key}"
     -m2m-graphql-allowed-assets "${m2m_graphql_asset_ref}"
   )
-  # The client CA is optional: when present it is handed to the listener, which
-  # then verifies any presented client certificate; when absent the listener
-  # starts with server-only TLS.
-  if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ]; then
-    if ! gateway_supports_flag "m2m-graphql-client-ca"; then
-      bashio::exit.nok "gateway does not support the M2M GraphQL client CA flag"
-    fi
-    m2m_args+=(-m2m-graphql-client-ca "${m2m_portal_ca}")
-  fi
   # The Portal BFF keeps its all-or-nothing client bundle (CA, certificate and
   # key); it stays disabled when any of the three is absent.
   if [ -f "${m2m_portal_ca}" ] && [ -r "${m2m_portal_ca}" ] && \
