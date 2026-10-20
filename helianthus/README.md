@@ -62,10 +62,12 @@ endpoints or raw words. The 0.6.51 owner-atomic raw Modbus retry, option schema,
 single-process wrapper, and disabled-by-default behavior remain unchanged.
 
 The dedicated M2M listener is disabled by default. Enable it only after placing
-`ca.pem`, `server-cert.pem`, `server-key.pem`, `portal-client-cert.pem`, and
-`portal-client-key.pem` under `/ssl/helianthus-pv-m2m`. The dedicated `/ssl`
-mount is read-only inside the add-on; certificate bytes are never accepted as
-options.
+`server-cert.pem` and `server-key.pem` under `/ssl/helianthus-pv-m2m`. It uses
+server-only TLS regardless of whether `ca.pem` is present. The optional Portal
+PV semantic view requires all three readable files: `ca.pem` as its trust root,
+`portal-client-cert.pem`, and `portal-client-key.pem`; it stays disabled when
+any is absent. The dedicated `/ssl` mount is read-only inside the add-on;
+certificate bytes are never accepted as options.
 
 For ebusd TCP mode, use `transport=ebusd-tcp`, `network=tcp`, and set `address=<ebusd-host>:<ebusd-port>`.
 

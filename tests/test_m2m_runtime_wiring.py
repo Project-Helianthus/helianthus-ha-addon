@@ -38,7 +38,7 @@ def test_supervisor_exposes_only_non_secret_m2m_controls_and_read_only_config() 
     )
 
 
-def test_wrapper_requires_server_tls_with_optional_client_ca_and_portal_credentials() -> None:
+def test_wrapper_requires_server_tls_with_optional_portal_credentials() -> None:
     run = RUN.read_text(encoding="utf-8")
 
     fixed_files = (
@@ -67,8 +67,7 @@ def test_wrapper_requires_server_tls_with_optional_client_ca_and_portal_credenti
     for flag in required_flags:
         assert f'gateway_supports_flag "{flag}"' in run or flag in run
         assert f'-{flag}' in run
-    assert '-m2m-graphql-client-ca "${m2m_portal_ca}"' in run
-    assert "m2m-graphql-client-ca \\" not in run  # not a mandatory flag
+    assert "m2m-graphql-client-ca" not in run
     mandatory = run[run.index("for m2m_tls_file in"):run.index("done", run.index("for m2m_tls_file in"))]
     assert "m2m_portal_ca" not in mandatory
     assert "m2m-graphql-denied-principals" not in run
@@ -185,8 +184,6 @@ def test_wrapper_executes_exact_m2m_bundle_only_when_enabled(
         "instance-guid",
         "instance-guid-source",
     )
-    if "ca.pem" in client_files:
-        flags += ("m2m-graphql-client-ca",)
     portal_enabled = len(client_files) == 3
     if not portal_enabled:
         flags = tuple(flag for flag in flags if not flag.startswith("portal-pv-"))
@@ -272,8 +269,6 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
         "-m2m-graphql-allowed-assets",
         "pv-asset-fixture",
     ]
-    if "ca.pem" in client_files:
-        m2m_argv += ["-m2m-graphql-client-ca", str(tls_root / "ca.pem")]
     if portal_enabled:
         m2m_argv += [
             "-portal-pv-semantic-enabled=true",
@@ -304,7 +299,7 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     if m2m_enabled:
         assert executed[executed.index("-m2m-graphql-listen") :] == m2m_argv
         assert "M2M GraphQL runtime: enabled" in log.read_text(encoding="utf-8")
-        assert ("-m2m-graphql-client-ca" in executed) == ("ca.pem" in client_files)
+        assert "-m2m-graphql-client-ca" not in executed
         assert "-m2m-graphql-denied-principals" not in executed
         if not portal_enabled:
             assert "Portal PV semantic runtime: disabled" in log.read_text(encoding="utf-8")
@@ -320,10 +315,10 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     ("files", "client_ca", "portal", "aborts"),
     (
         (("server-cert.pem", "server-key.pem", "ca.pem",
-          "portal-client-cert.pem", "portal-client-key.pem"), True, True, None),
+          "portal-client-cert.pem", "portal-client-key.pem"), False, True, None),
         (("server-cert.pem", "server-key.pem"), False, False, None),
         (("server-cert.pem", "ca.pem"), None, None, "server-key.pem"),
-        (("server-cert.pem", "server-key.pem", "ca.pem"), True, False, None),
+        (("server-cert.pem", "server-key.pem", "ca.pem"), False, False, None),
     ),
     ids=("full-bundle", "server-only-no-ca", "server-key-absent", "ca-without-portal-client"),
 )

@@ -48,14 +48,13 @@ def test_listener_client_auth_flags_are_not_configuration_options(flag: str) -> 
         assert flag.replace("-", "_") not in config[section]
 
 
-def test_listener_client_ca_is_supported_but_denied_principals_is_removed() -> None:
+def test_wrapper_omits_retired_listener_client_auth_flags() -> None:
     used = bom_manifest.gateway_flag_mentions(
         bom_manifest.WRAPPER.read_text(encoding="utf-8")
     )
-    # The client CA is a conditional flag: the wrapper emits it only when the
-    # optional CA file is present (runtime tests cover both outcomes).
+    # The pinned gateway still defines the retired no-op; the wrapper never uses it.
     assert "m2m-graphql-client-ca" in BOM["gateway_cli_flags"]
-    assert "m2m-graphql-client-ca" in used
+    assert "m2m-graphql-client-ca" not in used
     assert "m2m-graphql-denied-principals" not in BOM["gateway_cli_flags"]
     assert "m2m-graphql-denied-principals" not in used
 
@@ -67,7 +66,7 @@ def test_wrapper_flags_are_all_defined_by_pinned_gateway() -> None:
     assert used <= set(BOM["gateway_cli_flags"])
 
 
-@pytest.mark.parametrize("flag", ("m2m-graphql-allowed-assets", "m2m-graphql-client-ca"))
+@pytest.mark.parametrize("flag", ("m2m-graphql-allowed-assets",))
 def test_checker_rejects_a_flag_the_gateway_removed(flag: str) -> None:
     mutated = copy.deepcopy(BOM)
     mutated["gateway_cli_flags"] = [
@@ -113,9 +112,9 @@ def test_parse_go_mod_reads_blocks_and_indirect_markers() -> None:
     assert parsed["requires"][1]["indirect"] is False
 
 
-def test_wrapper_scan_flags_denied_principals_and_accepts_conditional_client_ca() -> None:
+def test_wrapper_scan_flags_denied_principals_and_omits_retired_client_ca() -> None:
     wrapper = bom_manifest.WRAPPER.read_text(encoding="utf-8")
-    assert "m2m-graphql-client-ca" in bom_manifest.gateway_flag_mentions(wrapper)
+    assert "m2m-graphql-client-ca" not in bom_manifest.gateway_flag_mentions(wrapper)
     injected = wrapper + '\n-m2m-graphql-denied-principals "x"\n'
     used = bom_manifest.gateway_flag_mentions(injected)
     assert "m2m-graphql-denied-principals" in used
