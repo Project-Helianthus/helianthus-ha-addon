@@ -901,6 +901,45 @@ def test_exact_case_holds_through_chained_links_and_file_links(tmp_path):
     assert ccm._absent_locally(ref("docs/wrong.md"), tree) is True
 
 
+def test_a_wrong_case_segment_between_a_link_and_a_final_link_is_absent(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path)
+    (tree / "real/Sub").mkdir(parents=True)
+    (tree / "elsewhere").mkdir()
+    (tree / "elsewhere/target.md").write_text("x", encoding="utf-8")
+    (tree / "real/Sub/link.md").symlink_to(tree / "elsewhere/target.md")
+    (tree / "docs/h").symlink_to(tree / "real")
+    listed = []
+    listing_spy(monkeypatch, listed)
+    assert ccm._absent_locally(ref("docs/h/Sub/link.md"), tree) is False
+    assert identity(tree / "real") in listed
+    assert identity(tmp_path) not in listed and identity(tmp_path.parent) not in listed
+    assert ccm._absent_locally(ref("docs/h/sub/link.md"), tree) is True
+
+
+def test_a_wrong_case_segment_between_two_links_in_a_chain_is_absent(tmp_path):
+    tree = make_worktree(tmp_path)
+    (tree / "b/Dir").mkdir(parents=True)
+    (tree / "d").mkdir()
+    (tree / "d/f.md").write_text("x", encoding="utf-8")
+    (tree / "b/Dir/c").symlink_to(tree / "d")
+    (tree / "a").symlink_to(tree / "b")
+    assert ccm._absent_locally(ref("a/Dir/c/f.md"), tree) is False
+    assert ccm._absent_locally(ref("a/dir/c/f.md"), tree) is True
+
+
+def test_a_wrong_case_after_the_last_link_or_in_a_link_name_is_absent(tmp_path):
+    tree = make_worktree(tmp_path)
+    (tree / "real/Sub").mkdir(parents=True)
+    (tree / "real/Sub/Name.md").write_text("x", encoding="utf-8")
+    (tree / "docs/h").symlink_to(tree / "real")
+    (tree / "docs/Link.md").symlink_to(tree / "real/Sub/Name.md")
+    assert ccm._absent_locally(ref("docs/h/Sub/Name.md"), tree) is False
+    assert ccm._absent_locally(ref("docs/h/Sub/name.md"), tree) is True
+    assert ccm._absent_locally(ref("docs/Link.md"), tree) is False
+    assert ccm._absent_locally(ref("docs/link.md"), tree) is True
+    assert ccm._absent_locally(ref("docs/H/Sub/Name.md"), tree) is True
+
+
 def test_restricted_text_from_the_validator_is_redacted(tmp_path, monkeypatch):
     def leaky(metadata, package_root, **kwargs):
         return ccm.Outcome(0, "not-ready", ["VALID: not-ready", f"K25: pin {COMMIT_LIKE}", ccm.NOTE],

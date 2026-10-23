@@ -591,22 +591,14 @@ def _read_descriptor(descriptor: int, limit: int = MAX_INPUT_BYTES) -> bytes:
     return b"".join(chunks)
 
 
-def _read_checked(descriptor: int) -> bytes:
-    try:
-        return _read_descriptor(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 def _read_path(path: Path) -> bytes:
     """Read a regular file through one checked descriptor opened without following a swapped-in link."""
     descriptor = _open(path.resolve(strict=True), _OPEN_FLAGS)
     try:
         _verify_descriptor(descriptor, False)
-    except BaseException:
+        return _read_descriptor(descriptor)
+    finally:
         os.close(descriptor)
-        raise
-    return _read_checked(descriptor)
 
 
 def _load(path: Path, label: str, validator: Callable[[Any], None], report: _Report,
@@ -666,8 +658,10 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
             report.public.append(
                 f"unrecognised packaging shape: package input {relative} resolves outside the package root")
             continue
+        descriptor = None
         try:  # One checked descriptor: a directory, FIFO or device is never read and a swap is never followed.
-            text = _read_checked(_open_beneath(base, target.relative_to(base).parts)).decode("utf-8")
+            descriptor = _open_beneath(base, target.relative_to(base).parts)
+            text = _read_descriptor(descriptor).decode("utf-8")
             value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
         except _WrongType:
             report.unavailable.append(f"package input {relative} is not a regular file")
@@ -679,6 +673,9 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
         except (ValueError, yaml.YAMLError, RecursionError):
             report.unavailable.append(f"package input {relative} cannot be parsed")
             continue
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
         if kind != "text" and type(value) is not dict:
             report.unavailable.append(f"package input {relative} is not a mapping")
             continue
@@ -702,12 +699,24 @@ def _public_refs(meta: dict[str, Any]) -> list[tuple[str, dict[str, Any] | None]
 
 
 def _absent_through_link(base: Path, parts: tuple[str, ...]) -> bool:
-    """A reference through a link is present only if its target is a regular file inside the checkout."""
+    """A reference through a link is present only if every segment is found by its exact name and the
+    target is a regular file inside the checkout."""
+    for number in range(len(parts)):  # Each segment is looked up in the listing of the directory it sits in.
+        parent = base.joinpath(*parts[:number]).resolve(strict=True)
+        relative = parent.relative_to(base).parts  # A parent outside the checkout is never listed.
+        if ".git" in {part.lower() for part in relative}:
+            return True
+        descriptor = _open_beneath(base, relative, directory=True, exact=True)
+        try:
+            if parts[number] not in os.listdir(descriptor):
+                return True
+        finally:
+            os.close(descriptor)
     target = base.joinpath(*parts).resolve(strict=True)
     relative = target.relative_to(base).parts
     if ".git" in {part.lower() for part in relative}:
         return True
-    os.close(_open_beneath(base, relative, exact=True))  # Exact case below the link as well.
+    os.close(_open_beneath(base, relative, exact=True))
     return False
 
 
