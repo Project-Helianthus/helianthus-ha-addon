@@ -68,7 +68,6 @@ REPOSITORY = re.compile(
     r"https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/([A-Za-z0-9._-]{1,100})"
 )
 PATH_SEGMENT = re.compile(r"[A-Za-z0-9._+-]+")
-SAFE_TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 # Restricted publication data: commit/tree/digest fragments, capture dates, IPv4.
 HEX_RUN = re.compile(r"[0-9A-Fa-f]{7,}")
 DATE = re.compile(r"(?:19|20)\d\d[-_./]?(?:0[1-9]|1[0-2])[-_./]?(?:0[1-9]|[12]\d|3[01])")
@@ -119,17 +118,11 @@ def _redact(line: str) -> str:
     return IPV4.sub("<redacted>", line)
 
 
-def _safe(token: Any) -> str:
-    if type(token) is str and SAFE_TOKEN.fullmatch(token) and not _restricted(token):
-        return token
-    return "<redacted>"
-
-
 def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise _Invalid(f"duplicate key {_safe(key)}")
+            raise _Invalid("duplicate key")
         result[key] = value
     return result
 
@@ -156,9 +149,9 @@ def _strict_json(raw: bytes) -> Any:
 def _object(value: Any, fields: tuple[str, ...], where: str) -> dict[str, Any]:
     if type(value) is not dict:
         raise _Invalid(f"{where} must be an object")
-    unknown = [_safe(key) for key in value if key not in fields]
+    unknown = [key for key in value if key not in fields]
     if unknown:
-        raise _Invalid(f"{where} has unknown field(s) {', '.join(unknown)}")
+        raise _Invalid(f"{where} has {len(unknown)} unknown field(s)")
     missing = [key for key in fields if key not in value]
     if missing:
         raise _Invalid(f"{where} is missing {', '.join(missing)}")

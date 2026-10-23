@@ -555,7 +555,7 @@ def test_reused_label_with_new_artifact_is_never_ready_without_new_evidence(tmp_
 def test_duplicate_keys_are_rejected_at_every_depth(tmp_path, target):
     outcome = run(tmp_path, None, meta_text=dumps_with_duplicate(ready_metadata(), target))
     assert outcome.exit_code == 1
-    assert first(outcome).startswith("INVALID_DOCUMENT: metadata: duplicate key ")
+    assert first(outcome) == "INVALID_DOCUMENT: metadata: duplicate key"
 
 
 @pytest.mark.parametrize("target", [(), ("checks",), ("checks", "acceptance"), ("components", "gateway")])
@@ -563,7 +563,7 @@ def test_receipt_duplicate_keys_are_rejected(tmp_path, target):
     meta = ready_metadata()
     outcome = run(tmp_path, meta, receipt_text=dumps_with_duplicate(receipt_for(meta), target))
     assert outcome.exit_code == 1
-    assert first(outcome).startswith("INVALID_DOCUMENT: verification context: duplicate key ")
+    assert first(outcome) == "INVALID_DOCUMENT: verification context: duplicate key"
 
 
 @pytest.mark.parametrize("path", [(), ("components",), ("components", "explorer"), ("components", "addon", "public_ref"),
@@ -576,7 +576,8 @@ def test_unknown_fields_are_rejected(tmp_path, path):
     target["extension"] = "synthetic"
     outcome = run(tmp_path, meta)
     assert outcome.exit_code == 1
-    assert "has unknown field(s) extension" in first(outcome)
+    assert first(outcome).endswith("has 1 unknown field(s)")
+    assert "extension" not in "\n".join(outcome.lines)
 
 
 def test_unknown_field_names_with_restricted_data_are_redacted(tmp_path):
@@ -584,7 +585,7 @@ def test_unknown_field_names_with_restricted_data_are_redacted(tmp_path):
     meta[COMMIT_LIKE] = "synthetic"
     outcome = run(tmp_path, meta)
     assert outcome.exit_code == 1
-    assert first(outcome) == "INVALID_DOCUMENT: metadata: document has unknown field(s) <redacted>"
+    assert first(outcome) == "INVALID_DOCUMENT: metadata: document has 1 unknown field(s)"
 
 
 @pytest.mark.parametrize("path,value", [
