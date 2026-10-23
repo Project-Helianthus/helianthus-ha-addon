@@ -297,6 +297,10 @@ class Outcome:
     exit_code: int
     disposition: str | None
     lines: list[str]
+    # For offline consumers such as scripts/build_offline_acceptance_index.py: the strictly validated
+    # public metadata (None when it is unreadable or invalid) and its unmet public prerequisites.
+    metadata: dict[str, Any] | None = None
+    public_reasons: tuple[str, ...] = ()
 
 
 class _Report:
@@ -576,6 +580,9 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
             report.public.append(
                 f"unrecognised packaging shape: package input {relative} resolves outside the package root")
             continue
+        if not target.is_file():  # A directory, FIFO or device is never read (a FIFO would block).
+            report.unavailable.append(f"package input {relative} is not a regular file")
+            continue
         try:
             text = target.read_bytes().decode("utf-8")
             value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
@@ -615,6 +622,8 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
     try:
         base = current = root.resolve(strict=True)
         for segment in ref["path"].split("/"):  # Exact case, as on the published repository.
+            if not current.resolve(strict=True).is_relative_to(base):  # Never list outside the checkout.
+                return True
             if segment not in {entry.name for entry in current.iterdir()}:
                 return True
             current = current / segment
@@ -884,7 +893,8 @@ def validate(metadata: str | Path, package_root: str | Path,
         if derived == "ready-for-review":
             lines += [f"PENDING: {reason}" for reason in report.pending]
     lines.append(NOTE)
-    return Outcome(code, derived, [_redact(line) for line in lines])
+    return Outcome(code, derived, [_redact(line) for line in lines], meta,
+                   tuple(_redact(reason) for reason in report.public))
 
 
 def main(argv: list[str] | None = None) -> int:
