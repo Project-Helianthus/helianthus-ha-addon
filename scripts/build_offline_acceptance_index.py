@@ -148,11 +148,11 @@ def _resolve_root(package_root: Path) -> Path | None:
     return root if root.is_dir() else None
 
 
-def _file_identity(root: Path, relative: str) -> tuple[int, int] | None:
+def _file_identity(root: Path, relative: str, *, root_fd: int | None = None) -> tuple[int, int] | None:
     """Identity of a record inside the worktree, taken from a no-follow descriptor opened below the root."""
     try:  # Links that stay inside the worktree are followed once, here; the open itself follows none.
         parts = (root / relative).resolve(strict=True).relative_to(root).parts
-        descriptor = ccm._open_beneath(root, parts)
+        descriptor = ccm._open_beneath(root, parts, root_fd=root_fd)
     except (OSError, RuntimeError, ValueError, ccm._WrongType):
         return None
     try:
@@ -162,7 +162,8 @@ def _file_identity(root: Path, relative: str) -> tuple[int, int] | None:
     return info.st_dev, info.st_ino
 
 
-def _read_input(path: Path, root: Path, role: str, seen: set[tuple[int, int]], errors: list[str]) -> bytes | None:
+def _read_input(path: Path, root: Path, role: str, seen: set[tuple[int, int]], errors: list[str],
+                *, root_fd: int | None = None) -> bytes | None:
     """Read an explicit input: a distinct regular file (also across hard links) inside the worktree.
 
     The supplied path is resolved only to learn its place below the worktree, so links that stay inside
@@ -182,7 +183,7 @@ def _read_input(path: Path, root: Path, role: str, seen: set[tuple[int, int]], e
         errors.append(f"{role} is inside repository metadata")
         return None
     try:
-        descriptor = ccm._open_beneath(root, relative)
+        descriptor = ccm._open_beneath(root, relative, root_fd=root_fd)
     except ccm._WrongType:
         errors.append(f"{role} is not a regular file")
         return None
@@ -274,14 +275,15 @@ def _evidence(doc: dict[str, Any]) -> list[_Evidence]:
 
 
 def _collect(paths: list[Path], limit: int, label: str, root: Path | None, seen: set[tuple[int, int]],
-             errors: list[str], validator: Callable[[Any], None], convert: Callable[[Any], list[Any]]) -> list[Any]:
+             errors: list[str], validator: Callable[[Any], None], convert: Callable[[Any], list[Any]],
+             root_fd: int | None = None) -> list[Any]:
     if len(paths) > limit:
         errors.append(f"at most {limit} {label} files may be supplied")
         return []
     items: list[Any] = []
     for index, path in enumerate(paths):
         role = f"{label}[{index}]"
-        raw = _read_input(Path(path), root, role, seen, errors) if root is not None else None
+        raw = _read_input(Path(path), root, role, seen, errors, root_fd=root_fd) if root is not None else None
         if raw is None:
             continue
         try:
@@ -361,25 +363,53 @@ def _software_row(gate: str, component: str, meta: dict[str, Any] | None,
     return row("unverified", "no result was supplied (missing)")
 
 
-def _record_problem(ref: dict[str, str] | None, root: Path, inputs: set[tuple[int, int]]) -> str | None:
+def _record_key(ref: dict[str, str], root: Path, root_fd: int | None) -> tuple[Any, ...]:
+    """Normalized identity of a linked record: the device and inode for this repository, else its path."""
+    repository = ref["repository"].lower()
+    if repository == ccm.ADDON_REPOSITORY:
+        identity = _file_identity(root, ref["path"], root_fd=root_fd)
+        if identity is not None:
+            return ("file", *identity)
+    return ("ref", repository, ref["path"])
+
+
+def _shared_records(evidence: list[_Evidence], meta: dict[str, Any] | None, root: Path | None,
+                    root_fd: int | None) -> set[tuple[Any, ...]]:
+    """Record keys linked from more than one current live gate."""
+    if meta is None or root is None:
+        return set()
+    counts: dict[tuple[Any, ...], int] = {}
+    for gate in PHYSICAL_GATE_IDS:
+        live = [entry for entry in evidence if entry.gate == gate and _current(entry, meta) and entry.live]
+        if len(live) == 1 and live[0].evidence_ref is not None:
+            key = _record_key(live[0].evidence_ref, root, root_fd)
+            counts[key] = counts.get(key, 0) + 1
+    return {key for key, count in counts.items() if count > 1}
+
+
+def _record_problem(ref: dict[str, str] | None, root: Path, inputs: set[tuple[int, int]],
+                    shared: set[tuple[Any, ...]] | None = None, *, root_fd: int | None = None) -> str | None:
     """Why a linked per-row evidence record cannot be used, or None."""
     if ref is None:
         return "no per-row evidence record is linked"
     if not ref["repository"].lower().startswith(EVIDENCE_OWNER):
         return "the linked per-row evidence record is not in a Project-Helianthus repository"
-    if ccm._absent_locally(ref, root):  # Only references into this repository are looked up.
+    if ccm._absent_locally(ref, root, root_fd=root_fd):  # Only references into this repository are looked up.
         return "the linked per-row evidence record does not exist in the worktree"
     if ref["repository"].lower() == ccm.ADDON_REPOSITORY:
-        identity = _file_identity(root, ref["path"])
+        identity = _file_identity(root, ref["path"], root_fd=root_fd)
         if identity is None:  # Vanished or unopenable since the existence check: nothing to verify.
             return "the linked per-row evidence record does not exist in the worktree"
         if identity in inputs:
             return "the linked per-row evidence record is one of the supplied inputs"
+    if shared and _record_key(ref, root, root_fd) in shared:
+        return "the linked per-row evidence record is also linked from another gate; each gate needs its own record"
     return None
 
 
 def _physical_row(gate: str, cases: tuple[str, ...], meta: dict[str, Any] | None,
-                  evidence: list[_Evidence], root: Path | None, inputs: set[tuple[int, int]]) -> dict[str, Any]:
+                  evidence: list[_Evidence], root: Path | None, inputs: set[tuple[int, int]],
+                  shared: set[tuple[Any, ...]] | None = None, *, root_fd: int | None = None) -> dict[str, Any]:
     def row(status: str, reason: str | None = None) -> dict[str, Any]:
         return _row(gate, status, [reason] if reason else [], cases=len(cases))
 
@@ -406,7 +436,7 @@ def _physical_row(gate: str, cases: tuple[str, ...], meta: dict[str, Any] | None
         return row("fail", f"{len(failed)} case(s) failed")
     if not entry.reviewed:
         return row("unverified", "independent review of this row's evidence is missing")
-    problem = _record_problem(entry.evidence_ref, root, inputs)
+    problem = _record_problem(entry.evidence_ref, root, inputs, shared, root_fd=root_fd)
     if problem:
         return row("unverified", problem)
     unaccounted = [case for case in cases if case not in entry.cases]
@@ -439,25 +469,39 @@ def build_index(package_root: str | Path, metadata: str | Path, results: list[st
     errors: list[str] = []
     seen: set[tuple[int, int]] = set()
     root = _resolve_root(Path(package_root))
+    root_fd = ccm._pin_root(root) if root is not None else None  # Pinned once: every traversal starts here.
+    try:
+        return _build(root, root_fd, errors, seen, metadata, results, operator_evidence)
+    finally:
+        if root_fd is not None:
+            os.close(root_fd)
+
+
+def _build(root: Path | None, root_fd: int | None, errors: list[str], seen: set[tuple[int, int]],
+           metadata: str | Path, results: list[str | Path] | None,
+           operator_evidence: list[str | Path] | None) -> Index:
     outcome = None
-    if root is None:
+    if root is None or root_fd is None:
+        root = None
         errors.append("package root is not a readable directory")
     else:
-        raw = _read_input(Path(metadata), root, "metadata", seen, errors)
+        raw = _read_input(Path(metadata), root, "metadata", seen, errors, root_fd=root_fd)
         if raw is not None:
             # Public-only: the private receipt never enters a worktree. The validator receives the bounded
             # bytes read here, so a file that grows or is swapped afterwards is never read again.
-            outcome = ccm.validate(Path(metadata), root, metadata_bytes=raw)
+            outcome = ccm.validate(Path(metadata), root, metadata_bytes=raw, root_fd=root_fd)
     supplied = _collect([Path(path) for path in results or []], MAX_RESULT_FILES, "results", root, seen,
-                        errors, _validate_results, _results)
+                        errors, _validate_results, _results, root_fd)
     evidence = _collect([Path(path) for path in operator_evidence or []], MAX_EVIDENCE_FILES,
-                        "operator evidence", root, seen, errors, _validate_evidence, _evidence)
+                        "operator evidence", root, seen, errors, _validate_evidence, _evidence, root_fd)
 
     # Rows are joined only to an identity the validator accepted; nothing is looked up for any other.
     meta = outcome.metadata if _accepted(outcome) else None
     software = [_candidate_row(outcome)] + [_software_row(gate, component, meta, supplied)
                                             for gate, component in SOFTWARE_GATES]
-    physical = [_physical_row(gate, cases, meta, evidence, root, seen) for gate, cases in PHYSICAL_GATES]
+    shared = _shared_records(evidence, meta, root, root_fd)
+    physical = [_physical_row(gate, cases, meta, evidence, root, seen, shared, root_fd=root_fd)
+                for gate, cases in PHYSICAL_GATES]
     rows = software + physical
     complete = not errors and all(row["status"] == "pass" for row in rows)
     identity = outcome.metadata if outcome is not None else None

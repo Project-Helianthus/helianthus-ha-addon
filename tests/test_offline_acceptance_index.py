@@ -99,13 +99,18 @@ def results_doc(bundle: str = BUNDLE, association: str = ASSOCIATION, **override
             "results": list(entries.values())}
 
 
+def record(gate: str) -> str:
+    """The per-row evidence record of a physical gate, one file of its own."""
+    return f"docs/records/{gate}.md"
+
+
 def evidence_doc(environment: str = "live", bundle: str = BUNDLE, association: str = ASSOCIATION,
                  gates: tuple[str, ...] | None = None) -> dict:
     """Live operator evidence, reviewed row by row, with every case passing for the selected gates."""
     selected = gates if gates is not None else oai.PHYSICAL_GATE_IDS
     return {"format": oai.EVIDENCE_FORMAT, "bundle_id": bundle, "association_id": association,
             "environment": environment,
-            "gates": [{"gate": gate, "independent_review": "satisfied", "evidence_ref": ref(EVIDENCE),
+            "gates": [{"gate": gate, "independent_review": "satisfied", "evidence_ref": ref(record(gate)),
                        "cases": [{"case": case, "outcome": "pass"} for case in oai.CASES[gate]]}
                       for gate in selected]}
 
@@ -152,6 +157,9 @@ def make_worktree(tmp_path: Path, freeze: dict | None = None, build_edit=None) -
     (tree / "helianthus/bom.json").write_text(json.dumps(bom), encoding="utf-8")
     (tree / "RELEASE_COHORT.md").write_text("synthetic\n", encoding="utf-8")
     (tree / EVIDENCE).write_text("synthetic\n", encoding="utf-8")
+    (tree / "docs/records").mkdir()
+    for gate in oai.PHYSICAL_GATE_IDS:
+        (tree / record(gate)).write_text(f"synthetic record {gate}\n", encoding="utf-8")
     return tree
 
 
@@ -471,8 +479,8 @@ def test_a_record_that_vanishes_after_the_existence_check_is_not_verified(tmp_pa
         "adapter-direct-ad07", lambda entry: entry.update(evidence_ref=ref("docs/vanishing-record.json"))))
     original = ccm._absent_locally
 
-    def spy(reference, root):
-        answer = original(reference, root)
+    def spy(reference, root, **kwargs):
+        answer = original(reference, root, **kwargs)
         if reference and reference["path"] == "docs/vanishing-record.json" and record.exists():
             record.unlink()
         return answer
@@ -653,7 +661,7 @@ def test_the_candidate_metadata_validator_is_reused_in_public_only_mode(tmp_path
     monkeypatch.setattr(oai.ccm, "validate", spy)
     assert complete(tmp_path).exit_code == 0
     tree = (tmp_path / "worktree").resolve()
-    assert len(calls) == 1 and set(calls[0][1]) == {"metadata_bytes"} and calls[0][0][1] == tree
+    assert len(calls) == 1 and set(calls[0][1]) == {"metadata_bytes", "root_fd"} and calls[0][0][1] == tree
 
 
 def test_metadata_swapped_after_the_check_is_never_reopened_by_path(tmp_path, monkeypatch):
@@ -1495,3 +1503,159 @@ def test_usage_errors_never_echo_option_text_or_values(tmp_path, capsys):
             assert PRIVATE_PATH not in text and "results-file" not in text and "bogus" not in text
             assert str(tmp_path) not in text
         assert "the command line cannot be used" in done.stderr
+
+
+# ------------------------------------------------ one record per physical gate
+
+SHARED = "the linked per-row evidence record is also linked from another gate; each gate needs its own record"
+FIRST, SECOND = "adapter-direct-ad01", "adapter-direct-ad02"
+
+
+def shared_run(tmp_path: Path, links: dict, prepare=None, edit=None) -> oai.Index:
+    tree = make_worktree(tmp_path)
+    if prepare:
+        prepare(tree)
+    doc = evidence_doc()
+    for gate, reference in links.items():
+        gate_entry(doc, gate)["evidence_ref"] = reference
+    if edit:
+        edit(doc)
+    return run(tmp_path, results=(results_doc(),), evidence=(doc,), tree=tree)
+
+
+def only_shared(index: oai.Index, *gates: str) -> None:
+    for gate, found in rows(index).items():
+        if gate in gates:
+            assert (found["status"], found["reasons"]) == ("unverified", [SHARED]), gate
+        else:
+            assert (found["status"], found["reasons"]) == ("pass", []), gate
+
+
+def test_two_gates_linked_to_one_record_are_both_unverified(tmp_path):
+    index = shared_run(tmp_path, {SECOND: ref(record(FIRST))})
+    assert index.exit_code == 2
+    only_shared(index, FIRST, SECOND)
+
+
+def test_one_record_for_every_gate_passes_no_row(tmp_path):
+    index = shared_run(tmp_path, {gate: ref(EVIDENCE) for gate in oai.PHYSICAL_GATE_IDS})
+    assert index.exit_code == 2
+    only_shared(index, *oai.PHYSICAL_GATE_IDS)
+
+
+def test_a_hard_link_to_the_same_record_is_the_same_record(tmp_path):
+    index = shared_run(tmp_path, {SECOND: ref("docs/alias.md")},
+                       prepare=lambda tree: os.link(tree / record(FIRST), tree / "docs/alias.md"))
+    only_shared(index, FIRST, SECOND)
+
+
+def test_a_symlink_to_the_same_record_is_the_same_record(tmp_path):
+    def prepare(tree):
+        try:
+            (tree / "docs/alias.md").symlink_to(Path("records") / f"{FIRST}.md")
+        except OSError:
+            pytest.skip("this platform cannot create symlinks")
+    index = shared_run(tmp_path, {SECOND: ref("docs/alias.md")}, prepare=prepare)
+    only_shared(index, FIRST, SECOND)
+
+
+def test_the_repository_name_case_does_not_make_a_record_distinct(tmp_path):
+    index = shared_run(tmp_path, {SECOND: ref(record(FIRST), ADDON.lower())})
+    only_shared(index, FIRST, SECOND)
+
+
+def test_a_failed_case_stays_a_failure_beside_a_shared_record(tmp_path):
+    index = shared_run(tmp_path, {SECOND: ref(record(FIRST))},
+                       edit=lambda doc: gate_entry(doc, FIRST)["cases"][0].update(outcome="fail"))
+    assert row(index, FIRST) == ("fail", ["1 case(s) failed"])
+    assert row(index, SECOND) == ("unverified", [SHARED])
+    assert index.exit_code == 2
+
+
+def test_the_shared_record_reason_echoes_no_gate_path_or_reference(tmp_path):
+    index = shared_run(tmp_path, {SECOND: ref(record(FIRST))})
+    for gate in (FIRST, SECOND):
+        reason = row(index, gate)[1][0]
+        assert reason == SHARED
+        for supplied in (FIRST, SECOND, record(FIRST), ADDON, "docs/records"):
+            assert supplied not in reason
+
+
+def test_distinct_records_keep_every_row_passing(tmp_path):
+    assert complete(tmp_path).exit_code == 0
+
+
+# ------------------------------------- one pinned checkout root per run
+
+MARKER = "replacement-tree-marker"
+
+
+def swap_after_first_open(monkeypatch, tmp_path: Path, reads: list) -> None:
+    """After the checkout root was first opened, rename its ancestor and plant a different tree in its place."""
+    state = {"swapped": False}
+    original_open, original_read = ccm._open, ccm._read_descriptor
+
+    def swap() -> None:
+        (tmp_path / "job").rename(tmp_path / "job-original")
+        tree = make_worktree(tmp_path / "job")
+        for name in ("metadata.json", "results.json", "evidence.json"):  # The supplied paths resolve here too.
+            write(tree, name, MARKER)
+        for path in tree.rglob("*"):  # Every file of the replacement carries the marker.
+            if path.is_file() and not path.is_symlink():
+                path.write_text(MARKER, encoding="utf-8")
+
+    def spy(path, flags, dir_fd=None):
+        descriptor = original_open(path, flags, dir_fd)
+        if not state["swapped"]:
+            state["swapped"] = True
+            swap()
+        return descriptor
+
+    def read(descriptor, limit=ccm.MAX_INPUT_BYTES):
+        data = original_read(descriptor, limit)
+        reads.append(data)
+        return data
+    monkeypatch.setattr(ccm, "_open", spy)
+    monkeypatch.setattr(ccm, "_read_descriptor", read)
+
+
+def test_an_ancestor_swapped_after_the_root_was_pinned_is_never_followed(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path / "job")
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    results = write(tree, "results.json", results_doc())
+    evidence = write(tree, "evidence.json", evidence_doc())
+    reads: list = []
+    swap_after_first_open(monkeypatch, tmp_path, reads)
+    index = check(oai.build_index(tree, metadata, [results], [evidence]), tmp_path)
+    assert (tmp_path / "job-original").is_dir() and reads
+    assert not any(MARKER.encode() in data for data in reads), "a replacement tree was read"
+    assert MARKER not in text(index)
+    assert index.exit_code == 0, index.document["blocking"]
+
+
+def test_the_validator_alone_never_follows_a_swapped_ancestor(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path / "job")
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    reads: list = []
+    swap_after_first_open(monkeypatch, tmp_path, reads)
+    outcome = ccm.validate(metadata, tree, metadata_bytes=metadata.read_bytes())
+    assert outcome.exit_code == 0 and reads and not any(MARKER.encode() in data for data in reads)
+
+
+def test_a_listing_below_a_swapped_ancestor_never_lists_the_replacement(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path / "job")
+    (tree / "docs/alias").symlink_to("records")
+    root_fd = ccm._pin_root(tree)
+    try:
+        (tmp_path / "job").rename(tmp_path / "job-original")
+        replacement = make_worktree(tmp_path / "job")
+        (replacement / "docs/records/only-in-replacement.md").write_text(MARKER, encoding="utf-8")
+        (replacement / "docs/alias").symlink_to("records")
+        listed: list = []
+        listing_spy(monkeypatch, listed)
+        absent = ccm._absent_locally(ref("docs/alias/only-in-replacement.md"), tree, root_fd=root_fd)
+        present = ccm._absent_locally(ref(f"docs/alias/{FIRST}.md"), tree, root_fd=root_fd)
+    finally:
+        os.close(root_fd)
+    assert absent is True and present is False
+    assert identity(replacement / "docs/records") not in listed and identity(replacement / "docs") not in listed

@@ -195,8 +195,9 @@ hard link. With that one
 live record, any failed case makes the row `fail`. Otherwise the row stays
 `unverified`: no evidence, only simulated evidence, only stale or different-BOM
 evidence, more than one live record, a missing review or record, or a case that
-is blocked, not run or not accounted for. Software results never reach physical
-rows.
+is blocked, not run or not accounted for. A record linked from more than one
+gate leaves each of those gates `unverified`, also when the links reach the same
+file under different spellings. Software results never reach physical rows.
 
 The index is `complete` only when no input error occurred and every row passes;
 missing and stale results keep it `incomplete`. Each section reports `complete`

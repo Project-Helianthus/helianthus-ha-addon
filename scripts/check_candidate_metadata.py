@@ -553,14 +553,30 @@ def _verify_descriptor(descriptor: int, directory: bool) -> None:
         raise _WrongType
 
 
-def _open_beneath(base: Path, parts: tuple[str, ...], directory: bool = False, exact: bool = False) -> int:
+def _pin_root(root: Path) -> int | None:
+    """Open the checkout root once; every later traversal starts from this descriptor, never from the path."""
+    try:
+        return _open(root.resolve(strict=True), _OPEN_FLAGS | os.O_DIRECTORY)
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _open_root(base: Path, root_fd: int | None) -> int:
+    if root_fd is None:
+        return _open(base, _OPEN_FLAGS | os.O_DIRECTORY)
+    return _open(".", _OPEN_FLAGS | os.O_DIRECTORY, root_fd)  # A fresh descriptor for the pinned directory.
+
+
+def _open_beneath(base: Path, parts: tuple[str, ...], directory: bool = False, exact: bool = False,
+                  *, root_fd: int | None = None) -> int:
     """Open parts below base one component at a time, relative to pinned directory descriptors.
 
     No component is followed if it is a link, and the final descriptor is verified with fstat, so a path
     swapped after an earlier check is never followed. With exact, every part must also be found by its exact
-    name in the listing of the pinned directory descriptor it is opened from. The caller closes the descriptor.
+    name in the listing of the pinned directory descriptor it is opened from. With root_fd, the traversal starts
+    from that pinned root, so a replaced ancestor of base is never followed. The caller closes the descriptor.
     """
-    current = _open(base, _OPEN_FLAGS | os.O_DIRECTORY)
+    current = _open_root(base, root_fd)
     try:
         for number, part in enumerate(parts):
             last = number == len(parts) - 1
@@ -634,7 +650,7 @@ def _inside(path: Path, root: Path) -> bool:
         return True
 
 
-def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
+def _read_package(root: Path, report: _Report, *, root_fd: int | None = None) -> dict[str, Any] | None:
     """Read each packaging input from its resolved location, which must lie inside the package root."""
     try:
         base = root.resolve(strict=True)
@@ -660,7 +676,7 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
             continue
         descriptor = None
         try:  # One checked descriptor: a directory, FIFO or device is never read and a swap is never followed.
-            descriptor = _open_beneath(base, target.relative_to(base).parts)
+            descriptor = _open_beneath(base, target.relative_to(base).parts, root_fd=root_fd)
             text = _read_descriptor(descriptor).decode("utf-8")
             value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
         except _WrongType:
@@ -698,7 +714,7 @@ def _public_refs(meta: dict[str, Any]) -> list[tuple[str, dict[str, Any] | None]
     return refs
 
 
-def _absent_through_link(base: Path, parts: tuple[str, ...]) -> bool:
+def _absent_through_link(base: Path, parts: tuple[str, ...], *, root_fd: int | None = None) -> bool:
     """A reference through a link is present only if every segment is found by its exact name and the
     target is a regular file inside the checkout."""
     for number in range(len(parts)):  # Each segment is looked up in the listing of the directory it sits in.
@@ -706,7 +722,7 @@ def _absent_through_link(base: Path, parts: tuple[str, ...]) -> bool:
         relative = parent.relative_to(base).parts  # A parent outside the checkout is never listed.
         if ".git" in {part.lower() for part in relative}:
             return True
-        descriptor = _open_beneath(base, relative, directory=True, exact=True)
+        descriptor = _open_beneath(base, relative, directory=True, exact=True, root_fd=root_fd)
         try:
             if parts[number] not in os.listdir(descriptor):
                 return True
@@ -716,11 +732,11 @@ def _absent_through_link(base: Path, parts: tuple[str, ...]) -> bool:
     relative = target.relative_to(base).parts
     if ".git" in {part.lower() for part in relative}:
         return True
-    os.close(_open_beneath(base, relative, exact=True))
+    os.close(_open_beneath(base, relative, exact=True, root_fd=root_fd))
     return False
 
 
-def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
+def _absent_locally(ref: dict[str, Any] | None, root: Path, *, root_fd: int | None = None) -> bool:
     """Offline existence check for references into this add-on repository only."""
     if ref is None or ref["repository"].lower() != ADDON_REPOSITORY:
         return False
@@ -729,7 +745,7 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
         parts = tuple(ref["path"].split("/"))
         if ".git" in {part.lower() for part in parts}:
             return True
-        current = _open(base, _OPEN_FLAGS | os.O_DIRECTORY)
+        current = _open_root(base, root_fd)
         try:
             for number, segment in enumerate(parts):  # Exact case, as on the published repository.
                 if segment not in os.listdir(current):  # Listed from the pinned descriptor, never by path.
@@ -738,7 +754,8 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
                 try:
                     following = _open(segment, _OPEN_FLAGS | (0 if last else os.O_DIRECTORY), current)
                 except OSError:
-                    return _absent_through_link(base, parts)  # A link must still end inside the checkout.
+                    # A link must still end inside the checkout.
+                    return _absent_through_link(base, parts, root_fd=root_fd)
                 os.close(current)
                 current = following
             _verify_descriptor(current, False)
@@ -792,7 +809,7 @@ def _check_overrides(labels: dict[str, str | None], slots: dict[str, str], repor
 
 
 def _check_package(meta: dict[str, Any], package: dict[str, Any], root: Path,
-                   report: _Report) -> tuple[set[str] | None, bool]:
+                   report: _Report, *, root_fd: int | None = None) -> tuple[set[str] | None, bool]:
     """Step 2-4 packaging checks. Return the published architecture set and local-reference absence."""
     components = meta["components"]
     labels = {key: components[key]["release_label"] for key in ("addon", "gateway", "explorer")}
@@ -837,7 +854,7 @@ def _check_package(meta: dict[str, Any], package: dict[str, Any], root: Path,
 
     absent = False
     for where, ref in _public_refs(meta):
-        if _absent_locally(ref, root):
+        if _absent_locally(ref, root, root_fd=root_fd):
             report.public.append(f"{where} does not exist in the provisioned package")
             absent = True
     return published, absent
@@ -944,8 +961,25 @@ def _identity(meta: dict[str, Any]) -> list[str]:
 
 
 def validate(metadata: str | Path, package_root: str | Path,
-             verification_context: str | Path | None = None, *, metadata_bytes: bytes | None = None) -> Outcome:
-    """Validate public metadata against a local checkout and an optional private receipt."""
+             verification_context: str | Path | None = None, *, metadata_bytes: bytes | None = None,
+             root_fd: int | None = None) -> Outcome:
+    """Validate public metadata against a local checkout and an optional private receipt.
+
+    With root_fd, the caller's pinned checkout root is used for every traversal; otherwise the root is pinned
+    once here and closed before returning.
+    """
+    if root_fd is not None:
+        return _validate(metadata, package_root, verification_context, metadata_bytes, root_fd)
+    pinned = _pin_root(Path(package_root))
+    try:
+        return _validate(metadata, package_root, verification_context, metadata_bytes, pinned)
+    finally:
+        if pinned is not None:
+            os.close(pinned)
+
+
+def _validate(metadata: str | Path, package_root: str | Path, verification_context: str | Path | None,
+              metadata_bytes: bytes | None, root_fd: int | None) -> Outcome:
     report = _Report()
     root = Path(package_root)
     if metadata_bytes is None:
@@ -959,14 +993,14 @@ def validate(metadata: str | Path, package_root: str | Path,
             report.unavailable.append("verification context must be provisioned outside the package checkout")
         else:
             receipt = _load(context, "verification context", _validate_receipt, report)
-    package = _read_package(root, report)
+    package = _read_package(root, report, root_fd=root_fd)
 
     published: set[str] | None = None
     absent = False
     if meta is not None:
         _public_reasons(meta, report)
         if package is not None:
-            published, absent = _check_package(meta, package, root, report)
+            published, absent = _check_package(meta, package, root, report, root_fd=root_fd)
         if verification_context is None:
             report.private.append(
                 "private verification context not supplied: package mapping, public references, inventory, "
