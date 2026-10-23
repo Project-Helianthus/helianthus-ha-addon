@@ -24,7 +24,6 @@ import json
 import os
 from pathlib import Path
 import re
-import stat
 import sys
 from typing import Any, Callable
 
@@ -149,101 +148,61 @@ def _resolve_root(package_root: Path) -> Path | None:
     return root if root.is_dir() else None
 
 
-def _file_identity(path: Path) -> tuple[int, int] | None:
-    try:
-        info = os.stat(path)
-    except (OSError, ValueError):
+def _file_identity(root: Path, relative: str) -> tuple[int, int] | None:
+    """Identity of a record inside the worktree, taken from a no-follow descriptor opened below the root."""
+    try:  # Links that stay inside the worktree are followed once, here; the open itself follows none.
+        parts = (root / relative).resolve(strict=True).relative_to(root).parts
+        descriptor = ccm._open_beneath(root, parts)
+    except (OSError, RuntimeError, ValueError, ccm._WrongType):
         return None
+    try:
+        info = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
     return info.st_dev, info.st_ino
 
 
-def _local(path: Path, root: Path, role: str, seen: set[tuple[int, int]], errors: list[str]) -> Path | None:
-    """Resolve an explicit input; it must be a distinct file (also across hard links) inside the worktree."""
+def _read_input(path: Path, root: Path, role: str, seen: set[tuple[int, int]], errors: list[str]) -> bytes | None:
+    """Read an explicit input: a distinct regular file (also across hard links) inside the worktree.
+
+    The supplied path is resolved only to learn its place below the worktree, so links that stay inside
+    remain accepted. The file is then opened one component at a time relative to pinned directory
+    descriptors, never following a link, and both its identity and its bytes come from that descriptor.
+    """
     try:
-        target = path.resolve(strict=True)
-        info = target.stat()
+        resolved = path.resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         errors.append(f"{role} cannot be read")
         return None
-    identity = (info.st_dev, info.st_ino)
-    if target == root or not target.is_relative_to(root):
+    if resolved == root or not resolved.is_relative_to(root):
         errors.append(f"{role} is not a file inside the worktree")
         return None
-    if ".git" in {part.lower() for part in target.relative_to(root).parts}:
+    relative = resolved.relative_to(root).parts
+    if ".git" in {part.lower() for part in relative}:
         errors.append(f"{role} is inside repository metadata")
         return None
-    if identity in seen:
-        errors.append(f"{role} repeats an input that was already supplied")
-        return None
-    seen.add(identity)
-    return target
-
-
-def _read(target: Path, role: str, errors: list[str], content: bool = True) -> bytes | None:
-    """Read at most MAX_INPUT_BYTES from a regular file without following a swapped-in link or blocking."""
     try:
-        descriptor = os.open(target, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        descriptor = ccm._open_beneath(root, relative)
+    except ccm._WrongType:
+        errors.append(f"{role} is not a regular file")
+        return None
     except OSError as exc:
         errors.append(f"{role} cannot be read ({exc.strerror or type(exc).__name__})")
         return None
     try:
         info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            errors.append(f"{role} is not a regular file")
+        identity = (info.st_dev, info.st_ino)
+        if identity in seen:
+            errors.append(f"{role} repeats an input that was already supplied")
             return None
-        chunks: list[bytes] = []
-        size = 0
-        while content and size <= MAX_INPUT_BYTES:
-            chunk = os.read(descriptor, MAX_INPUT_BYTES + 1 - size)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            size += len(chunk)
-        if info.st_size > MAX_INPUT_BYTES or size > MAX_INPUT_BYTES:
-            errors.append(f"{role} exceeds the 1 MiB input limit")
-            return None
-        return b"".join(chunks)
+        seen.add(identity)
+        return ccm._read_descriptor(descriptor, MAX_INPUT_BYTES)
     except OSError as exc:
-        errors.append(f"{role} cannot be read ({exc.strerror or type(exc).__name__})")
+        errors.append(f"{role} " + ("exceeds the 1 MiB input limit" if exc.strerror == "exceeds the 1 MiB input limit"
+                                    else f"cannot be read ({exc.strerror or type(exc).__name__})"))
         return None
     finally:
         os.close(descriptor)
-
-
-def _validate_bounded(raw: bytes, target: Path, root: Path) -> Any:
-    """Bound input reads while leaving parsing and packaging rules with the validator."""
-    original = ccm._load
-    original_package = ccm._read_package
-
-    class BoundedPath(type(root)):
-        def read_bytes(self) -> bytes:
-            errors: list[str] = []
-            content = _read(self, "packaging input", errors)
-            if content is None:
-                raise OSError(None, errors[0])
-            return content
-
-    def read_package(path: Path, report: Any) -> Any:
-        return original_package(BoundedPath(path), report)
-
-    def load(path: Path, label: str, validator: Callable[[Any], None], report: Any) -> Any:
-        if label != "metadata":
-            return original(path, label, validator, report)
-        try:
-            doc = ccm._strict_json(raw)
-            validator(doc)
-        except ccm._Invalid as exc:
-            report.invalid.append(f"{label}: {exc}")
-            return None
-        return doc
-
-    ccm._load = load
-    ccm._read_package = read_package
-    try:
-        return ccm.validate(target, root)
-    finally:
-        ccm._load = original
-        ccm._read_package = original_package
 
 
 def _entries(value: Any, where: str, limit: int) -> list[Any]:
@@ -322,8 +281,7 @@ def _collect(paths: list[Path], limit: int, label: str, root: Path | None, seen:
     items: list[Any] = []
     for index, path in enumerate(paths):
         role = f"{label}[{index}]"
-        target = _local(Path(path), root, role, seen, errors) if root is not None else None
-        raw = _read(target, role, errors) if target is not None else None
+        raw = _read_input(Path(path), root, role, seen, errors) if root is not None else None
         if raw is None:
             continue
         try:
@@ -411,7 +369,7 @@ def _record_problem(ref: dict[str, str] | None, root: Path, inputs: set[tuple[in
         return "the linked per-row evidence record is not in a Project-Helianthus repository"
     if ccm._absent_locally(ref, root):  # Only references into this repository are looked up.
         return "the linked per-row evidence record does not exist in the worktree"
-    if ref["repository"].lower() == ccm.ADDON_REPOSITORY and _file_identity(root / ref["path"]) in inputs:
+    if ref["repository"].lower() == ccm.ADDON_REPOSITORY and _file_identity(root, ref["path"]) in inputs:
         return "the linked per-row evidence record is one of the supplied inputs"
     return None
 
@@ -481,12 +439,11 @@ def build_index(package_root: str | Path, metadata: str | Path, results: list[st
     if root is None:
         errors.append("package root is not a readable directory")
     else:
-        target = _local(Path(metadata), root, "metadata", seen, errors)
-        raw = _read(target, "metadata", errors) if target is not None else None
+        raw = _read_input(Path(metadata), root, "metadata", seen, errors)
         if raw is not None:
             # Public-only: the private receipt never enters a worktree. The validator receives the bounded
             # bytes read here, so a file that grows or is swapped afterwards is never read again.
-            outcome = _validate_bounded(raw, target, root)
+            outcome = ccm.validate(Path(metadata), root, metadata_bytes=raw)
     supplied = _collect([Path(path) for path in results or []], MAX_RESULT_FILES, "results", root, seen,
                         errors, _validate_results, _results)
     evidence = _collect([Path(path) for path in operator_evidence or []], MAX_EVIDENCE_FILES,

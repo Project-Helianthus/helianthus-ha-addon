@@ -20,6 +20,7 @@ import argparse
 import csv
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any, Callable
@@ -534,11 +535,96 @@ def _validate_receipt(doc: Any) -> None:
         raise _Invalid("attestation_id must be set exactly when checks.exact_bom is satisfied")
 
 
-def _load(path: Path, label: str, validator: Callable[[Any], None], report: _Report) -> Any:
+MAX_INPUT_BYTES = 1 << 20  # 1 MiB for every file read through a checked descriptor
+_OPEN_FLAGS = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+_TYPE_MASK, _DIRECTORY_TYPE, _REGULAR_TYPE = 0o170000, 0o040000, 0o100000
+
+
+def _open(path: Any, flags: int, dir_fd: int | None = None) -> int:
+    return os.open(path, flags, dir_fd=dir_fd)
+
+
+class _WrongType(Exception):
+    """An opened descriptor is not the kind of file or directory that was expected."""
+
+
+def _verify_descriptor(descriptor: int, directory: bool) -> None:
+    if os.fstat(descriptor).st_mode & _TYPE_MASK != (_DIRECTORY_TYPE if directory else _REGULAR_TYPE):
+        raise _WrongType
+
+
+def _open_beneath(base: Path, parts: tuple[str, ...], directory: bool = False, exact: bool = False) -> int:
+    """Open parts below base one component at a time, relative to pinned directory descriptors.
+
+    No component is followed if it is a link, and the final descriptor is verified with fstat, so a path
+    swapped after an earlier check is never followed. With exact, every part must also be found by its exact
+    name in the listing of the pinned directory descriptor it is opened from. The caller closes the descriptor.
+    """
+    current = _open(base, _OPEN_FLAGS | os.O_DIRECTORY)
     try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        report.unavailable.append(f"{label} cannot be read ({exc.strerror or type(exc).__name__})")
+        for number, part in enumerate(parts):
+            last = number == len(parts) - 1
+            if exact and part not in os.listdir(current):
+                raise FileNotFoundError(None, "no entry with this exact name")
+            following = _open(part, _OPEN_FLAGS | (os.O_DIRECTORY if directory or not last else 0), current)
+            os.close(current)
+            current = following
+        _verify_descriptor(current, directory)
+    except BaseException:
+        os.close(current)
+        raise
+    return current
+
+
+def _read_descriptor(descriptor: int, limit: int = MAX_INPUT_BYTES) -> bytes:
+    """Read the whole descriptor, never more than limit bytes; a longer file is an error."""
+    chunks: list[bytes] = []
+    size = 0
+    while size <= limit:
+        chunk = os.read(descriptor, limit + 1 - size)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    if size > limit:
+        raise OSError(None, "exceeds the 1 MiB input limit")
+    return b"".join(chunks)
+
+
+def _read_checked(descriptor: int) -> bytes:
+    try:
+        return _read_descriptor(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _read_path(path: Path) -> bytes:
+    """Read a regular file through one checked descriptor opened without following a swapped-in link."""
+    descriptor = _open(path.resolve(strict=True), _OPEN_FLAGS)
+    try:
+        _verify_descriptor(descriptor, False)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return _read_checked(descriptor)
+
+
+def _load(path: Path, label: str, validator: Callable[[Any], None], report: _Report,
+          *, raw: bytes | None = None) -> Any:
+    if raw is None:
+        try:
+            raw = _read_path(path)
+        except _WrongType:
+            report.unavailable.append(f"{label} cannot be read (not a regular file)")
+            return None
+        except OSError as exc:
+            report.unavailable.append(f"{label} cannot be read ({exc.strerror or type(exc).__name__})")
+            return None
+        except RuntimeError as exc:
+            report.unavailable.append(f"{label} cannot be read ({type(exc).__name__})")
+            return None
+    elif len(raw) > MAX_INPUT_BYTES:
+        report.unavailable.append(f"{label} cannot be read (exceeds the 1 MiB input limit)")
         return None
     try:
         doc = _strict_json(raw)
@@ -580,12 +666,12 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
             report.public.append(
                 f"unrecognised packaging shape: package input {relative} resolves outside the package root")
             continue
-        if not target.is_file():  # A directory, FIFO or device is never read (a FIFO would block).
+        try:  # One checked descriptor: a directory, FIFO or device is never read and a swap is never followed.
+            text = _read_checked(_open_beneath(base, target.relative_to(base).parts)).decode("utf-8")
+            value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
+        except _WrongType:
             report.unavailable.append(f"package input {relative} is not a regular file")
             continue
-        try:
-            text = target.read_bytes().decode("utf-8")
-            value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
         except OSError as exc:
             report.unavailable.append(
                 f"package input {relative} cannot be read ({exc.strerror or type(exc).__name__})")
@@ -615,22 +701,42 @@ def _public_refs(meta: dict[str, Any]) -> list[tuple[str, dict[str, Any] | None]
     return refs
 
 
+def _absent_through_link(base: Path, parts: tuple[str, ...]) -> bool:
+    """A reference through a link is present only if its target is a regular file inside the checkout."""
+    target = base.joinpath(*parts).resolve(strict=True)
+    relative = target.relative_to(base).parts
+    if ".git" in {part.lower() for part in relative}:
+        return True
+    os.close(_open_beneath(base, relative, exact=True))  # Exact case below the link as well.
+    return False
+
+
 def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
     """Offline existence check for references into this add-on repository only."""
     if ref is None or ref["repository"].lower() != ADDON_REPOSITORY:
         return False
     try:
-        base = current = root.resolve(strict=True)
-        for segment in ref["path"].split("/"):  # Exact case, as on the published repository.
-            if not current.resolve(strict=True).is_relative_to(base):  # Never list outside the checkout.
-                return True
-            if segment not in {entry.name for entry in current.iterdir()}:
-                return True
-            current = current / segment
-        target = current.resolve(strict=True)
-        return not (target.is_file() and target.is_relative_to(base)
-                    and ".git" not in {part.lower() for part in target.relative_to(base).parts})
-    except (OSError, RuntimeError):
+        base = root.resolve(strict=True)
+        parts = tuple(ref["path"].split("/"))
+        if ".git" in {part.lower() for part in parts}:
+            return True
+        current = _open(base, _OPEN_FLAGS | os.O_DIRECTORY)
+        try:
+            for number, segment in enumerate(parts):  # Exact case, as on the published repository.
+                if segment not in os.listdir(current):  # Listed from the pinned descriptor, never by path.
+                    return True
+                last = number == len(parts) - 1
+                try:
+                    following = _open(segment, _OPEN_FLAGS | (0 if last else os.O_DIRECTORY), current)
+                except OSError:
+                    return _absent_through_link(base, parts)  # A link must still end inside the checkout.
+                os.close(current)
+                current = following
+            _verify_descriptor(current, False)
+        finally:
+            os.close(current)
+        return False
+    except (OSError, RuntimeError, ValueError, _WrongType):
         return True
 
 
@@ -829,11 +935,14 @@ def _identity(meta: dict[str, Any]) -> list[str]:
 
 
 def validate(metadata: str | Path, package_root: str | Path,
-             verification_context: str | Path | None = None) -> Outcome:
+             verification_context: str | Path | None = None, *, metadata_bytes: bytes | None = None) -> Outcome:
     """Validate public metadata against a local checkout and an optional private receipt."""
     report = _Report()
     root = Path(package_root)
-    meta = _load(Path(metadata), "metadata", _validate_metadata, report)
+    if metadata_bytes is None:
+        meta = _load(Path(metadata), "metadata", _validate_metadata, report)
+    else:  # The caller already read the bounded bytes from its own checked descriptor.
+        meta = _load(Path(metadata), "metadata", _validate_metadata, report, raw=metadata_bytes)
     receipt = None
     if verification_context is not None:
         context = Path(verification_context)

@@ -954,24 +954,80 @@ def test_real_package_with_exact_revisions_never_leaks_them(tmp_path):
 
 # --------------------------------------- offline, read-only, K25 reuse
 
+OS_SURFACE = {"open", "fstat", "read", "close", "listdir", "scandir", "O_RDONLY", "O_NONBLOCK", "O_NOFOLLOW",
+              "O_DIRECTORY"}
+WRITE_FLAGS = {"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND", "O_EXCL"}
+BANNED_CALLS = {"write_text", "write_bytes", "mkdir", "unlink", "rename", "replace", "rmdir", "touch", "chmod",
+                "symlink_to", "hardlink_to", "expanduser", "home", "getenv"}
+BANNED_BUILTINS = {"getattr", "setattr", "delattr", "__import__", "eval", "exec", "compile", "globals", "locals",
+                   "vars"}
+
+
+def validator_violations(source: str, extra: frozenset = frozenset()) -> list[str]:
+    allowed = {"__future__", "argparse", "csv", "dataclasses", "json", "os", "pathlib", "re", "shlex", "typing",
+               "yaml", "check_release_cohort"} | extra
+    found: list[str] = []
+    tree = ast.parse(source)
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                if top not in allowed:
+                    found.append(f"import {alias.name}")
+                if top == "os" and (alias.name != "os" or alias.asname):
+                    found.append("os imported other than plainly")
+        elif isinstance(node, ast.ImportFrom):
+            if node.level or (node.module or "").split(".")[0] not in allowed or node.module == "os":
+                found.append(f"from {node.module} import")
+        elif isinstance(node, ast.Name) and node.id == "os" and not isinstance(node.ctx, ast.Load):
+            found.append("os rebound")
+        elif isinstance(node, ast.Name) and node.id == "os":
+            parent = parents[node]
+            if not (isinstance(parent, ast.Attribute) and parent.value is node and parent.attr in OS_SURFACE):
+                found.append("os used outside the allowed attributes")
+        if isinstance(node, (ast.Name, ast.Attribute, ast.Constant)):
+            text = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else node.value
+            if isinstance(text, str) and text in WRITE_FLAGS:
+                found.append(f"write flag {text}")
+        if isinstance(node, ast.Call):
+            func = node.func
+            called = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+            if called in BANNED_CALLS or (isinstance(func, ast.Name) and called in BANNED_BUILTINS):
+                found.append(f"call {called}")
+            if called == "open" and not (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                                         and func.value.id == "os"):
+                found.append("open other than os.open")
+            if called in ("open", "_open") and len(node.args) > 1:  # os.open and the validator's own wrapper
+                for part in ast.walk(node.args[1]):
+                    if isinstance(part, ast.Constant) and isinstance(part.value, int) and part.value != 0:
+                        found.append("integer literal in os.open flags")
+    return found
+
+
 def test_validator_imports_no_network_process_or_publication_modules():
-    allowed = {"__future__", "argparse", "csv", "dataclasses", "json", "pathlib", "re", "shlex", "typing", "yaml",
-               "check_release_cohort"}
-    for script, extra in [(SCRIPT, set()), (ROOT / "scripts/check_release_cohort.py", {"io", "shlex"})]:
-        tree = ast.parse(script.read_text(encoding="utf-8"))
+    assert validator_violations(SCRIPT.read_text(encoding="utf-8")) == []
+    assert validator_violations(
+        "import os\nfd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW | 0)\nos.fstat(fd)\nos.read(fd, 1)\nos.close(fd)\n"
+        "os.listdir(fd)\nos.scandir(fd)\n") == []
+    for source in ("import os\nos.open(p, os.O_WRONLY)", "import os\nos.open(p, os.O_RDONLY | os.O_CREAT)",
+                   'os = __import__("os")', 'import os\ngetattr(os, "open")', "import importlib",
+                   "from os import open", 'import os\nos.system("x")', "import os\nos.unlink(p)",
+                   "import os\nx = os\nx.open(p, 0)", 'open(p, "w")', "import subprocess", "import os as o",
+                   "import os\nos.stat(p)", "import os\nos.path", "import os\nos.write(fd, b'x')",
+                   "import os\nos.execv(p, [])", "import os\nos.spawnl(0, p)", "import os\nos.fork()",
+                   "import os\nos.open(p, 65)", "import os\n_open(p, 0o101)", "import socket", "p.open()", "from pathlib import Path\nPath(p).open()"):
+        assert validator_violations(source), source
+    for script, extra in [(ROOT / "scripts/check_release_cohort.py", frozenset({"io", "shlex"}))]:
         imported = set()
-        for node in ast.walk(tree):
+        for node in ast.walk(ast.parse(script.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom):
                 imported.add((node.module or "").split(".")[0])
-        assert imported <= allowed | extra, imported - allowed - extra
-    writers = {"open", "write_text", "write_bytes", "mkdir", "unlink", "rename", "replace", "rmdir", "touch",
-               "chmod", "symlink_to", "hardlink_to", "expanduser", "home", "getenv"}
-    for node in ast.walk(ast.parse(SCRIPT.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Call):
-            called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
-            assert called not in writers, called
+        previous = {"__future__", "argparse", "csv", "dataclasses", "json", "pathlib", "re", "shlex", "typing", "yaml",
+                    "check_release_cohort"}
+        assert imported <= previous | extra, imported - previous - extra
 
 
 def test_validation_opens_no_socket_or_process(tmp_path, monkeypatch):

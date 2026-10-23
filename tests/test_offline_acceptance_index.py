@@ -209,6 +209,27 @@ def text(index: oai.Index) -> str:
     return json.dumps(index.document)
 
 
+def listing_spy(monkeypatch, listed: list) -> None:
+    """Record the identity of every directory listed, whether by path or by descriptor."""
+    def record(original):
+        def spy(path=".", *args, **kwargs):
+            if isinstance(path, int):
+                info = os.fstat(path)
+                listed.append((info.st_dev, info.st_ino))
+            else:
+                info = os.stat(path)
+                listed.append((info.st_dev, info.st_ino))
+            return original(path, *args, **kwargs)
+        return spy
+    monkeypatch.setattr(os, "scandir", record(os.scandir))
+    monkeypatch.setattr(os, "listdir", record(os.listdir))
+
+
+def identity(path: Path) -> tuple:
+    info = os.stat(path)
+    return info.st_dev, info.st_ino
+
+
 UNESTABLISHED = ("unverified", ["the candidate identity was not established"])
 
 
@@ -462,18 +483,13 @@ def test_an_evidence_record_through_a_link_leaving_the_worktree_is_never_listed(
     (home / "Library/Keychains/login.db").write_text("x", encoding="utf-8")
     (tree / "docs/h").symlink_to(home)
     listed = []
-    original = os.scandir
-
-    def scandir(path=".", *args, **kwargs):
-        listed.append(Path(os.fsdecode(path)).resolve())
-        return original(path, *args, **kwargs)
     doc = edit_evidence(SINGLE, lambda entry: entry.update(evidence_ref=ref("docs/h/Library/Keychains/login.db")))
     inputs = [write(tree, "metadata.json", candidate_metadata()), write(tree, "results.json", results_doc()),
               write(tree, "evidence.json", doc)]
-    monkeypatch.setattr(os, "scandir", scandir)
+    listing_spy(monkeypatch, listed)
     index = check(oai.build_index(tree, inputs[0], [inputs[1]], [inputs[2]]), tmp_path)
     assert row(index, SINGLE) == ("unverified", ["the linked per-row evidence record does not exist in the worktree"])
-    assert listed and all(path.is_relative_to(tree.resolve()) for path in listed)
+    assert listed and identity(home) not in listed and identity(home / "Library") not in listed
 
 
 @pytest.mark.parametrize("field, value, reason", [
@@ -615,7 +631,7 @@ def test_the_candidate_metadata_validator_is_reused_in_public_only_mode(tmp_path
     monkeypatch.setattr(oai.ccm, "validate", spy)
     assert complete(tmp_path).exit_code == 0
     tree = (tmp_path / "worktree").resolve()
-    assert len(calls) == 1 and calls[0][1] == {} and calls[0][0][1] == tree
+    assert len(calls) == 1 and set(calls[0][1]) == {"metadata_bytes"} and calls[0][0][1] == tree
 
 
 def test_metadata_swapped_after_the_check_is_never_reopened_by_path(tmp_path, monkeypatch):
@@ -670,26 +686,39 @@ def test_every_packaging_input_is_bounded_before_parsing(tmp_path, relative):
 
 
 @pytest.mark.parametrize("relative", [relative for _, relative, _ in ccm.PACKAGE_INPUTS])
-def test_validator_packaging_reads_use_the_bounded_descriptor_adapter(monkeypatch, relative):
-    original_read = oai._read
-    original_package = ccm._read_package
-    original_load = ccm._load
+def test_each_packaging_input_is_read_once_from_one_bounded_descriptor(tmp_path, monkeypatch, relative):
+    tree = make_worktree(tmp_path).resolve()
+    bounds = []
+    original = ccm._read_descriptor
+
+    def spy(descriptor, limit=ccm.MAX_INPUT_BYTES):
+        bounds.append(limit)
+        return original(descriptor, limit)
+    monkeypatch.setattr(ccm, "_read_descriptor", spy)
+    outcome = ccm.validate(write(tree, "metadata.json", candidate_metadata()), tree)
+    assert outcome.exit_code == 0 and outcome.metadata is not None
+    assert len(bounds) == len(ccm.PACKAGE_INPUTS) + 1 and set(bounds) == {oai.MAX_INPUT_BYTES}
+
+
+def test_nothing_global_is_mutated_while_the_index_validates(tmp_path, monkeypatch):
+    before = {name: getattr(ccm, name) for name in dir(ccm)}
     seen = []
+    original = ccm.validate
 
-    def bounded(path, role, errors, content=True):
-        seen.append(path.relative_to(ROOT).as_posix())
-        if path == ROOT / relative:
-            errors.append(f"{role} exceeds the 1 MiB input limit")
-            return None
-        return original_read(path, role, errors, content)
-
-    monkeypatch.setattr(oai, "_read", bounded)
-    outcome = oai._validate_bounded(json.dumps(candidate_metadata()).encode(), ROOT / "metadata.json", ROOT)
-    assert seen == [relative for _, relative, _ in ccm.PACKAGE_INPUTS]
-    assert any(line.startswith("INPUT_UNAVAILABLE:") and "exceeds the 1 MiB input limit" in line
-               for line in outcome.lines)
-    assert ccm._read_package is original_package
-    assert ccm._load is original_load
+    def spy(*args, **kwargs):
+        seen.append({name: getattr(ccm, name) for name in dir(ccm)})
+        return original(*args, **kwargs)
+    monkeypatch.setattr(oai.ccm, "validate", spy)
+    assert complete(tmp_path).exit_code == 0
+    monkeypatch.undo()
+    assert seen and seen[0] == {**before, "validate": seen[0]["validate"]}
+    assert {name: getattr(ccm, name) for name in dir(ccm)} == before
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(
+            node, (ast.AugAssign, ast.AnnAssign)) else []
+        assert not any(isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                       and target.value.id == "ccm" for target in targets)
 
 
 def test_the_index_never_reads_packaging_files_itself():
@@ -833,25 +862,274 @@ def test_the_validator_never_lists_a_directory_outside_the_checkout(tmp_path, mo
     (tmp_path / "fakehome/secret").mkdir(parents=True)
     (tree / "docs/h").symlink_to(tmp_path / "fakehome")
     listed = []
-    original = os.scandir
-
-    def scandir(path=".", *args, **kwargs):
-        listed.append(Path(os.fsdecode(path)).resolve())
-        return original(path, *args, **kwargs)
-    monkeypatch.setattr(os, "scandir", scandir)
+    listing_spy(monkeypatch, listed)
     assert ccm._absent_locally(ref("docs/h/secret/x.md"), tree) is True
-    assert listed and all(path.is_relative_to(tree.resolve()) for path in listed)
+    assert listed and identity(tmp_path / "fakehome") not in listed and identity(tmp_path / "fakehome/secret") not in listed
     assert ccm._absent_locally(ref(EVIDENCE), tree) is False
 
 
+def link_tree(tmp_path: Path) -> Path:
+    tree = make_worktree(tmp_path)
+    (tree / "real/Sub").mkdir(parents=True)
+    (tree / "real/Sub/x.md").write_text("x", encoding="utf-8")
+    (tree / "real/Name.md").write_text("x", encoding="utf-8")
+    (tree / "docs/h").symlink_to(tree / "real")
+    return tree
+
+
+def test_references_keep_the_exact_case_below_a_followed_link(tmp_path, monkeypatch):
+    tree = link_tree(tmp_path)
+    listed = []
+    listing_spy(monkeypatch, listed)
+    assert ccm._absent_locally(ref("docs/h/Sub/x.md"), tree) is False
+    for below in (identity(tree / "real"), identity(tree / "real/Sub")):
+        assert below in listed
+    assert not {identity(tmp_path), identity(tmp_path.parent)} & set(listed)
+    assert ccm._absent_locally(ref("docs/h/sub/x.md"), tree) is True
+    assert ccm._absent_locally(ref("docs/h/Sub/X.md"), tree) is True
+
+
+def test_exact_case_holds_through_chained_links_and_file_links(tmp_path):
+    tree = link_tree(tmp_path)
+    (tree / "docs/h2").symlink_to(tree / "docs/h")
+    (tree / "docs/file.md").symlink_to(tree / "real/Name.md")
+    (tree / "docs/wrong.md").symlink_to(tree / "real/name.md")
+    assert ccm._absent_locally(ref("docs/h2/Sub/x.md"), tree) is False
+    assert ccm._absent_locally(ref("docs/h2/sub/x.md"), tree) is True
+    assert ccm._absent_locally(ref("docs/h2/Sub/X.md"), tree) is True
+    assert ccm._absent_locally(ref("docs/file.md"), tree) is False
+    assert ccm._absent_locally(ref("docs/wrong.md"), tree) is True
+
+
 def test_restricted_text_from_the_validator_is_redacted(tmp_path, monkeypatch):
-    def leaky(metadata, package_root):
+    def leaky(metadata, package_root, **kwargs):
         return ccm.Outcome(0, "not-ready", ["VALID: not-ready", f"K25: pin {COMMIT_LIKE}", ccm.NOTE],
                            candidate_metadata(), oai.PENDING_ACCEPTANCE + (f"pin {COMMIT_LIKE} differs",))
     monkeypatch.setattr(oai.ccm, "validate", leaky)
     index = complete(tmp_path)
     assert index.document["candidate"]["validator"]["lines"] == ["VALID: not-ready", "K25: pin <redacted>"]
     assert row(index, oai.CANDIDATE_GATE) == ("unverified", ["unmet candidate prerequisite: pin <redacted> differs"])
+
+
+
+# ---------------------------------- descriptor-bound input handling
+
+FORBIDDEN_PATH_READS = ("read_bytes", "read_text", "is_file", "iterdir")
+
+
+def refuse_path_reads(monkeypatch, tree: Path) -> None:
+    for name in FORBIDDEN_PATH_READS:
+        original = getattr(Path, name)
+
+        def guard(self, *args, _original=original, _name=name, **kwargs):
+            if Path(os.path.abspath(self)).is_relative_to(tree) or not Path(self).is_absolute():
+                raise AssertionError(f"Path.{_name} used on a checkout path")
+            return _original(self, *args, **kwargs)
+        monkeypatch.setattr(Path, name, guard)
+
+
+def test_packaging_inputs_and_listings_never_use_path_reads(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    results = write(tree, "results.json", results_doc())
+    evidence = write(tree, "evidence.json", evidence_doc())
+    refuse_path_reads(monkeypatch, tree)
+    outcome = ccm.validate(metadata, tree)
+    assert outcome.exit_code == 0, outcome.lines
+    index = oai.build_index(tree, metadata, [results], [evidence])
+    assert index.exit_code == 0, index.document["blocking"]
+
+
+def test_every_checkout_open_is_no_follow_and_files_are_non_blocking(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    results = write(tree, "results.json", results_doc())
+    evidence = write(tree, "evidence.json", evidence_doc())
+    opened = []
+    original = os.open
+
+    def spy(path, flags, *args, **kwargs):
+        opened.append((os.fsdecode(path), flags, kwargs.get("dir_fd")))
+        return original(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, "open", spy)
+    index = oai.build_index(tree, metadata, [results], [evidence])
+    assert index.exit_code == 0, index.document["blocking"]
+    assert opened
+    for path, flags, dir_fd in opened:
+        assert flags & os.O_NOFOLLOW, path
+        if not flags & os.O_DIRECTORY:
+            assert flags & os.O_NONBLOCK, path
+    opened_names = {Path(path).name for path, _, _ in opened}
+    assert {"build.yml", "test-image.yml", "bom.json", "config.json", "Dockerfile", "metadata.json",
+            "results.json", "evidence.json", "synthetic-evidence.md"} <= opened_names
+    assert all(dir_fd is not None for path, _, dir_fd in opened if os.sep not in path.strip(os.sep)
+               and path not in ("",) and not Path(path).is_absolute())
+
+
+class Hang(Exception):
+    pass
+
+
+def swap_at_open(monkeypatch, victim: Path, swap) -> None:
+    """Run swap() just before the first os.open whose final component is victim's name."""
+    original = os.open
+    done = []
+
+    def spy(path, flags, *args, **kwargs):
+        if not done and Path(os.fsdecode(path)).name == victim.name:
+            done.append(True)
+            swap()
+        return original(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, "open", spy)
+
+
+def alarm(seconds: int = 5):
+    import signal
+
+    def handler(signum, frame):
+        raise Hang("blocked")
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(seconds)
+    return signal
+
+
+@pytest.mark.parametrize("kind", ["fifo", "link"])
+def test_a_packaging_input_swapped_before_the_open_is_never_followed(tmp_path, monkeypatch, kind):
+    tree = make_worktree(tmp_path).resolve()
+    victim = tree / "helianthus/bom.json"
+    outside = tmp_path / "outside.json"
+    outside.write_text(victim.read_text(encoding="utf-8"), encoding="utf-8")
+    metadata = write(tree, "metadata.json", candidate_metadata())
+
+    def swap():
+        victim.unlink()
+        if kind == "fifo":
+            os.mkfifo(victim)
+        else:
+            victim.symlink_to(outside)
+    swap_at_open(monkeypatch, victim, swap)
+    signal = alarm()
+    try:
+        outcome = ccm.validate(metadata, tree)
+    finally:
+        signal.alarm(0)
+    expected = ("is not a regular file" if kind == "fifo" else "cannot be read")
+    assert outcome.exit_code == 2
+    assert any(line.startswith("INPUT_UNAVAILABLE: package input helianthus/bom.json") and expected in line
+               for line in outcome.lines), outcome.lines
+
+
+def test_a_packaging_directory_swapped_for_a_link_is_never_followed(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    directory = tree / "helianthus"
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    holder = tmp_path / "moved"
+
+    def swap():
+        directory.rename(holder)
+        directory.symlink_to(holder)
+    swap_at_open(monkeypatch, directory, swap)
+    outcome = ccm.validate(metadata, tree)
+    assert outcome.exit_code == 2
+    assert any(line.startswith("INPUT_UNAVAILABLE: package input helianthus/config.json cannot be read")
+               for line in outcome.lines), outcome.lines
+
+
+def test_a_listed_directory_swapped_for_a_link_is_never_listed(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    (tree / "docs/h").mkdir()
+    (tree / "docs/h/x.md").write_text("x\n", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.md").write_text("outside\n", encoding="utf-8")
+    original = os.open
+
+    def spy(path, flags, *args, **kwargs):
+        if os.fsdecode(path) == "h" and kwargs.get("dir_fd") is not None:
+            (tree / "docs/h").rename(tmp_path / "held")
+            (tree / "docs/h").symlink_to(outside)
+        return original(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, "open", spy)
+    listed = []
+    listing_spy(monkeypatch, listed)
+    assert ccm._absent_locally(ref("docs/h/x.md"), tree) is True
+    assert identity(outside) not in listed
+
+
+def test_a_metadata_ancestor_swapped_for_a_link_reads_nothing_outside(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    write_at(outside / "metadata.json", candidate_metadata())
+    metadata = write(tree, "metadata.json", {"format": "x"})
+    original = os.open
+    swapped = []
+
+    def spy(path, flags, *args, **kwargs):
+        if os.fsdecode(path) == "acceptance" and not swapped:
+            swapped.append(True)
+            (tree / "acceptance").rename(tmp_path / "held")
+            (tree / "acceptance").symlink_to(outside)
+        return original(path, flags, *args, **kwargs)
+    monkeypatch.setattr(os, "open", spy)
+    index = oai.build_index(tree, metadata, [], [])
+    assert swapped
+    assert index.document["candidate"]["bundle_id"] is None
+    assert index.exit_code == 1
+    assert index.document["input_errors"] and index.document["input_errors"][0].startswith("metadata cannot be read")
+
+
+def test_input_identity_comes_from_the_descriptor_that_was_read(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path).resolve()
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    first = write(tree, "results-a.json", results_doc())
+    second = write(tree, "results-b.json", results_doc())
+    other = write(tree, "other.json", results_doc())
+
+    def swap():  # After the path was resolved, the name now holds the inode of another supplied input.
+        first.unlink()
+        os.link(second, first)
+    swap_at_open(monkeypatch, first, swap)
+    index = oai.build_index(tree, metadata, [first, second], [])
+    assert other.exists()
+    assert index.document["input_errors"] == ["results[1] repeats an input that was already supplied"]
+
+
+def test_concurrent_builds_keep_their_own_candidates_and_mutate_nothing(tmp_path, monkeypatch):
+    import threading
+    first = make_worktree(tmp_path / "one").resolve()
+    second_meta = json.loads(json.dumps(candidate_metadata()).replace(BUNDLE, "bundle-synthetic-second")
+                             .replace(ASSOCIATION, "association-synthetic-second"))
+    second = make_worktree(tmp_path / "two").resolve()
+    first_path = write(first, "metadata.json", candidate_metadata())
+    second_path = write(second, "metadata.json", second_meta)
+    barrier = threading.Barrier(2, timeout=10)
+    seen = []
+    load, package = ccm._load, ccm._read_package
+    original = ccm._read_descriptor
+    waited = threading.local()
+
+    def spy(descriptor, limit=ccm.MAX_INPUT_BYTES):
+        if not getattr(waited, "done", False):
+            waited.done = True
+            seen.append((ccm._load is load, ccm._read_package is package))
+            barrier.wait()
+        return original(descriptor, limit)
+    monkeypatch.setattr(ccm, "_read_descriptor", spy)
+    outcomes = {}
+
+    def build(key, tree, metadata):
+        outcomes[key] = oai.build_index(tree, metadata, [], [])
+    threads = [threading.Thread(target=build, args=("one", first, first_path)),
+               threading.Thread(target=build, args=("two", second, second_path))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert seen == [(True, True), (True, True)]
+    assert outcomes["one"].document["candidate"]["bundle_id"] == BUNDLE
+    assert outcomes["two"].document["candidate"]["bundle_id"] == "bundle-synthetic-second"
+    assert ccm._load is load and ccm._read_package is package
 
 
 # ------------------------------------------------- explicit local inputs
@@ -994,27 +1272,21 @@ def test_the_builder_imports_and_calls_nothing_that_executes_writes_or_enumerate
 
 def test_building_the_index_opens_no_socket_process_or_home_directory(tmp_path, monkeypatch):
     tree = make_worktree(tmp_path).resolve()
+    inside = {identity(path) for path in [tree, *tree.rglob("*")] if path.is_dir()}
     listed = []
 
     def refuse(*args, **kwargs):
         raise AssertionError("network, process, home or enumeration access attempted")
-
-    def recorder(original):
-        def record(path=".", *args, **kwargs):
-            listed.append(Path(os.fsdecode(path)).resolve())
-            return original(path, *args, **kwargs)
-        return record
     for owner, name in [(socket, "socket"), (socket, "create_connection"), (subprocess, "Popen"), (os, "system"),
                         (os, "execv"), (os, "walk"), (Path, "home"), (Path, "expanduser"), (Path, "glob"),
                         (Path, "rglob"), (os.path, "expanduser")]:
         monkeypatch.setattr(owner, name, refuse)
-    monkeypatch.setattr(os, "scandir", recorder(os.scandir))
-    monkeypatch.setattr(os, "listdir", recorder(os.listdir))
+    listing_spy(monkeypatch, listed)
     metadata = write(tree, "metadata.json", candidate_metadata())
     index = oai.build_index(tree, metadata, [write(tree, "results.json", results_doc())],
                             [write(tree, "evidence.json", evidence_doc())])
     assert index.exit_code == 0, index.document["blocking"]
-    assert listed and all(path.is_relative_to(tree) for path in listed), "only worktree entries are looked up"
+    assert listed and set(listed) <= inside, "only worktree entries are looked up"
 
 
 def test_the_real_package_is_never_a_usable_candidate(tmp_path):
