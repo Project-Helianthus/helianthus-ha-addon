@@ -5,6 +5,14 @@
 - Add the opt-in `test-image` workflow (manual dispatch with a gateway commit) that
   publishes only `test-<label>-<short sha>` images. The catalog version, the BOM and
   the stable gateway pin are unchanged.
+- Declare Home Assistant Ingress for the Portal on the existing HTTP listener
+  (port 8080, entry `portal/`, administrator-only panel) and pin the gateway
+  Portal mount with `-portal-path /portal`. The wrapper still starts one gateway
+  process; a moved HTTP listener only logs that the panel is unavailable.
+  Portal sections that use bootstrap-advertised GraphQL, catalog or eeBUS admin
+  endpoints stay on the direct endpoint until the gateway accepts a trusted
+  external prefix. The catalog version, the BOM and the gateway pin are
+  unchanged.
 
 ## 0.6.58 (2026-10-14)
 

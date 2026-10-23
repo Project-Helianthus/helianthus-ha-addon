@@ -575,6 +575,18 @@ fi
 
 http_addr="0.0.0.0:${http_port}"
 
+# Portal through Home Assistant Ingress. config.json declares Ingress on the
+# existing HTTP listener port with the entry "portal/", so the Supervisor
+# proxies the sidebar panel to this gateway's Portal mount. No second listener
+# or process is started, and native TCP listeners stay off Ingress. The mount is
+# fixed configuration; forwarded request headers never select it.
+portal_mount="/portal"
+portal_ingress_port=8080
+portal_ingress_available=false
+if [ "${http_port}" = "${portal_ingress_port}" ]; then
+  portal_ingress_available=true
+fi
+
 if [ -z "${scan_request_timeout}" ]; then
   scan_request_timeout="400ms"
 fi
@@ -630,6 +642,12 @@ bashio::log.info "HTTP listen: ${http_addr}"
 bashio::log.info "GraphQL endpoint: http://${host}:${http_port}${graphql_path}"
 bashio::log.info "Subscriptions endpoint: http://${host}:${http_port}${subscription_path}"
 bashio::log.info "MCP endpoint: http://${host}:${http_port}${mcp_path}"
+bashio::log.info "Portal endpoint: http://${host}:${http_port}${portal_mount}/"
+if bashio::var.true "${portal_ingress_available}"; then
+  bashio::log.info "Portal Ingress: Home Assistant panel entry ${portal_mount#/}/ on HTTP port ${http_port}"
+else
+  bashio::log.warning "Portal Ingress unavailable: Ingress targets HTTP port ${portal_ingress_port} but the HTTP listener uses port ${http_port}; the direct Portal endpoint is unaffected"
+fi
 bashio::log.info "mDNS: enabled=${mdns} instance=${mdns_instance}"
 bashio::log.info "Stable instance GUID: ${instance_guid}"
 bashio::log.info "Observe-first: enabled=${observe_first_enabled} state-direct-apply=${passive_state_direct_apply} config-direct-apply=${passive_config_direct_apply} write-policy=${external_write_policy}"
@@ -680,6 +698,16 @@ if gateway_supports_flag "semantic-cache-path"; then
   bashio::log.info "Semantic cache path: /data/semantic_cache.json"
 else
   bashio::log.warning "Packaged gateway binary does not support -semantic-cache-path; semantic startup cache will remain container-local. Publish an add-on release with gateway semantic cache persistence support."
+fi
+
+# Pin the Portal mount that the declared Ingress entry targets, so a changed
+# gateway default cannot silently move the panel. A binary without the option
+# keeps its default mount; the Portal is optional, so startup continues.
+portal_args=()
+if gateway_supports_flag "portal-path"; then
+  portal_args=(-portal-path "${portal_mount}")
+else
+  bashio::log.warning "Packaged gateway binary does not support -portal-path; the Ingress entry relies on the gateway default Portal mount ${portal_mount}"
 fi
 
 eebus_args=()
@@ -983,6 +1011,7 @@ gateway_args+=(
 )
 if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[@]}"); fi
 if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
+if [ "${#portal_args[@]}" -ne 0 ]; then gateway_args+=("${portal_args[@]}"); fi
 if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
 if [ "${#m2m_args[@]}" -ne 0 ]; then gateway_args+=("${m2m_args[@]}"); fi
 
