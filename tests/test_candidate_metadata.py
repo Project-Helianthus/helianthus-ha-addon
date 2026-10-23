@@ -1163,7 +1163,11 @@ def test_local_references_match_exact_case_and_stay_inside_the_checkout(tmp_path
     outside.write_text("outside\n", encoding="utf-8")
     (package / "docs" / "escape.md").symlink_to(outside)
     (package / "docs" / "inside.md").symlink_to(package / EVIDENCE)
+    (package / ".git").mkdir()
+    (package / ".git" / "config").write_text("[core]\n", encoding="utf-8")
+    (package / "docs" / "gitlink.md").symlink_to(package / ".git" / "config")
     cases = [("release_cohort.md", True), ("docs/escape.md", True), ("docs", True), ("docs/inside.md", False),
+             ("docs/gitlink.md", True),
              ("RELEASE_COHORT.md", False)]
     for path, absent in cases:
         meta = setpath(ready_metadata(), ("components", "addon", "public_ref", "path"), path)

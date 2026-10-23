@@ -401,7 +401,8 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
                 return True
             current = current / segment
         target = current.resolve(strict=True)
-        return not (target.is_file() and target.is_relative_to(base))
+        return not (target.is_file() and target.is_relative_to(base)
+                    and ".git" not in {part.lower() for part in target.relative_to(base).parts})
     except (OSError, RuntimeError):
         return True
 
