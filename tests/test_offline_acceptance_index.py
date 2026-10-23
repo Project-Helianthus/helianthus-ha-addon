@@ -654,6 +654,44 @@ def test_metadata_growing_after_the_size_check_is_never_read_past_the_limit(tmp_
     assert parsed and max(parsed) <= oai.MAX_INPUT_BYTES
 
 
+@pytest.mark.parametrize("relative", [relative for _, relative, _ in ccm.PACKAGE_INPUTS])
+def test_every_packaging_input_is_bounded_before_parsing(tmp_path, relative):
+    tree = make_worktree(tmp_path)
+    packaging = tree / relative
+    with packaging.open("ab") as handle:
+        handle.write(b" " * (oai.MAX_INPUT_BYTES + 1))
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    index = oai.build_index(tree, metadata, [], [])
+    assert index.exit_code == 1
+    assert row(index, oai.CANDIDATE_GATE) == (
+        "unverified", ["the candidate metadata validator reported INPUT_UNAVAILABLE"])
+    assert any("exceeds the 1 MiB input limit" in line
+               for line in index.document["candidate"]["validator"]["lines"])
+
+
+@pytest.mark.parametrize("relative", [relative for _, relative, _ in ccm.PACKAGE_INPUTS])
+def test_validator_packaging_reads_use_the_bounded_descriptor_adapter(monkeypatch, relative):
+    original_read = oai._read
+    original_package = ccm._read_package
+    original_load = ccm._load
+    seen = []
+
+    def bounded(path, role, errors, content=True):
+        seen.append(path.relative_to(ROOT).as_posix())
+        if path == ROOT / relative:
+            errors.append(f"{role} exceeds the 1 MiB input limit")
+            return None
+        return original_read(path, role, errors, content)
+
+    monkeypatch.setattr(oai, "_read", bounded)
+    outcome = oai._validate_bounded(json.dumps(candidate_metadata()).encode(), ROOT / "metadata.json", ROOT)
+    assert seen == [relative for _, relative, _ in ccm.PACKAGE_INPUTS]
+    assert any(line.startswith("INPUT_UNAVAILABLE:") and "exceeds the 1 MiB input limit" in line
+               for line in outcome.lines)
+    assert ccm._read_package is original_package
+    assert ccm._load is original_load
+
+
 def test_the_index_never_reads_packaging_files_itself():
     source = SCRIPT.read_text(encoding="utf-8")
     for owned_by_the_validator in ["build.yml", "test-image", "Dockerfile", "config.json", "bom.json", "yaml",

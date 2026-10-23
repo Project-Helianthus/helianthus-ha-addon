@@ -211,8 +211,20 @@ def _read(target: Path, role: str, errors: list[str], content: bool = True) -> b
 
 
 def _validate_bounded(raw: bytes, target: Path, root: Path) -> Any:
-    """Validate metadata bytes that were already read under the input limit; the validator never reopens a file."""
+    """Bound input reads while leaving parsing and packaging rules with the validator."""
     original = ccm._load
+    original_package = ccm._read_package
+
+    class BoundedPath(type(root)):
+        def read_bytes(self) -> bytes:
+            errors: list[str] = []
+            content = _read(self, "packaging input", errors)
+            if content is None:
+                raise OSError(None, errors[0])
+            return content
+
+    def read_package(path: Path, report: Any) -> Any:
+        return original_package(BoundedPath(path), report)
 
     def load(path: Path, label: str, validator: Callable[[Any], None], report: Any) -> Any:
         if label != "metadata":
@@ -226,10 +238,12 @@ def _validate_bounded(raw: bytes, target: Path, root: Path) -> Any:
         return doc
 
     ccm._load = load
+    ccm._read_package = read_package
     try:
         return ccm.validate(target, root)
     finally:
         ccm._load = original
+        ccm._read_package = original_package
 
 
 def _entries(value: Any, where: str, limit: int) -> list[Any]:
