@@ -438,6 +438,29 @@ def test_build_version_not_tied_to_config_version_is_not_ready(tmp_path):
             in outcome.lines)
 
 
+@pytest.mark.parametrize("extra", [
+    "echo version=0.7.9 >> \"$GITHUB_OUTPUT\"",
+    "echo \"version=0.7.9\" >> \"$GITHUB_OUTPUT\"",
+])
+@pytest.mark.parametrize("commented", [True, False])
+def test_version_step_must_prove_the_config_assignment(tmp_path, extra, commented):
+    canonical = "echo \"version=$(jq -r '.version' helianthus/config.json)\" >> \"$GITHUB_OUTPUT\""
+
+    def edit(workflow):
+        for job in workflow["jobs"].values():
+            for step in job.get("steps", []):
+                if step.get("id") == "addon":
+                    first_line = "# " + canonical if commented else canonical
+                    step["run"] = first_line + "\n" + extra + "\n"
+    meta = ready_metadata()
+    package = make_package(tmp_path, build_edit=edit)
+    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
+    assert outcome.exit_code == 1
+    assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
+    assert ("NOT_READY: build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline"
+            in outcome.lines)
+
+
 def test_opaque_gateway_pin_without_label_is_unverified_not_ready(tmp_path):
     meta = setpath(ready_metadata(), ("components", "gateway", "release_label"), None)
     meta["disposition"] = "not-ready"

@@ -73,7 +73,8 @@ HEX_RUN = re.compile(r"[0-9A-Fa-f]{7,}")
 DATE = re.compile(r"(?:19|20)\d\d[-_./]?(?:0[1-9]|1[0-2])[-_./]?(?:0[1-9]|[12]\d|3[01])")
 IPV4 = re.compile(r"(?<!\d)(?<!\d\.)\d{1,3}(?:\.\d{1,3}){3}(?!\.?\d)")
 DERIVED_VERSION = re.compile(r"\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
-CONFIG_VERSION_STEP = re.compile(r"jq -r '\.version' helianthus/config\.json")
+CONFIG_VERSION_STEP = re.compile(
+    r"""echo "version=\$\(jq -r '\.version' helianthus/config\.json\)" >> "\$GITHUB_OUTPUT\"""")
 MANIFEST_MEMBER = re.compile(r":\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-([a-z0-9]+)\b")
 CONFIG_VERSION = object()  # BUILD_VERSION provably read from helianthus/config.json
 DOCKERFILE_DEFAULT = object()  # A build step without this override uses the Dockerfile default
@@ -403,6 +404,13 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
         return True
 
 
+def _derives_version(run: str) -> bool:
+    """Prove the step's only version output is assigned from the config.json version."""
+    lines = [line.strip() for line in run.splitlines() if line.strip() and not line.strip().startswith("#")]
+    writers = [line for line in lines if "version=" in line or "GITHUB_OUTPUT" in line]
+    return len(writers) == 1 and CONFIG_VERSION_STEP.fullmatch(writers[0]) is not None
+
+
 def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str, set[Any]], set[str], set[str]]:
     """Return build-argument values, matrix architectures and version-manifest members."""
     values: dict[str, set[Any]] = {}
@@ -429,7 +437,7 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
             if type(entry) is dict and type(entry.get("arch")) is str:
                 matrix.add(entry["arch"])
         reads_version = any(step.get("id") == "addon" and type(step.get("run")) is str
-                            and CONFIG_VERSION_STEP.search(step["run"]) for step in steps)
+                            and _derives_version(step["run"]) for step in steps)
         for step in builds:
             settings = step.get("with") if type(step.get("with")) is dict else {}
             build_args = settings.get("build-args", "")
