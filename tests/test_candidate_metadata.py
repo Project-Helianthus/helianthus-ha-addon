@@ -1246,3 +1246,67 @@ def test_help_documents_usage_and_limits():
                      "INPUT_UNAVAILABLE", "METADATA_CONFLICT", "EVIDENCE_MISMATCH", "DISPOSITION_MISMATCH",
                      "public-only", "never authenticated", "no fetch", "hardware qualification"]:
         assert expected in help_text, expected
+
+
+def test_version_output_step_after_the_build_is_not_credited(tmp_path):
+    def move_producer_after_build(workflow):
+        for job in workflow["jobs"].values():
+            steps = job.get("steps", [])
+            if any(step.get("id") == "addon" for step in steps) and any(
+                    str(step.get("uses", "")).startswith("docker/build-push-action@") for step in steps):
+                producer = [step for step in steps if step.get("id") == "addon"]
+                rest = [step for step in steps if step.get("id") != "addon"]
+                last_build = max(i for i, step in enumerate(rest)
+                                 if str(step.get("uses", "")).startswith("docker/build-push-action@"))
+                job["steps"] = rest[:last_build + 1] + producer + rest[last_build + 1:]
+                return
+        raise AssertionError("no job with both a build and the version producer")
+    meta = ready_metadata()
+    package = make_package(tmp_path, build_edit=move_producer_after_build)
+    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
+    assert outcome.exit_code == 1
+    assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
+    assert ("NOT_READY: build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline"
+            in outcome.lines)
+
+
+@pytest.mark.parametrize("relative", ["helianthus/bom.json", "helianthus/Dockerfile",
+                                      ".github/workflows/build.yml"])
+def test_package_inputs_resolving_outside_the_checkout_are_unavailable(tmp_path, relative):
+    package = make_package(tmp_path)
+    outside = tmp_path / "outside-input"
+    outside.write_bytes((package / relative).read_bytes())
+    (package / relative).unlink()
+    (package / relative).symlink_to(outside)
+    meta = ready_metadata()
+    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
+    assert outcome.exit_code == 2, text(outcome)
+    assert first(outcome) == f"INPUT_UNAVAILABLE: package input {relative} resolves outside the package root"
+
+
+def test_package_input_symlink_inside_the_checkout_is_accepted(tmp_path):
+    package = make_package(tmp_path)
+    real = package / "docs" / "bom-real.json"
+    real.write_bytes((package / "helianthus/bom.json").read_bytes())
+    (package / "helianthus/bom.json").unlink()
+    (package / "helianthus/bom.json").symlink_to(real)
+    meta = ready_metadata()
+    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
+    assert outcome.exit_code == 0, text(outcome)
+
+
+def test_inline_comment_after_the_last_active_manifest_source_is_not_counted(tmp_path):
+    def comment_last(run_text):
+        pattern = re.compile(r'(version \}\}-armhf") \\\n\s+("[^"\n]*version \}\}-i386")')
+        assert pattern.search(run_text)
+        return pattern.sub(r"\1 # \2", run_text)
+    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
+    receipt = receipt_for(meta, output_binding="missing")
+    package = make_package(tmp_path, build_edit=_manifest_edit(_version_only(comment_last)))
+    outcome = run(tmp_path, meta, receipt, package=package)
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+def _version_only(transform):
+    return lambda run_text: transform(run_text)

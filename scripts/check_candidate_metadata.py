@@ -351,6 +351,9 @@ def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
         return None
     package: dict[str, Any] = {}
     for key, relative, kind in PACKAGE_INPUTS:
+        if not _inside(root / relative, root):
+            report.unavailable.append(f"package input {relative} resolves outside the package root")
+            continue
         try:
             text = (root / relative).read_bytes().decode("utf-8")
             value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
@@ -403,12 +406,13 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
 def _version_manifest_members(run: str) -> set[str]:
     """Members of active imagetools commands whose destination is the version tag."""
     text = "\n".join(line for line in run.splitlines() if not line.strip().startswith("#"))
+    text = re.sub(r"\\\n", " ", text)
     members: set[str] = set()
-    for command in re.sub(r"\\\n", " ", text).splitlines():
+    for command in text.splitlines():
         if "imagetools create" not in command:
             continue
         try:
-            tokens = shlex.split(command)
+            tokens = shlex.split(command, comments=True)
         except ValueError:
             continue
         for index, token in enumerate(tokens[:-1]):
@@ -449,7 +453,8 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
             run = step.get("run")
             if type(run) is str and "imagetools create" in run:
                 manifest.update(_version_manifest_members(run))
-        builds = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action@")]
+        builds = [(position, step) for position, step in enumerate(steps)
+                  if str(step.get("uses", "")).startswith("docker/build-push-action@")]
         if not builds:
             continue
         strategy = job.get("strategy") if type(job.get("strategy")) is dict else {}
@@ -457,9 +462,10 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
         for entry in include if type(include) is list else []:
             if type(entry) is dict and type(entry.get("arch")) is str:
                 matrix.add(entry["arch"])
-        reads_version = any(step.get("id") == "addon" and type(step.get("run")) is str
-                            and _derives_version(step["run"]) for step in steps)
-        for step in builds:
+        producers = [index for index, step in enumerate(steps) if step.get("id") == "addon"
+                     and type(step.get("run")) is str and _derives_version(step["run"])]
+        for position, step in builds:
+            reads_version = any(index < position for index in producers)
             settings = step.get("with") if type(step.get("with")) is dict else {}
             build_args = settings.get("build-args", "")
             try:
