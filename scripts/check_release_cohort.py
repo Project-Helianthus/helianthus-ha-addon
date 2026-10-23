@@ -52,6 +52,14 @@ def arg_default(dockerfile: str, name: str) -> str:
     return values[0]
 
 
+def build_arg_records(build_args: str):
+    """Yield (name, separator, value) for each docker/build-push-action build-args record."""
+    # The action reads CSV records with ignoreComma: true: unquote
+    # fields, then rejoin each record so commas remain in the argument.
+    for record in csv.reader(io.StringIO(build_args.strip(), newline=""), strict=True):
+        yield ",".join(record).strip().partition("=")
+
+
 def check(config: dict, dockerfile: str, gateway_release: str | None,
           test_image_workflow: dict) -> list[str]:
     version = config.get("version")
@@ -68,11 +76,8 @@ def check(config: dict, dockerfile: str, gateway_release: str | None,
         for step in job.get("steps", []):
             if not step.get("uses", "").startswith("docker/build-push-action@"):
                 continue
-            # The action reads CSV records with ignoreComma: true: unquote
-            # fields, then rejoin each record so commas remain in the argument.
-            build_args = step.get("with", {}).get("build-args", "").strip()
-            for record in csv.reader(io.StringIO(build_args, newline=""), strict=True):
-                name, separator, value = ",".join(record).strip().partition("=")
+            build_args = step.get("with", {}).get("build-args", "")
+            for name, separator, value in build_arg_records(build_args):
                 # An expression in the name position (or a record without "=") can expand
                 # to any assignment at run time, including a 0.6 Explorer override.
                 if "${{" in name:
