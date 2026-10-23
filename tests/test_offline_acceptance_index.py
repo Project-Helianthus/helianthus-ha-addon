@@ -633,6 +633,27 @@ def test_metadata_swapped_after_the_check_is_never_reopened_by_path(tmp_path, mo
     assert index.document["candidate"]["validator"]["exit_code"] == 0
 
 
+def test_metadata_growing_after_the_size_check_is_never_read_past_the_limit(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path)
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    original = ccm.validate
+    parsed = []
+    strict = ccm._strict_json
+
+    def grow_then_validate(path, root, *args, **kwargs):
+        with open(metadata, "ab") as handle:
+            handle.write(b" " * (oai.MAX_INPUT_BYTES + 1))
+        return original(path, root, *args, **kwargs)
+
+    def record(raw):
+        parsed.append(len(raw))
+        return strict(raw)
+    monkeypatch.setattr(oai.ccm, "validate", grow_then_validate)
+    monkeypatch.setattr(ccm, "_strict_json", record)
+    oai.build_index(tree, metadata, [], [])
+    assert parsed and max(parsed) <= oai.MAX_INPUT_BYTES
+
+
 def test_the_index_never_reads_packaging_files_itself():
     source = SCRIPT.read_text(encoding="utf-8")
     for owned_by_the_validator in ["build.yml", "test-image", "Dockerfile", "config.json", "bom.json", "yaml",

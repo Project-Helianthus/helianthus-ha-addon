@@ -210,25 +210,26 @@ def _read(target: Path, role: str, errors: list[str], content: bool = True) -> b
         os.close(descriptor)
 
 
-def _checked_descriptor(target: Path, errors: list[str]) -> int | None:
-    """Open the metadata once under the same checks as _read; the caller validates through this descriptor."""
+def _validate_bounded(raw: bytes, target: Path, root: Path) -> Any:
+    """Validate metadata bytes that were already read under the input limit; the validator never reopens a file."""
+    original = ccm._load
+
+    def load(path: Path, label: str, validator: Callable[[Any], None], report: Any) -> Any:
+        if label != "metadata":
+            return original(path, label, validator, report)
+        try:
+            doc = ccm._strict_json(raw)
+            validator(doc)
+        except ccm._Invalid as exc:
+            report.invalid.append(f"{label}: {exc}")
+            return None
+        return doc
+
+    ccm._load = load
     try:
-        descriptor = os.open(target, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
-    except OSError as exc:
-        errors.append(f"metadata cannot be read ({exc.strerror or type(exc).__name__})")
-        return None
-    try:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode):
-            errors.append("metadata is not a regular file")
-        elif info.st_size > MAX_INPUT_BYTES:
-            errors.append("metadata exceeds the 1 MiB input limit")
-        else:
-            return descriptor
-    except OSError as exc:
-        errors.append(f"metadata cannot be read ({exc.strerror or type(exc).__name__})")
-    os.close(descriptor)
-    return None
+        return ccm.validate(target, root)
+    finally:
+        ccm._load = original
 
 
 def _entries(value: Any, where: str, limit: int) -> list[Any]:
@@ -467,14 +468,11 @@ def build_index(package_root: str | Path, metadata: str | Path, results: list[st
         errors.append("package root is not a readable directory")
     else:
         target = _local(Path(metadata), root, "metadata", seen, errors)
-        descriptor = _checked_descriptor(target, errors) if target is not None else None
-        if descriptor is not None:
-            try:
-                # Public-only: the private receipt never enters a worktree. The validator reads the descriptor
-                # that was checked, so a path swapped afterwards is never opened.
-                outcome = ccm.validate(Path(f"/dev/fd/{descriptor}"), root)
-            finally:
-                os.close(descriptor)
+        raw = _read(target, "metadata", errors) if target is not None else None
+        if raw is not None:
+            # Public-only: the private receipt never enters a worktree. The validator receives the bounded
+            # bytes read here, so a file that grows or is swapped afterwards is never read again.
+            outcome = _validate_bounded(raw, target, root)
     supplied = _collect([Path(path) for path in results or []], MAX_RESULT_FILES, "results", root, seen,
                         errors, _validate_results, _results)
     evidence = _collect([Path(path) for path in operator_evidence or []], MAX_EVIDENCE_FILES,
