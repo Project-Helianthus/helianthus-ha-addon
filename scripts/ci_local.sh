@@ -24,6 +24,9 @@ python3 -m pytest -q tests/test_release_cohort.py
 echo "==> offline candidate metadata validator (synthetic fixtures; no fetch or build)"
 python3 -m pytest -q tests/test_candidate_metadata.py
 
+echo "==> offline acceptance index (synthetic manifests; nothing executed, fetched or deployed)"
+python3 -m pytest -q tests/test_offline_acceptance_index.py
+
 echo "==> validate JSON syntax"
 found=0
 while IFS= read -r file; do
