@@ -840,6 +840,62 @@ def test_commented_version_manifest_member_is_not_counted(tmp_path):
     assert MANIFEST_DIFFERS in outcome.lines
 
 
+VERSION_MEMBER_I386 = '"${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"'
+
+
+def test_adjacent_command_tag_is_not_a_manifest_member(tmp_path):
+    def echo_before(run_text):
+        run_text = re.sub(r'\s*' + re.escape(VERSION_MEMBER_I386), "", run_text).rstrip(" \\\n") + "\n"
+        head, tail = run_text.rsplit("docker buildx imagetools create", 1)
+        return head + f"echo {VERSION_MEMBER_I386} && docker buildx imagetools create" + tail
+    outcome = _manifest_outcome(tmp_path, echo_before)
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+def test_adjacent_command_after_manifest_is_not_a_member(tmp_path):
+    def echo_after(run_text):
+        run_text = re.sub(r'\s*' + re.escape(VERSION_MEMBER_I386), "", run_text).rstrip(" \\\n") + "\n"
+        head, tail = run_text.rsplit("docker buildx imagetools create", 1)
+        return (head + "docker buildx imagetools create" + tail.rstrip() + " ; echo "
+                + VERSION_MEMBER_I386 + "\n")
+    outcome = _manifest_outcome(tmp_path, echo_after)
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+def test_repeated_version_manifest_overwrite_is_not_ready(tmp_path):
+    def overwrite(run_text):
+        return run_text.rstrip() + (
+            "\ndocker buildx imagetools create " + VERSION_TARGET
+            + ' "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64"\n')
+    outcome = _manifest_outcome(tmp_path, overwrite)
+    assert outcome.exit_code == 0, text(outcome)
+    assert "NOT_READY: build workflow creates the version manifest more than once" in outcome.lines
+
+
+def _tags_edit(tags):
+    def edit(workflow):
+        for job in workflow["jobs"].values():
+            for step in job.get("steps", []):
+                if str(step.get("uses", "")).startswith("docker/build-push-action@"):
+                    if tags is None:
+                        step["with"].pop("tags", None)
+                    else:
+                        step["with"]["tags"] = tags
+    return edit
+
+
+@pytest.mark.parametrize("tags", [None, "${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}\n",
+                                  "${{ env.IMAGE_NAME }}:unrelated\n"])
+def test_build_step_without_version_architecture_tags_is_not_ready(tmp_path, tags):
+    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
+    receipt = receipt_for(meta, output_binding="missing")
+    outcome = run(tmp_path, meta, receipt, package=make_package(tmp_path, build_edit=_tags_edit(tags)))
+    assert outcome.exit_code == 0, text(outcome)
+    assert "NOT_READY: build workflow build step does not publish version-architecture tags" in outcome.lines
+
+
 @pytest.mark.parametrize("coordinate", ["abcdefa", "ABCDEFAB", "deadbeef"])
 def test_all_letter_short_hex_coordinates_are_restricted(coordinate):
     assert ccm._restricted(f"artifact-{coordinate}")

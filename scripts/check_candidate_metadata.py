@@ -76,6 +76,8 @@ DERIVED_VERSION = re.compile(r"\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
 CONFIG_VERSION_STEP = re.compile(
     r"""echo "version=\$\(jq -r '\.version' helianthus/config\.json\)" >> "\$GITHUB_OUTPUT\"""")
 MANIFEST_MEMBER = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-([a-z0-9]+)")
+CONTROL_CHARACTERS = "();<>|&"
+VERSION_ARCH_TAG = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-\$\{\{\s*matrix\.arch\s*\}\}")
 VERSION_TAG = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
 CONFIG_VERSION = object()  # BUILD_VERSION provably read from helianthus/config.json
 DOCKERFILE_DEFAULT = object()  # A build step without this override uses the Dockerfile default
@@ -403,30 +405,37 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
         return True
 
 
-def _version_manifest_members(run: str) -> set[str]:
-    """Members of active imagetools commands whose destination is the version tag."""
+def _version_manifest_members(run: str) -> list[set[str]]:
+    """Members of each active imagetools command whose destination is the version tag."""
     text = "\n".join(line for line in run.splitlines() if not line.strip().startswith("#"))
     text = re.sub(r"\\\n", " ", text)
-    members: set[str] = set()
-    for command in text.splitlines():
-        if "imagetools create" not in command:
+    manifests: list[set[str]] = []
+    for line in text.splitlines():
+        if "imagetools create" not in line:
             continue
         try:
-            tokens = shlex.split(command, comments=True)
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            tokens = list(lexer)
         except ValueError:
             continue
-        for index, token in enumerate(tokens[:-1]):
-            if token != "-t":
+        for start in range(len(tokens) - 1):
+            if tokens[start:start + 2] != ["imagetools", "create"]:
                 continue
-            target = tokens[index + 1]
-            if not VERSION_TAG.fullmatch(target):
-                continue
-            repository = target.rsplit(":", 1)[0]
-            for source in tokens:
-                found = MANIFEST_MEMBER.fullmatch(source)
-                if found and source.startswith(repository + ":"):
-                    members.add(found[1])
-    return members
+            command: list[str] = []
+            for token in tokens[start + 2:]:
+                if set(token) <= set(CONTROL_CHARACTERS):
+                    break
+                command.append(token)
+            for index, token in enumerate(command[:-1]):
+                target = command[index + 1]
+                if token != "-t" or not VERSION_TAG.fullmatch(target):
+                    continue
+                repository = target.rsplit(":", 1)[0]
+                manifests.append({found[1] for source in command
+                                  if (found := MANIFEST_MEMBER.fullmatch(source))
+                                  and source.startswith(repository + ":")})
+    return manifests
 
 
 def _derives_version(run: str) -> bool:
@@ -436,12 +445,21 @@ def _derives_version(run: str) -> bool:
     return len(writers) == 1 and CONFIG_VERSION_STEP.fullmatch(writers[0]) is not None
 
 
+def _publishes_version_tags(step: dict[str, Any]) -> bool:
+    settings = step.get("with") if type(step.get("with")) is dict else {}
+    tags = settings.get("tags")
+    if type(tags) is not str:
+        return False
+    return any(VERSION_ARCH_TAG.fullmatch(tag.strip()) for tag in re.split(r"[\n,]", tags))
+
+
 def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str, set[Any]], set[str], set[str]]:
     """Return build-argument values, matrix architectures and version-manifest members."""
     values: dict[str, set[Any]] = {}
     step_names: list[set[str]] = []
     matrix: set[str] = set()
     manifest: set[str] = set()
+    manifest_commands = 0
     jobs = workflow.get("jobs")
     if type(jobs) is not dict:
         report.conflict.append("build workflow has no jobs mapping")
@@ -452,10 +470,17 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
         for step in steps:
             run = step.get("run")
             if type(run) is str and "imagetools create" in run:
-                manifest.update(_version_manifest_members(run))
+                for members in _version_manifest_members(run):
+                    manifest.update(members)
+                    manifest_commands += 1
         builds = [(position, step) for position, step in enumerate(steps)
                   if str(step.get("uses", "")).startswith("docker/build-push-action@")]
         if not builds:
+            continue
+        publishers = [step for _, step in builds if _publishes_version_tags(step)]
+        if len(publishers) != len(builds):
+            report.public.append("build workflow build step does not publish version-architecture tags")
+        if not publishers:
             continue
         strategy = job.get("strategy") if type(job.get("strategy")) is dict else {}
         include = strategy.get("matrix", {}).get("include", []) if type(strategy.get("matrix")) is dict else []
@@ -485,6 +510,8 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
                 else:
                     values.setdefault(name, set()).add(value if separator else None)
             step_names.append(seen)
+    if manifest_commands > 1:
+        report.public.append("build workflow creates the version manifest more than once")
     for name, found in values.items():
         if any(name not in seen for seen in step_names):
             found.add(DOCKERFILE_DEFAULT)
