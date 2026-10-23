@@ -796,6 +796,55 @@ def test_build_workflow_matrix_and_manifest_must_agree(tmp_path):
     assert "NOT_READY: build workflow matrix and version manifest members differ" in outcome.lines
 
 
+def _manifest_edit(transform):
+    def edit(workflow):
+        for step in workflow["jobs"]["manifest"]["steps"]:
+            if "imagetools create" in step.get("run", ""):
+                step["run"] = transform(step["run"])
+    return edit
+
+
+def _manifest_outcome(tmp_path, transform):
+    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
+    receipt = receipt_for(meta, output_binding="missing")
+    return run(tmp_path, meta, receipt, package=make_package(tmp_path, build_edit=_manifest_edit(transform)))
+
+
+MANIFEST_DIFFERS = "NOT_READY: build workflow matrix and version manifest members differ"
+VERSION_TARGET = '-t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}"'
+
+
+def test_commented_version_manifest_command_is_not_counted(tmp_path):
+    def comment_out(run_text):
+        head, _, tail = run_text.partition(VERSION_TARGET)
+        start = head.rsplit("docker buildx", 1)
+        lines = ("docker buildx" + start[1] + VERSION_TARGET + tail).splitlines()
+        return start[0] + "\n".join("# " + line for line in lines)
+    outcome = _manifest_outcome(tmp_path, comment_out)
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+def test_version_manifest_with_other_destination_is_not_counted(tmp_path):
+    outcome = _manifest_outcome(tmp_path, lambda run_text: run_text.replace(
+        VERSION_TARGET, '-t "${IMAGE_NAME}:other"'))
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+def test_commented_version_manifest_member_is_not_counted(tmp_path):
+    outcome = _manifest_outcome(tmp_path, lambda run_text: "\n".join(
+        "# " + line if "version }}-i386" in line else line for line in run_text.splitlines()))
+    assert outcome.exit_code == 0, text(outcome)
+    assert MANIFEST_DIFFERS in outcome.lines
+
+
+@pytest.mark.parametrize("coordinate", ["abcdefa", "ABCDEFAB", "deadbeef"])
+def test_all_letter_short_hex_coordinates_are_restricted(coordinate):
+    assert ccm._restricted(f"artifact-{coordinate}")
+    assert "<redacted>" in ccm._redact(f"v0.7.0+{coordinate}")
+
+
 # --------------------------------------------------- private receipt rules
 
 @pytest.mark.parametrize("check", list(ccm.READINESS_CHECKS + ccm.PROMOTION_CHECKS)
@@ -1007,7 +1056,7 @@ def test_real_package_with_exact_revisions_never_leaks_them(tmp_path):
 # --------------------------------------- offline, read-only, K25 reuse
 
 def test_validator_imports_no_network_process_or_publication_modules():
-    allowed = {"__future__", "argparse", "csv", "dataclasses", "json", "pathlib", "re", "typing", "yaml",
+    allowed = {"__future__", "argparse", "csv", "dataclasses", "json", "pathlib", "re", "shlex", "typing", "yaml",
                "check_release_cohort"}
     for script, extra in [(SCRIPT, set()), (ROOT / "scripts/check_release_cohort.py", {"io", "shlex"})]:
         tree = ast.parse(script.read_text(encoding="utf-8"))

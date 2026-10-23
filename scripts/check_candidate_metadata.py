@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import re
+import shlex
 from typing import Any, Callable
 
 import yaml
@@ -75,7 +76,8 @@ IPV4 = re.compile(r"(?<!\d)(?<!\d\.)\d{1,3}(?:\.\d{1,3}){3}(?!\.?\d)")
 DERIVED_VERSION = re.compile(r"\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
 CONFIG_VERSION_STEP = re.compile(
     r"""echo "version=\$\(jq -r '\.version' helianthus/config\.json\)" >> "\$GITHUB_OUTPUT\"""")
-MANIFEST_MEMBER = re.compile(r":\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-([a-z0-9]+)\b")
+MANIFEST_MEMBER = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-([a-z0-9]+)")
+VERSION_TAG = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
 CONFIG_VERSION = object()  # BUILD_VERSION provably read from helianthus/config.json
 DOCKERFILE_DEFAULT = object()  # A build step without this override uses the Dockerfile default
 
@@ -104,7 +106,7 @@ class _Report:
 
 
 def _hex_like(run: str) -> bool:
-    return len(run) >= 12 or any(char.isdigit() for char in run)
+    return True
 
 
 def _restricted(text: str, dates: bool = True) -> bool:
@@ -404,6 +406,31 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
         return True
 
 
+def _version_manifest_members(run: str) -> set[str]:
+    """Members of active imagetools commands whose destination is the version tag."""
+    text = "\n".join(line for line in run.splitlines() if not line.strip().startswith("#"))
+    members: set[str] = set()
+    for command in re.sub(r"\\\n", " ", text).splitlines():
+        if "imagetools create" not in command:
+            continue
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            continue
+        for index, token in enumerate(tokens[:-1]):
+            if token != "-t":
+                continue
+            target = tokens[index + 1]
+            if not VERSION_TAG.fullmatch(target):
+                continue
+            repository = target.rsplit(":", 1)[0]
+            for source in tokens:
+                found = MANIFEST_MEMBER.fullmatch(source)
+                if found and source.startswith(repository + ":"):
+                    members.add(found[1])
+    return members
+
+
 def _derives_version(run: str) -> bool:
     """Prove the step's only version output is assigned from the config.json version."""
     lines = [line.strip() for line in run.splitlines() if line.strip() and not line.strip().startswith("#")]
@@ -427,7 +454,7 @@ def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str
         for step in steps:
             run = step.get("run")
             if type(run) is str and "imagetools create" in run:
-                manifest.update(MANIFEST_MEMBER.findall(run))
+                manifest.update(_version_manifest_members(run))
         builds = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action@")]
         if not builds:
             continue
