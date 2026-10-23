@@ -210,6 +210,27 @@ def _read(target: Path, role: str, errors: list[str], content: bool = True) -> b
         os.close(descriptor)
 
 
+def _checked_descriptor(target: Path, errors: list[str]) -> int | None:
+    """Open the metadata once under the same checks as _read; the caller validates through this descriptor."""
+    try:
+        descriptor = os.open(target, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except OSError as exc:
+        errors.append(f"metadata cannot be read ({exc.strerror or type(exc).__name__})")
+        return None
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            errors.append("metadata is not a regular file")
+        elif info.st_size > MAX_INPUT_BYTES:
+            errors.append("metadata exceeds the 1 MiB input limit")
+        else:
+            return descriptor
+    except OSError as exc:
+        errors.append(f"metadata cannot be read ({exc.strerror or type(exc).__name__})")
+    os.close(descriptor)
+    return None
+
+
 def _entries(value: Any, where: str, limit: int) -> list[Any]:
     if type(value) is not list or not value:
         raise ccm._Invalid(f"{where} must be a nonempty array")
@@ -446,8 +467,14 @@ def build_index(package_root: str | Path, metadata: str | Path, results: list[st
         errors.append("package root is not a readable directory")
     else:
         target = _local(Path(metadata), root, "metadata", seen, errors)
-        if target is not None and _read(target, "metadata", errors, content=False) is not None:
-            outcome = ccm.validate(target, root)  # Public-only: the private receipt never enters a worktree.
+        descriptor = _checked_descriptor(target, errors) if target is not None else None
+        if descriptor is not None:
+            try:
+                # Public-only: the private receipt never enters a worktree. The validator reads the descriptor
+                # that was checked, so a path swapped afterwards is never opened.
+                outcome = ccm.validate(Path(f"/dev/fd/{descriptor}"), root)
+            finally:
+                os.close(descriptor)
     supplied = _collect([Path(path) for path in results or []], MAX_RESULT_FILES, "results", root, seen,
                         errors, _validate_results, _results)
     evidence = _collect([Path(path) for path in operator_evidence or []], MAX_EVIDENCE_FILES,

@@ -615,7 +615,22 @@ def test_the_candidate_metadata_validator_is_reused_in_public_only_mode(tmp_path
     monkeypatch.setattr(oai.ccm, "validate", spy)
     assert complete(tmp_path).exit_code == 0
     tree = (tmp_path / "worktree").resolve()
-    assert calls == [((tree / "acceptance/metadata.json", tree), {})]
+    assert len(calls) == 1 and calls[0][1] == {} and calls[0][0][1] == tree
+
+
+def test_metadata_swapped_after_the_check_is_never_reopened_by_path(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path)
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    original = ccm.validate
+
+    def swap_then_validate(path, root, *args, **kwargs):
+        metadata.unlink()
+        os.mkfifo(metadata)  # A reopen by pathname would block here; the checked descriptor must be used.
+        return original(path, root, *args, **kwargs)
+    monkeypatch.setattr(oai.ccm, "validate", swap_then_validate)
+    index = oai.build_index(tree, metadata, [], [])
+    assert index.document["candidate"]["bundle_id"] == BUNDLE
+    assert index.document["candidate"]["validator"]["exit_code"] == 0
 
 
 def test_the_index_never_reads_packaging_files_itself():
