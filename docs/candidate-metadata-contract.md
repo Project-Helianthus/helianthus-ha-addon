@@ -4,8 +4,10 @@ This proposal extends [K25 cohort validation](https://github.com/Project-Heliant
 [issue #252](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/252).
 It is a partial INT-16 / INT-17 acceptance slice in
 [Project #2](https://github.com/orgs/Project-Helianthus/projects/2).
-It specifies a document format and validation order; it does not implement a
-validator, change packaging, or grant acceptance to the current package.
+It specifies a document format and validation order, implemented offline by
+[`scripts/check_candidate_metadata.py`](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/check_candidate_metadata.py)
+([issue #270](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/270)).
+Neither changes packaging nor grants acceptance to the current package.
 
 ## Public record and private verification
 
@@ -55,6 +57,10 @@ are not integers. No free-form extension fields are allowed in this revision.
 
 An opaque ID matches `[a-z][a-z0-9]*(?:-[a-z0-9]+)+`, at most 80 characters.
 IDs must not embed prohibited publication data even when syntactically valid.
+The validator rejects IDs, names, release labels and references containing a
+hexadecimal run that resembles a commit or digest fragment or an IPv4 address,
+and all but release labels when they contain a date (calendar release labels
+remain allowed).
 Every component and output artifact ID is unique within its own inventory.
 
 Each of `addon`, `gateway`, `explorer`, `ha_integration` is a component object.
@@ -75,8 +81,10 @@ a leading slash, backslash, empty segment, `.` or `..` segment, URL encoding,
 query or fragment. It must identify public documentation or sanitized evidence,
 never a private record. Resolve it against that repository's reviewed branch
 or default branch; existence and content suitability must be checked from
-provisioned offline evidence. This is a navigation reference, not an identity
-proof. Public metadata never needs a pinned blob URL.
+provisioned offline evidence. The validator checks references into this
+add-on repository against the supplied checkout; other repositories rely on
+the receipt's `public_references` check. This is a navigation reference, not
+an identity proof. Public metadata never needs a pinned blob URL.
 
 Inventory all resolved native dependencies, including transitive dependencies
 and replacements. When a dependency has no publishable release label, retain
@@ -121,15 +129,15 @@ accepted. No acceptance entry is optional or silently not applicable.
    `helianthus/config.json`, `helianthus/Dockerfile` and
    `.github/workflows/test-image.yml` to K25 as `--addon-config`, `--dockerfile`
    and `--test-image-workflow`. A non-null `components.addon.release_label`
-   must equal the config's `version` literally (also the build workflow's
-   `BUILD_VERSION`).
+   must equal the config's `version` literally; the canonical build workflow
+   derives `BUILD_VERSION` from that version.
    Pass non-null `components.gateway.release_label` as
    `--gateway-release-version`; privately verify its mapping to the effective
-   `EBUSGATEWAY_VERSION` Dockerfile ARG, including build-workflow overrides.
+   `EBUSGATEWAY_VERSION`, the canonical build workflow's override.
    A non-null `components.explorer.release_label` must equal the effective
-   `VRCEXPLORER_VERSION` ARG for the bound output literally, using the Dockerfile
-   default when no override applies. Sharing a cohort alone is insufficient for
-   that identity check. K25 still checks all Explorer Dockerfile defaults and
+   `VRCEXPLORER_VERSION` for the bound output literally: the canonical build
+   workflow's override, which is also the release tag its verification step
+   checks. Sharing a cohort alone is insufficient for that identity check. K25 still checks all Explorer Dockerfile defaults and
    test-image overrides for cohort consistency; a differently labelled override
    needs its own bundle to bind its outputs. Add-on, Explorer and gateway must
    all declare the 0.7 cohort here. A conflicting release fails; an opaque
@@ -140,7 +148,8 @@ accepted. No acceptance entry is optional or silently not applicable.
 3. Check architecture coverage, complete dependency inventory and all output
    bindings against the private record. The declared architecture set must equal
    the set published under the version tag by the provisioned
-   `.github/workflows/build.yml`, including its matrix and manifest members.
+   `.github/workflows/build.yml`, which must be the canonical packaging shape
+   described below.
    The current workflow publishes `aarch64`, `amd64`, `armv7`, `armhf`, `i386`;
    matching only `config.json`'s two architectures leaves the bundle `not-ready`.
    Bind and verify every published architecture, including those outside the
@@ -160,15 +169,57 @@ accepted. No acceptance entry is optional or silently not applicable.
    promote the result. A claimed disposition differing from the derived result
    fails validation.
 
+### Canonical packaging shape
+
+Per the [owner decision on issue #270](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/270),
+M45 recognises exactly one canonical packaging shape: this repository's
+`.github/workflows/build.yml`, including its manifest job, as it stands on
+main. M45 matches the provisioned file line for line, element by element,
+against that form and never interprets workflow or shell constructs:
+
+- the triggers, permissions and image environment, and the build job header;
+- the architecture matrix: `amd64`, `aarch64`, `armv7`, `armhf`, `i386`;
+- each job's checkout step;
+- the version-output step `addon`, which runs `set -euo pipefail` followed by
+  the single assignment
+  `echo "version=$(jq -r '.version' helianthus/config.json)" >> "$GITHUB_OUTPUT"`;
+  the build job and the manifest job must each contain exactly this step, and
+  both are matched by the same rule;
+- the Explorer release-tag verification step and the set-up and registry
+  login steps;
+- the build step after them, with its explicit
+  `push: ${{ github.event_name != 'pull_request' }}` input, platform,
+  version-architecture tags, labels, build-args (`BUILD_VERSION` from the
+  version output, `BUILD_FROM` from the matrix) and secrets;
+- the manifest job header, its registry login step, the `latest` manifest
+  command, the version manifest member list and the GHCR visibility check,
+  with nothing after it.
+
+The only variable values are two plain literals: the Explorer release,
+identical in the release-tag verification step and the `VRCEXPLORER_VERSION`
+override, and the `EBUSGATEWAY_VERSION` override. Every packaging input named
+in steps 2–4 must resolve, after following symlinks, to a file inside the
+package root. Anything unrecognised, reordered, unreachable or extra, such as
+a comment, a step moved before the version output, a guarded or early-exited
+assignment, an omitted or different `push` input, a changed manifest member, or
+an additional job, step, build-arg record or manifest command, derives
+`not-ready` with `NOT_READY: unrecognised packaging shape: …`. The reason names
+the canonical element expected where the first difference occurs, or the input
+that resolves outside the package root. Generalising M45 to other packaging
+shapes is out of scope for 0.7. A change to the build workflow on main must
+update the validator's canonical form in the same change; the validator tests
+check that this checkout's workflow is recognised.
+
 ### Offline verification context and M45 results
 
-M45's proposed offline interface is `validate(metadata, package_root,
+M45's offline interface is `validate(metadata, package_root,
 verification_context=None)`. `metadata` and `verification_context` are paths to
 UTF-8 JSON files; `package_root` is the standalone checkout containing the
 packaging files named in steps 2–4. All paths are explicit caller inputs; no
 sibling checkout, environment variable, home-directory file, network lookup or
-installed adapter is consulted. This is an implementation contract, not an
-available command in this PR.
+installed adapter is consulted. The command form is
+`python3 scripts/check_candidate_metadata.py --metadata <file> --package-root
+<checkout> [--verification-context <receipt>]`.
 
 The optional context file is a private verification receipt in format
 `helianthus-candidate-verification/1`. It is the complete input boundary for
@@ -188,8 +239,9 @@ source/build verification. An arbitrary candidate-supplied JSON file is not
 trusted verification. A receipt is valid only for that invocation's unchanged
 bundle and package inputs; any change requires re-verification and a new
 association as specified below. Keep receipts outside the checkout and never
-commit them. The receipt uses opaque IDs and sanitized results only; underlying
-private coordinates stay in the orchestrator's private records.
+commit them; a receipt path inside the package checkout is `INPUT_UNAVAILABLE`.
+The receipt uses opaque IDs and sanitized results only; underlying private
+coordinates stay in the orchestrator's private records.
 
 The receipt is one object with exactly the following required fields. Apply the
 public JSON's duplicate-key, type, unknown-field and opaque-ID rules. Arrays
@@ -259,9 +311,10 @@ inside a supplied receipt is malformed, not an implicit pass.
 In public-only mode, check all available schema, publication and packaging
 constraints, report private equality, bindings and acceptance as unverified,
 and derive `not-ready`. A valid document claiming `not-ready` succeeds with
-that result; a claim of `ready-for-review` or `accepted-candidate` reports
-`PRIVATE_EVIDENCE_REQUIRED` and cannot succeed. This is an inability to verify
-the claim, not proof of a mismatch. Never promote a public-only result.
+that result; a claim of `ready-for-review` or `accepted-candidate` whose public
+prerequisites are satisfied reports `PRIVATE_EVIDENCE_REQUIRED` and cannot
+succeed. This is an inability to verify the claim, not proof of a mismatch.
+Never promote a public-only result.
 
 M45 must use these exit codes and diagnostic classes (with sanitized reasons):
 
@@ -272,11 +325,15 @@ M45 must use these exit codes and diagnostic classes (with sanitized reasons):
 | `2` | `PRIVATE_EVIDENCE_REQUIRED` when missing/stale private context prevents verifying an elevated disposition claim; or `INPUT_UNAVAILABLE` when a required local packaging/evidence input cannot be read. |
 
 Definite invalidity or conflict takes precedence over missing verification.
+An elevated claim blocked by an unmet public prerequisite (for example a
+preparatory kind, pending acceptance or an unfrozen BOM) is therefore
+`DISPOSITION_MISMATCH` in either mode; `PRIVATE_EVIDENCE_REQUIRED` applies only
+when private verification alone is missing.
 Missing private checks leave a correctly claimed `not-ready` document valid;
 private mismatches fail validation even when it claims `not-ready`. With a
 complete trusted context, derive and compare dispositions in steps 3–4 above.
 Required local input failures use `INPUT_UNAVAILABLE` in either mode. These
-results belong to the proposed M45 validator, not the existing K25 checker.
+results belong to the M45 validator, not the existing K25 checker.
 
 K25's exit zero means no declared cohort conflict and can include `UNVERIFIED`
 or `NOT_APPLICABLE`; neither establishes candidate readiness. Its existing
@@ -395,6 +452,6 @@ The deliberately incomplete acceptance makes the only valid disposition
 Offline consumer checks must also exercise duplicate keys, unknown fields,
 missing acceptance entries, mismatched associations, absent private evidence,
 partial outputs, preparatory self-promotion and component changes under reused
-labels. Parsing this example proves JSON syntax only. Implementing and
-registering a validator requires a separately owned code change; this document
-does not add an executable gate or imply that its checks already run in CI.
+labels. Parsing this example proves JSON syntax only. The validator's synthetic
+tests exercise these cases and `./scripts/ci_local.sh` runs them; that gate
+checks no real candidate and establishes no readiness.
