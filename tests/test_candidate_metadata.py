@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import copy
-import csv
 import hashlib
 import json
 from pathlib import Path
@@ -122,11 +121,28 @@ def set_build_args(workflow: dict, **values: str | None) -> None:
             step["with"]["build-args"] = "\n".join(lines) + "\n"
 
 
+# This checkout's build workflow, read as text: the canonical packaging shape on main.
+REAL_BUILD = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+REAL_EXPLORER = re.search(r"^ +VRCEXPLORER_VERSION=(\S+)$", REAL_BUILD, re.M)[1]
+REAL_GATEWAY = re.search(r"^ +EBUSGATEWAY_VERSION=(\S+)$", REAL_BUILD, re.M)[1]
+EXPLORER_OCCURRENCE = re.compile(rf"(?<![\w.]){re.escape(REAL_EXPLORER)}(?![\w.])")
+
+
+def canonical_build(explorer: str, gateway_pin: str) -> str:
+    """The real build workflow text with only its two release slots re-pinned."""
+    text = EXPLORER_OCCURRENCE.sub(lambda match: explorer, REAL_BUILD)
+    return re.sub(r"^( +EBUSGATEWAY_VERSION=)\S+$", lambda match: match[1] + gateway_pin, text, flags=re.M)
+
+
 def make_package(tmp_path: Path, version: str = "0.7.0", explorer: str = "v0.7.1",
-                 gateway_pin: str = "opaque-test-pin", build_args: dict | None = None,
-                 test_explorer: str = "v0.7.1", freeze: dict | None = None, build_edit=None,
-                 name: str = "pkg") -> Path:
-    """Derive a synthetic 0.7 package from this checkout's real packaging files."""
+                 gateway_pin: str = "opaque-test-pin", build_explorer: str | None = None,
+                 build_gateway: str | None = None, test_explorer: str = "v0.7.1", freeze: dict | None = None,
+                 build_edit=None, name: str = "pkg") -> Path:
+    """Derive a synthetic 0.7 package from this checkout's real packaging files.
+
+    The build workflow is the real text with its release slots re-pinned (build_explorer and
+    build_gateway default to the Dockerfile values); build_edit transforms that text.
+    """
     package = tmp_path / name
     (package / "helianthus").mkdir(parents=True)
     (package / ".github/workflows").mkdir(parents=True)
@@ -138,11 +154,10 @@ def make_package(tmp_path: Path, version: str = "0.7.0", explorer: str = "v0.7.1
     dockerfile = re.sub(r"^ARG VRCEXPLORER_VERSION=\S+$", f"ARG VRCEXPLORER_VERSION={explorer}", dockerfile, flags=re.M)
     dockerfile = re.sub(r"^ARG EBUSGATEWAY_VERSION=\S+$", f"ARG EBUSGATEWAY_VERSION={gateway_pin}", dockerfile, flags=re.M)
     (package / "helianthus/Dockerfile").write_text(dockerfile, encoding="utf-8")
-    build = yaml.safe_load((ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8"))
-    set_build_args(build, **{"EBUSGATEWAY_VERSION": gateway_pin, "VRCEXPLORER_VERSION": explorer, **(build_args or {})})
+    build = canonical_build(build_explorer or explorer, build_gateway or gateway_pin)
     if build_edit is not None:
-        build_edit(build)
-    (package / ".github/workflows/build.yml").write_text(yaml.safe_dump(build), encoding="utf-8")
+        build = build_edit(build)
+    (package / ".github/workflows/build.yml").write_bytes(build.encode("utf-8"))
     test_image = yaml.safe_load((ROOT / ".github/workflows/test-image.yml").read_text(encoding="utf-8"))
     set_build_args(test_image, VRCEXPLORER_VERSION=test_explorer)
     (package / ".github/workflows/test-image.yml").write_text(yaml.safe_dump(test_image), encoding="utf-8")
@@ -359,9 +374,9 @@ def test_metadata_cohort_other_than_0_7_is_unsupported(tmp_path, cohort):
      "METADATA_CONFLICT: K25 cohort guard failed: Explorer release cohort differs from add-on 0.7"),
     ({"test_explorer": "v0.6.1"}, {},
      "METADATA_CONFLICT: K25 cohort guard failed: test-image Explorer override cohort differs from add-on 0.7"),
-    ({"build_args": {"VRCEXPLORER_VERSION": "v0.6.1"}}, {("components", "explorer", "release_label"): None},
+    ({"build_explorer": "v0.6.1"}, {("components", "explorer", "release_label"): None},
      "METADATA_CONFLICT: effective Explorer release for published outputs is outside the 0.7 cohort"),
-    ({"build_args": {"EBUSGATEWAY_VERSION": "v0.6.9"}}, {},
+    ({"build_gateway": "v0.6.9"}, {},
      "METADATA_CONFLICT: effective gateway release pin is outside the 0.7 cohort"),
     ({"gateway_pin": "v0.6.9"}, {},
      "METADATA_CONFLICT: K25 cohort guard failed: gateway release pin cohort differs from add-on 0.7"),
@@ -377,12 +392,10 @@ def test_metadata_cohort_other_than_0_7_is_unsupported(tmp_path, cohort):
      "METADATA_CONFLICT: components.addon.release_label differs from the helianthus/config.json version"),
     ({}, {("components", "explorer", "release_label"): "v0.7.2"},
      "METADATA_CONFLICT: components.explorer.release_label differs from the effective VRCEXPLORER_VERSION"),
-    ({"build_args": {"EBUSGATEWAY_VERSION": "v0.7.5"}}, {},
+    ({"build_gateway": "v0.7.5"}, {},
      "METADATA_CONFLICT: components.gateway.release_label differs from the effective gateway release pin"),
-    ({"build_args": {"BUILD_VERSION": "0.7.9"}}, {},
-     "METADATA_CONFLICT: build workflow BUILD_VERSION differs from components.addon.release_label"),
-    ({"build_args": {"VRCEXPLORER_VERSION": "${{ inputs.explorer }}"}}, {},
-     "METADATA_CONFLICT: build workflow VRCEXPLORER_VERSION is not a literal"),
+    ({"build_explorer": "v0.7.2"}, {},
+     "METADATA_CONFLICT: components.explorer.release_label differs from the effective VRCEXPLORER_VERSION"),
 ])
 def test_mismatched_cohort_or_release_identity_fails_closed(tmp_path, package_kwargs, metadata_edit, message):
     meta = ready_metadata()
@@ -395,70 +408,10 @@ def test_mismatched_cohort_or_release_identity_fails_closed(tmp_path, package_kw
     assert outcome.disposition is None
 
 
-def test_conflicting_explorer_override_records_in_build_workflow_fail(tmp_path):
-    def edit(workflow):
-        step = next(step for step in workflow["jobs"]["build"]["steps"]
-                    if str(step.get("uses", "")).startswith("docker/build-push-action@"))
-        step["with"]["build-args"] += "VRCEXPLORER_VERSION=v0.7.9\n"
-    outcome = run(tmp_path, ready_metadata(), receipt_for(ready_metadata()),
-                  package=make_package(tmp_path, build_edit=edit))
-    assert outcome.exit_code == 1
-    assert "METADATA_CONFLICT: build workflow declares conflicting VRCEXPLORER_VERSION values" in outcome.lines
-
-
-def test_build_step_without_override_uses_the_dockerfile_default(tmp_path):
-    def add_second_build(workflow):
-        steps = workflow["jobs"]["build"]["steps"]
-        step = copy.deepcopy(next(step for step in steps
-                                  if str(step.get("uses", "")).startswith("docker/build-push-action@")))
-        step["with"]["build-args"] = "\n".join(line for line in step["with"]["build-args"].splitlines()
-                                               if not line.startswith("VRCEXPLORER_VERSION="))
-        steps.append(step)
-    package = make_package(tmp_path, explorer="v0.7.1", build_args={"VRCEXPLORER_VERSION": "v0.7.2"},
-                           build_edit=add_second_build)
-    meta = setpath(ready_metadata(), ("components", "explorer", "release_label"), "v0.7.2")
-    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
-    assert outcome.exit_code == 1
-    assert "METADATA_CONFLICT: build workflow declares conflicting VRCEXPLORER_VERSION values" in outcome.lines
-
-
 def test_calendar_release_labels_are_not_capture_times(tmp_path):
     meta = setpath(ready_metadata(), ("components", "ha_integration", "release_label"), "2026.10.1")
     outcome = run(tmp_path, meta, receipt_for(meta))
     assert outcome.exit_code == 0, text(outcome)
-
-
-def test_build_version_not_tied_to_config_version_is_not_ready(tmp_path):
-    meta = ready_metadata()
-    package = make_package(tmp_path, build_args={"BUILD_VERSION": "${{ inputs.version }}"})
-    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
-    assert outcome.exit_code == 1
-    assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
-    assert ("NOT_READY: build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline"
-            in outcome.lines)
-
-
-@pytest.mark.parametrize("extra", [
-    "echo version=0.7.9 >> \"$GITHUB_OUTPUT\"",
-    "echo \"version=0.7.9\" >> \"$GITHUB_OUTPUT\"",
-])
-@pytest.mark.parametrize("commented", [True, False])
-def test_version_step_must_prove_the_config_assignment(tmp_path, extra, commented):
-    canonical = "echo \"version=$(jq -r '.version' helianthus/config.json)\" >> \"$GITHUB_OUTPUT\""
-
-    def edit(workflow):
-        for job in workflow["jobs"].values():
-            for step in job.get("steps", []):
-                if step.get("id") == "addon":
-                    first_line = "# " + canonical if commented else canonical
-                    step["run"] = first_line + "\n" + extra + "\n"
-    meta = ready_metadata()
-    package = make_package(tmp_path, build_edit=edit)
-    outcome = run(tmp_path, meta, receipt_for(meta), package=package)
-    assert outcome.exit_code == 1
-    assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
-    assert ("NOT_READY: build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline"
-            in outcome.lines)
 
 
 def test_opaque_gateway_pin_without_label_is_unverified_not_ready(tmp_path):
@@ -784,118 +737,6 @@ def test_partial_outputs_stay_not_ready(tmp_path):
     assert first(run(tmp_path, meta, receipt)).startswith("DISPOSITION_MISMATCH")
 
 
-def test_build_workflow_matrix_and_manifest_must_agree(tmp_path):
-    def drop_i386_from_manifest(workflow):
-        for step in workflow["jobs"]["manifest"]["steps"]:
-            if "imagetools create" in step.get("run", ""):
-                step["run"] = re.sub(r'"\$\{IMAGE_NAME\}:\$\{\{ steps\.addon\.outputs\.version \}\}-i386"', "",
-                                     step["run"])
-    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
-    receipt = receipt_for(meta, output_binding="missing")
-    outcome = run(tmp_path, meta, receipt, package=make_package(tmp_path, build_edit=drop_i386_from_manifest))
-    assert outcome.exit_code == 0, text(outcome)
-    assert "NOT_READY: build workflow matrix and version manifest members differ" in outcome.lines
-
-
-def _manifest_edit(transform):
-    def edit(workflow):
-        for step in workflow["jobs"]["manifest"]["steps"]:
-            if "imagetools create" in step.get("run", ""):
-                step["run"] = transform(step["run"])
-    return edit
-
-
-def _manifest_outcome(tmp_path, transform):
-    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
-    receipt = receipt_for(meta, output_binding="missing")
-    return run(tmp_path, meta, receipt, package=make_package(tmp_path, build_edit=_manifest_edit(transform)))
-
-
-MANIFEST_DIFFERS = "NOT_READY: build workflow matrix and version manifest members differ"
-VERSION_TARGET = '-t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}"'
-
-
-def test_commented_version_manifest_command_is_not_counted(tmp_path):
-    def comment_out(run_text):
-        head, _, tail = run_text.partition(VERSION_TARGET)
-        start = head.rsplit("docker buildx", 1)
-        lines = ("docker buildx" + start[1] + VERSION_TARGET + tail).splitlines()
-        return start[0] + "\n".join("# " + line for line in lines)
-    outcome = _manifest_outcome(tmp_path, comment_out)
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-def test_version_manifest_with_other_destination_is_not_counted(tmp_path):
-    outcome = _manifest_outcome(tmp_path, lambda run_text: run_text.replace(
-        VERSION_TARGET, '-t "${IMAGE_NAME}:other"'))
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-def test_commented_version_manifest_member_is_not_counted(tmp_path):
-    outcome = _manifest_outcome(tmp_path, lambda run_text: "\n".join(
-        "# " + line if "version }}-i386" in line else line for line in run_text.splitlines()))
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-VERSION_MEMBER_I386 = '"${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"'
-
-
-def test_adjacent_command_tag_is_not_a_manifest_member(tmp_path):
-    def echo_before(run_text):
-        run_text = re.sub(r'\s*' + re.escape(VERSION_MEMBER_I386), "", run_text).rstrip(" \\\n") + "\n"
-        head, tail = run_text.rsplit("docker buildx imagetools create", 1)
-        return head + f"echo {VERSION_MEMBER_I386} && docker buildx imagetools create" + tail
-    outcome = _manifest_outcome(tmp_path, echo_before)
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-def test_adjacent_command_after_manifest_is_not_a_member(tmp_path):
-    def echo_after(run_text):
-        run_text = re.sub(r'\s*' + re.escape(VERSION_MEMBER_I386), "", run_text).rstrip(" \\\n") + "\n"
-        head, tail = run_text.rsplit("docker buildx imagetools create", 1)
-        return (head + "docker buildx imagetools create" + tail.rstrip() + " ; echo "
-                + VERSION_MEMBER_I386 + "\n")
-    outcome = _manifest_outcome(tmp_path, echo_after)
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-def test_repeated_version_manifest_overwrite_is_not_ready(tmp_path):
-    def overwrite(run_text):
-        return run_text.rstrip() + (
-            "\ndocker buildx imagetools create " + VERSION_TARGET
-            + ' "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64"\n')
-    outcome = _manifest_outcome(tmp_path, overwrite)
-    assert outcome.exit_code == 0, text(outcome)
-    assert "NOT_READY: build workflow creates the version manifest more than once" in outcome.lines
-
-
-def _tags_edit(tags):
-    def edit(workflow):
-        for job in workflow["jobs"].values():
-            for step in job.get("steps", []):
-                if str(step.get("uses", "")).startswith("docker/build-push-action@"):
-                    if tags is None:
-                        step["with"].pop("tags", None)
-                    else:
-                        step["with"]["tags"] = tags
-    return edit
-
-
-@pytest.mark.parametrize("tags", [None, "${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}\n",
-                                  "${{ env.IMAGE_NAME }}:unrelated\n"])
-def test_build_step_without_version_architecture_tags_is_not_ready(tmp_path, tags):
-    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
-    receipt = receipt_for(meta, output_binding="missing")
-    outcome = run(tmp_path, meta, receipt, package=make_package(tmp_path, build_edit=_tags_edit(tags)))
-    assert outcome.exit_code == 0, text(outcome)
-    assert "NOT_READY: build workflow build step does not publish version-architecture tags" in outcome.lines
-
-
 @pytest.mark.parametrize("coordinate", ["abcdefa", "ABCDEFAB", "deadbeef"])
 def test_all_letter_short_hex_coordinates_are_restricted(coordinate):
     assert ccm._restricted(f"artifact-{coordinate}")
@@ -1070,12 +911,12 @@ def test_missing_packaging_input_is_unavailable(tmp_path, relative):
     assert first(outcome) == f"INPUT_UNAVAILABLE: package input {relative} cannot be read (No such file or directory)"
 
 
-@pytest.mark.parametrize("relative,content", [("helianthus/config.json", "{"), ("helianthus/bom.json", "[]"),
-                                              (".github/workflows/build.yml", "jobs: ["),
-                                              (".github/workflows/test-image.yml", "- list")])
+@pytest.mark.parametrize("relative,content", [("helianthus/config.json", b"{"), ("helianthus/bom.json", b"[]"),
+                                              (".github/workflows/build.yml", b"name: \xff"),
+                                              (".github/workflows/test-image.yml", b"- list")])
 def test_unparseable_packaging_input_is_unavailable(tmp_path, relative, content):
     package = make_package(tmp_path)
-    (package / relative).write_text(content, encoding="utf-8")
+    (package / relative).write_bytes(content)
     outcome = run(tmp_path, ready_metadata(), package=package)
     assert outcome.exit_code == 2
     assert first(outcome).startswith(f"INPUT_UNAVAILABLE: package input {relative}")
@@ -1104,6 +945,7 @@ def test_real_package_with_exact_revisions_never_leaks_them(tmp_path):
     outcome = run(tmp_path, contract_example(), package=ROOT)
     assert outcome.exit_code == 1, text(outcome)
     assert "METADATA_CONFLICT: provisioned add-on version is outside the 0.7 cohort" in outcome.lines
+    assert "unrecognised packaging shape" not in text(outcome)
     pins = re.findall(r"[0-9a-f]{40}", (ROOT / "helianthus/Dockerfile").read_text(encoding="utf-8"))
     assert pins
     assert not any(pin[:7] in text(outcome) for pin in pins)
@@ -1165,14 +1007,7 @@ def test_packaging_cohort_is_delegated_to_k25(tmp_path, monkeypatch):
     assert "METADATA_CONFLICT: K25 cohort guard failed: synthetic K25 failure" in outcome.lines
 
 
-def test_build_arguments_use_the_k25_record_reader(tmp_path, monkeypatch):
-    def failing(build_args):
-        raise csv.Error("synthetic CSV failure")
-        yield  # pragma: no cover
-    monkeypatch.setattr(ccm.k25, "build_arg_records", failing)
-    outcome = run(tmp_path, ready_metadata())
-    assert outcome.exit_code == 1
-    assert "METADATA_CONFLICT: build workflow build-args are malformed CSV" in outcome.lines
+def test_validator_does_not_duplicate_k25_logic():
     source = SCRIPT.read_text(encoding="utf-8")
     for duplicate in ["csv.reader", "def cohort", "def arg_default", "\nVERSION = re.compile"]:
         assert duplicate not in source
@@ -1246,16 +1081,6 @@ def test_native_dependency_order_does_not_matter(tmp_path):
     assert "ARTIFACT: components.native_dependencies[1] artifact-transitive-ready" in outcome.lines
 
 
-def test_conflicting_build_version_records_fail(tmp_path):
-    def edit(workflow):
-        step = next(step for step in workflow["jobs"]["build"]["steps"]
-                    if str(step.get("uses", "")).startswith("docker/build-push-action@"))
-        step["with"]["build-args"] += "BUILD_VERSION=0.7.0\n"
-    outcome = run(tmp_path, ready_metadata(), receipt_for(ready_metadata()), package=make_package(tmp_path, build_edit=edit))
-    assert outcome.exit_code == 1
-    assert "METADATA_CONFLICT: build workflow declares conflicting BUILD_VERSION values" in outcome.lines
-
-
 @pytest.mark.parametrize("where", ["metadata", "expected_output_ids", "bound_output_ids"])
 def test_output_ids_cannot_substitute_for_component_entries(tmp_path, where):
     meta = ready_metadata()
@@ -1300,35 +1125,245 @@ def test_help_documents_usage_and_limits():
     help_text = " ".join(result.stdout.split())
     for expected in ["--metadata", "--package-root", "--verification-context", "PRIVATE_EVIDENCE_REQUIRED",
                      "INPUT_UNAVAILABLE", "METADATA_CONFLICT", "EVIDENCE_MISMATCH", "DISPOSITION_MISMATCH",
-                     "public-only", "never authenticated", "no fetch", "hardware qualification"]:
+                     "public-only", "never authenticated", "no fetch", "hardware qualification",
+                     "unrecognised packaging shape"]:
         assert expected in help_text, expected
 
 
-def test_version_output_step_after_the_build_is_not_credited(tmp_path):
-    def move_producer_after_build(workflow):
-        for job in workflow["jobs"].values():
-            steps = job.get("steps", [])
-            if any(step.get("id") == "addon" for step in steps) and any(
-                    str(step.get("uses", "")).startswith("docker/build-push-action@") for step in steps):
-                producer = [step for step in steps if step.get("id") == "addon"]
-                rest = [step for step in steps if step.get("id") != "addon"]
-                last_build = max(i for i, step in enumerate(rest)
-                                 if str(step.get("uses", "")).startswith("docker/build-push-action@"))
-                job["steps"] = rest[:last_build + 1] + producer + rest[last_build + 1:]
-                return
-        raise AssertionError("no job with both a build and the version producer")
+# ------------------------------------ canonical packaging shape (owner decision on #270)
+
+SHAPE = "NOT_READY: unrecognised packaging shape: build workflow does not match the canonical "
+ECHO = "          echo \"version=$(jq -r '.version' helianthus/config.json)\" >> \"$GITHUB_OUTPUT\"\n"
+PUSH = "          push: ${{ github.event_name != 'pull_request' }}\n"
+VERSION_TAG = "            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}\n"
+BUILD_VERSION_ARG = "            BUILD_VERSION=${{ steps.addon.outputs.version }}\n"
+VERSION_TARGET = '-t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}"'
+VERSION_MEMBER = '            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-%s"'
+
+
+def replace_nth(text: str, old: str, new: str, nth: int = 1) -> str:
+    """Replace the nth occurrence of old, which must occur at least nth times."""
+    parts = text.split(old)
+    assert len(parts) > nth, (old, nth)
+    return old.join(parts[:nth]) + new + old.join(parts[nth:])
+
+
+def block(text: str, start: str, end: str) -> str:
+    """The lines from the one starting with start up to, not including, the one starting with end."""
+    head = text.index(start)
+    return text[head:text.index(end, head)]
+
+
+def build_step(text: str) -> str:
+    return block(text, "      - name: Build and push", "  manifest:")
+
+
+def version_step(text: str) -> str:
+    return block(text, "      - name: Read add-on version", "      - name: Verify")
+
+
+def move_build_step_before_version_step(text: str) -> str:
+    step = build_step(text)
+    return replace_nth(text.replace(step, ""), "      - name: Read add-on version", step + "      - name: Read add-on version")
+
+
+def move_version_step_after_build(text: str) -> str:
+    step = version_step(text)
+    return text.replace(step, "", 1).replace("  manifest:\n", step + "  manifest:\n", 1)
+
+
+LAST_MEMBERS = VERSION_MEMBER % "armhf" + " \\\n" + VERSION_MEMBER % "i386"
+I386_MEMBER = (VERSION_MEMBER % "i386").strip()
+
+
+def drop_i386_member(text: str) -> str:
+    return text.replace(LAST_MEMBERS, VERSION_MEMBER % "armhf")
+
+
+def comment_version_manifest_command(text: str) -> str:
+    start = text.rindex("          docker buildx imagetools create", 0, text.index(VERSION_TARGET))
+    command = text[start:text.index("\n\n", start)]
+    assert VERSION_TARGET in command and ":latest" not in command
+    return text.replace(command, "\n".join("          # " + line.strip() for line in command.split("\n")))
+
+
+def echo_member_before_command(text: str) -> str:
+    return replace_nth(drop_i386_member(text), "          docker buildx imagetools create \\\n",
+                       f"          echo {I386_MEMBER} && docker buildx imagetools create \\\n", 2)
+
+
+def echo_member_after_command(text: str) -> str:
+    return text.replace(LAST_MEMBERS, VERSION_MEMBER % "armhf" + " ; echo " + I386_MEMBER)
+
+
+def inline_comment_last_member(text: str) -> str:
+    return text.replace(LAST_MEMBERS, VERSION_MEMBER % "armhf" + " # " + I386_MEMBER)
+
+
+def drop_i386_matrix_entry(text: str) -> str:
+    return text.replace(block(text, "          - platform: linux/386\n", "    steps:"), "", 1)
+
+
+SHAPE_CASES = {
+    # Fix round 1: build steps before the version-output step.
+    "build step before the version-output step": (move_build_step_before_version_step, "build job version-output step"),
+    "version-output step after the build step": (move_version_step_after_build, "build job version-output step"),
+    # Fix round 3 / review: inline shell comments and commented constructs.
+    "inline comment hides the last manifest member": (inline_comment_last_member, "version manifest member list"),
+    "commented version manifest member": (
+        lambda t: t.replace(VERSION_MEMBER % "i386", "          # " + I386_MEMBER), "version manifest member list"),
+    "commented version manifest command": (comment_version_manifest_command, "version manifest member list"),
+    "commented producer with an extra unquoted writer": (
+        lambda t: replace_nth(t, ECHO, "          # " + ECHO.strip() + "\n          echo version=0.7.9 >> \"$GITHUB_OUTPUT\"\n"),
+        "build job version-output step"),
+    "producer with an extra quoted writer": (
+        lambda t: replace_nth(t, ECHO, ECHO + "          echo \"version=0.7.9\" >> \"$GITHUB_OUTPUT\"\n"),
+        "build job version-output step"),
+    # Fix round 6 / r7 Codex read: the manifest job's version producer.
+    "manifest job producer assigns a literal version": (
+        lambda t: replace_nth(t, ECHO, "          echo \"version=0.7.9\" >> \"$GITHUB_OUTPUT\"\n", 2),
+        "manifest job version-output step"),
+    "manifest job producer is unreachable": (
+        lambda t: replace_nth(t, ECHO, "          exit 0\n" + ECHO, 2), "manifest job version-output step"),
+    # r7 thread: the build step's push input.
+    "build step push disabled": (lambda t: t.replace(PUSH, "          push: false\n"), "build step push input"),
+    "build step push omitted": (lambda t: t.replace(PUSH, ""), "build step push input"),
+    "build step push always on": (lambda t: t.replace(PUSH, "          push: true\n"), "build step push input"),
+    # r7 thread: unreachable version-output assignments.
+    "producer assignment inside if false": (
+        lambda t: replace_nth(t, ECHO, "          if false; then\n  " + ECHO + "          fi\n"),
+        "build job version-output step"),
+    "producer assignment after exit 0": (
+        lambda t: replace_nth(t, ECHO, "          exit 0\n" + ECHO), "build job version-output step"),
+    # Earlier rounds: manifest members, destinations and commands.
+    "matrix and version manifest members differ": (drop_i386_member, "version manifest member list"),
+    "matrix entry dropped": (drop_i386_matrix_entry, "build job architecture matrix"),
+    "version manifest with another destination": (
+        lambda t: t.replace(VERSION_TARGET, '-t "${IMAGE_NAME}:other"'), "version manifest member list"),
+    "adjacent command tag before the manifest": (echo_member_before_command, "version manifest member list"),
+    "adjacent command after the manifest": (echo_member_after_command, "version manifest member list"),
+    "version manifest created twice": (
+        lambda t: t.replace(LAST_MEMBERS + "\n", LAST_MEMBERS + "\n          docker buildx imagetools create "
+                            + VERSION_TARGET + " " + (VERSION_MEMBER % "amd64").strip() + "\n"),
+        "version manifest member list"),
+    # Earlier rounds: version-architecture tags.
+    "build step without tags": (
+        lambda t: t.replace(block(t, "          tags: |", "          labels: |"), ""), "build step version-architecture tags"),
+    "build step with latest tag only": (lambda t: t.replace(VERSION_TAG, ""), "build step version-architecture tags"),
+    "build step with an unrelated tag": (
+        lambda t: t.replace(VERSION_TAG, "            ${{ env.IMAGE_NAME }}:unrelated\n"),
+        "build step version-architecture tags"),
+    # Earlier rounds: build arguments.
+    "BUILD_VERSION literal": (
+        lambda t: t.replace(BUILD_VERSION_ARG, "            BUILD_VERSION=0.7.9\n"), "build step build-args"),
+    "BUILD_VERSION expression": (
+        lambda t: t.replace(BUILD_VERSION_ARG, "            BUILD_VERSION=${{ inputs.version }}\n"),
+        "build step build-args"),
+    "conflicting BUILD_VERSION records": (
+        lambda t: t.replace(BUILD_VERSION_ARG, BUILD_VERSION_ARG + "            BUILD_VERSION=0.7.0\n"),
+        "build step build-args"),
+    "conflicting Explorer records": (
+        lambda t: t.replace("            VRCEXPLORER_VERSION=v0.7.1\n",
+                            "            VRCEXPLORER_VERSION=v0.7.1\n            VRCEXPLORER_VERSION=v0.7.9\n"),
+        "build step build-args"),
+    "Explorer override expression": (
+        lambda t: t.replace("VRCEXPLORER_VERSION=v0.7.1", "VRCEXPLORER_VERSION=${{ inputs.explorer }}"),
+        "build step build-args"),
+    "Explorer override differs from the verified release tag": (
+        lambda t: t.replace("VRCEXPLORER_VERSION=v0.7.1", "VRCEXPLORER_VERSION=v0.7.2"), "build step build-args"),
+    "gateway override with an inline comment": (
+        lambda t: re.sub(r"(EBUSGATEWAY_VERSION=\S+)\n", r"\1 # pinned\n", t), "build step build-args"),
+    # Extra, reordered or unreachable constructs elsewhere.
+    "second build step": (lambda t: t.replace(build_step(t), build_step(t) * 2), "manifest job header"),
+    "build job disabled": (lambda t: t.replace("  build:\n", "  build:\n    if: false\n"), "build job header"),
+    "default shell override": (
+        lambda t: t.replace("\njobs:\n", "\ndefaults:\n  run:\n    shell: sh\n\njobs:\n"),
+        "workflow triggers, permissions and image environment"),
+    "checkout of another ref": (
+        lambda t: replace_nth(t, "        uses: actions/checkout@v4\n",
+                              "        uses: actions/checkout@v4\n        with:\n          ref: other\n"),
+        "build job checkout step"),
+    "step rewriting the config before the build": (
+        lambda t: t.replace("      - name: Verify helianthus-vrc-explorer",
+                            "      - run: echo '{}' > helianthus/config.json\n\n      - name: Verify helianthus-vrc-explorer"),
+        "build job Explorer release-tag verification step"),
+    "extra job after the manifest job": (
+        lambda t: t + "\n  extra:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
+        "end of the workflow after the GHCR visibility check step"),
+    "CRLF line endings": (lambda t: t.replace("\n", "\r\n"), "workflow triggers, permissions and image environment"),
+}
+
+
+@pytest.mark.parametrize("case", list(SHAPE_CASES))
+def test_recorded_edge_cases_are_an_unrecognised_packaging_shape(tmp_path, case):
+    transform, element = SHAPE_CASES[case]
+    package = make_package(tmp_path, build_edit=transform)
+    assert (package / ".github/workflows/build.yml").read_bytes() != canonical_build("v0.7.1", "opaque-test-pin").encode()
     meta = ready_metadata()
-    package = make_package(tmp_path, build_edit=move_producer_after_build)
     outcome = run(tmp_path, meta, receipt_for(meta), package=package)
-    assert outcome.exit_code == 1
+    assert outcome.exit_code == 1, text(outcome)
     assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
-    assert ("NOT_READY: build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline"
-            in outcome.lines)
+    shape = [line for line in outcome.lines if line.startswith("NOT_READY: unrecognised packaging shape")]
+    assert len(shape) == 1 and shape[0].startswith(SHAPE + element + " at line "), text(outcome)
+    meta["disposition"] = "not-ready"
+    outcome = run(tmp_path, meta, receipt_for(meta, output_binding="missing"), package=package)
+    assert first(outcome) == "VALID: not-ready", text(outcome)
 
 
-@pytest.mark.parametrize("relative", ["helianthus/bom.json", "helianthus/Dockerfile",
-                                      ".github/workflows/build.yml"])
-def test_package_inputs_resolving_outside_the_checkout_are_unavailable(tmp_path, relative):
+def test_the_checkout_build_workflow_is_the_canonical_shape():
+    """The real workflow and manifest job on main match the canonical form unchanged."""
+    slots, unrecognised = ccm._match_build_workflow(REAL_BUILD)
+    assert unrecognised is None
+    assert slots == {"explorer": REAL_EXPLORER, "gateway": REAL_GATEWAY}
+
+
+def test_real_workflow_with_repinned_release_slots_validates_as_ready(tmp_path):
+    repinned = canonical_build("v0.7.1", "opaque-test-pin")
+    changed = [(old, new) for old, new in zip(REAL_BUILD.split("\n"), repinned.split("\n")) if old != new]
+    assert len(repinned.split("\n")) == len(REAL_BUILD.split("\n"))
+    assert len(changed) == 5 and all("v0.7.1" in new or new.endswith("=opaque-test-pin") for _, new in changed)
+    meta = ready_metadata()
+    outcome = run(tmp_path, meta, receipt_for(meta), package=make_package(tmp_path))
+    assert first(outcome) == "VALID: ready-for-review", text(outcome)
+    assert "unrecognised packaging shape" not in text(outcome)
+
+
+def test_canonical_architectures_are_the_matrix_and_version_manifest_members():
+    workflow = yaml.safe_load(REAL_BUILD)
+    matrix = [entry["arch"] for entry in workflow["jobs"]["build"]["strategy"]["matrix"]["include"]]
+    manifest_run = next(step["run"] for step in workflow["jobs"]["manifest"]["steps"]
+                        if VERSION_TARGET in step.get("run", ""))
+    members = re.findall(r"steps\.addon\.outputs\.version \}\}-([a-z0-9]+)\"", manifest_run)
+    assert matrix == members == list(ccm.CANONICAL_ARCHITECTURES)
+    assert set(ccm.CANONICAL_ARCHITECTURES) == set(ccm.ARCHITECTURES)
+
+
+def test_both_version_producers_are_matched_by_one_rule():
+    producers = [(element, text) for element, text in ccm.CANONICAL_BUILD_WORKFLOW if "version-output step" in element]
+    assert [element for element, _ in producers] == ["build job version-output step",
+                                                     "manifest job version-output step"]
+    assert all(text is ccm.VERSION_OUTPUT_STEP for _, text in producers)
+    assert REAL_BUILD.count(ccm.VERSION_OUTPUT_STEP) == 2
+
+
+def test_every_single_line_mutation_of_the_canonical_workflow_is_rejected():
+    lines = REAL_BUILD.split("\n")
+    mutants = []
+    for index, line in enumerate(lines):
+        mutants.append(lines[:index] + [line + " # mutated"] + lines[index + 1:])
+        mutants.append(lines[:index] + lines[index + 1:])
+        mutants.append(lines[:index] + [line, line] + lines[index + 1:])
+        if index + 1 < len(lines) and lines[index + 1] != line:
+            mutants.append(lines[:index] + [lines[index + 1], line] + lines[index + 2:])
+    assert len(mutants) > 3 * len(lines)
+    for mutant in mutants:
+        slots, unrecognised = ccm._match_build_workflow("\n".join(mutant))
+        assert unrecognised is not None and not slots, mutant
+
+
+@pytest.mark.parametrize("relative", ["helianthus/bom.json", "helianthus/Dockerfile", "helianthus/config.json",
+                                      ".github/workflows/build.yml", ".github/workflows/test-image.yml"])
+def test_package_inputs_resolving_outside_the_checkout_are_an_unrecognised_shape(tmp_path, relative):
     package = make_package(tmp_path)
     outside = tmp_path / "outside-input"
     outside.write_bytes((package / relative).read_bytes())
@@ -1336,33 +1371,28 @@ def test_package_inputs_resolving_outside_the_checkout_are_unavailable(tmp_path,
     (package / relative).symlink_to(outside)
     meta = ready_metadata()
     outcome = run(tmp_path, meta, receipt_for(meta), package=package)
-    assert outcome.exit_code == 2, text(outcome)
-    assert first(outcome) == f"INPUT_UNAVAILABLE: package input {relative} resolves outside the package root"
+    assert outcome.exit_code == 1, text(outcome)
+    assert first(outcome) == "DISPOSITION_MISMATCH: claimed ready-for-review, derived not-ready"
+    assert (f"NOT_READY: unrecognised packaging shape: package input {relative} resolves outside the package root"
+            in outcome.lines)
 
 
-def test_package_input_symlink_inside_the_checkout_is_accepted(tmp_path):
+@pytest.mark.parametrize("relative", ["helianthus/bom.json", ".github/workflows/build.yml"])
+def test_package_input_symlink_inside_the_checkout_is_accepted(tmp_path, relative):
     package = make_package(tmp_path)
-    real = package / "docs" / "bom-real.json"
-    real.write_bytes((package / "helianthus/bom.json").read_bytes())
-    (package / "helianthus/bom.json").unlink()
-    (package / "helianthus/bom.json").symlink_to(real)
+    real = package / "docs" / "input-real"
+    real.write_bytes((package / relative).read_bytes())
+    (package / relative).unlink()
+    (package / relative).symlink_to(real)
     meta = ready_metadata()
     outcome = run(tmp_path, meta, receipt_for(meta), package=package)
     assert outcome.exit_code == 0, text(outcome)
 
 
-def test_inline_comment_after_the_last_active_manifest_source_is_not_counted(tmp_path):
-    def comment_last(run_text):
-        pattern = re.compile(r'(version \}\}-armhf") \\\n\s+("[^"\n]*version \}\}-i386")')
-        assert pattern.search(run_text)
-        return pattern.sub(r"\1 # \2", run_text)
-    meta = setpath(ready_metadata(), ("disposition",), "not-ready")
-    receipt = receipt_for(meta, output_binding="missing")
-    package = make_package(tmp_path, build_edit=_manifest_edit(_version_only(comment_last)))
-    outcome = run(tmp_path, meta, receipt, package=package)
-    assert outcome.exit_code == 0, text(outcome)
-    assert MANIFEST_DIFFERS in outcome.lines
-
-
-def _version_only(transform):
-    return lambda run_text: transform(run_text)
+def test_package_input_symlink_loop_is_unavailable(tmp_path):
+    package = make_package(tmp_path)
+    (package / "helianthus/bom.json").unlink()
+    (package / "helianthus/bom.json").symlink_to(package / "helianthus/bom.json")
+    outcome = run(tmp_path, ready_metadata(), package=package)
+    assert outcome.exit_code == 2, text(outcome)
+    assert first(outcome).startswith("INPUT_UNAVAILABLE: package input helianthus/bom.json cannot be read")

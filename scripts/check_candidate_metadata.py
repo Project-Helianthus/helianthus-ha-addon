@@ -6,6 +6,12 @@ checkout. Packaging cohort consistency is delegated to the K25 guard in
 scripts/check_release_cohort.py. Every input is an explicit local path: nothing
 is fetched, resolved, built, written, published or tagged, and diagnostics never
 echo input paths, receipt contents or exact coordinates.
+
+Owner decision on issue #270: exactly one canonical packaging shape is
+recognised, the add-on's own build workflow and manifest job as they stand on
+main. The workflow is matched line for line against CANONICAL_BUILD_WORKFLOW;
+anything unrecognised, reordered, unreachable or extra is reported as
+"unrecognised packaging shape" naming the element, never interpreted.
 """
 
 from __future__ import annotations
@@ -16,7 +22,6 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import re
-import shlex
 from typing import Any, Callable
 
 import yaml
@@ -54,7 +59,7 @@ PACKAGE_INPUTS = (
     ("config", "helianthus/config.json", "json"),
     ("dockerfile", "helianthus/Dockerfile", "text"),
     ("bom", "helianthus/bom.json", "json"),
-    ("build", ".github/workflows/build.yml", "yaml"),
+    ("build", ".github/workflows/build.yml", "text"),
     ("test_image", ".github/workflows/test-image.yml", "yaml"),
 )
 NOTE = (
@@ -72,15 +77,215 @@ PATH_SEGMENT = re.compile(r"[A-Za-z0-9._+-]+")
 HEX_RUN = re.compile(r"[0-9A-Fa-f]{7,}")
 DATE = re.compile(r"(?:19|20)\d\d[-_./]?(?:0[1-9]|1[0-2])[-_./]?(?:0[1-9]|[12]\d|3[01])")
 IPV4 = re.compile(r"(?<!\d)(?<!\d\.)\d{1,3}(?:\.\d{1,3}){3}(?!\.?\d)")
-DERIVED_VERSION = re.compile(r"\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
-CONFIG_VERSION_STEP = re.compile(
-    r"""echo "version=\$\(jq -r '\.version' helianthus/config\.json\)" >> "\$GITHUB_OUTPUT\"""")
-MANIFEST_MEMBER = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-([a-z0-9]+)")
-CONTROL_CHARACTERS = "();<>|&"
-VERSION_ARCH_TAG = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}-\$\{\{\s*matrix\.arch\s*\}\}")
-VERSION_TAG = re.compile(r".+:\$\{\{\s*steps\.addon\.outputs\.version\s*\}\}")
-CONFIG_VERSION = object()  # BUILD_VERSION provably read from helianthus/config.json
-DOCKERFILE_DEFAULT = object()  # A build step without this override uses the Dockerfile default
+
+# ------------------------------------------------ canonical packaging shape
+# .github/workflows/build.yml as it stands on main, split into named elements.
+# The only variable values are two literal slots: the Explorer release (the
+# same literal in the release-tag verification step and the VRCEXPLORER_VERSION
+# override) and the EBUSGATEWAY_VERSION override. Every other byte is fixed, so
+# the shape publishes CANONICAL_ARCHITECTURES under the config.json version and
+# derives BUILD_VERSION from it; no workflow or shell construct is interpreted.
+# A change to the build workflow on main must update this form in the same change.
+EXPLORER_SLOT = "<explorer-release>"
+GATEWAY_SLOT = "<gateway-pin>"
+SLOTS = (("explorer", EXPLORER_SLOT), ("gateway", GATEWAY_SLOT))
+SLOT_VALUE = r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}"  # A plain literal: no expression, quote, space or comment.
+CANONICAL_ARCHITECTURES = ("amd64", "aarch64", "armv7", "armhf", "i386")
+# The build job's and the manifest job's version producer: one rule for both.
+VERSION_OUTPUT_STEP = r"""      - name: Read add-on version
+        id: addon
+        run: |
+          set -euo pipefail
+          echo "version=$(jq -r '.version' helianthus/config.json)" >> "$GITHUB_OUTPUT"
+
+"""
+CANONICAL_BUILD_WORKFLOW = (
+    ("workflow triggers, permissions and image environment", r"""name: build-addon
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/project-helianthus/helianthus-ha-addon
+  OCI_SOURCE: https://github.com/Project-Helianthus/helianthus-ha-addon
+  OCI_DESCRIPTION: Helianthus Home Assistant add-on
+  OCI_LICENSE: AGPL-3.0-or-later
+
+jobs:
+"""),
+    ("build job header", r"""  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+"""),
+    ("build job architecture matrix", r"""      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            base: ghcr.io/home-assistant/amd64-base:3.20
+          - platform: linux/arm64
+            arch: aarch64
+            base: ghcr.io/home-assistant/aarch64-base:3.20
+          - platform: linux/arm/v7
+            arch: armv7
+            base: ghcr.io/home-assistant/armv7-base:3.20
+          - platform: linux/arm/v6
+            arch: armhf
+            base: ghcr.io/home-assistant/armhf-base:3.20
+          - platform: linux/386
+            arch: i386
+            base: ghcr.io/home-assistant/i386-base:3.20
+"""),
+    ("build job checkout step", r"""    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+"""),
+    ("build job version-output step", VERSION_OUTPUT_STEP),
+    ("build job Explorer release-tag verification step", r"""      - name: Verify helianthus-vrc-explorer release tag
+        run: |
+          set -euo pipefail
+          remote_url="https://github.com/Project-Helianthus/helianthus-vrc-explorer.git"
+          if [ -n "${{ secrets.REPO_READ_TOKEN }}" ]; then
+            remote_url="https://x-access-token:${{ secrets.REPO_READ_TOKEN }}@github.com/Project-Helianthus/helianthus-vrc-explorer.git"
+          fi
+          ref="$(git ls-remote "${remote_url}" refs/tags/<explorer-release> | awk '{print $1}')"
+          if [ -z "${ref}" ]; then
+            echo "failed to resolve helianthus-vrc-explorer <explorer-release> tag" >&2
+            exit 1
+          fi
+          echo "Resolved helianthus-vrc-explorer <explorer-release> to ${ref}"
+
+"""),
+    ("build job set-up and registry login steps", r"""      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+"""),
+    ("build step action and context", r"""      - name: Build and push (${{ matrix.arch }})
+        uses: docker/build-push-action@v5
+        with:
+          context: ./helianthus
+"""),
+    ("build step push input", r"""          push: ${{ github.event_name != 'pull_request' }}
+"""),
+    ("build step platforms input", r"""          platforms: ${{ matrix.platform }}
+"""),
+    ("build step version-architecture tags", r"""          tags: |
+            ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+"""),
+    ("build step labels", r"""          labels: |
+            org.opencontainers.image.source=${{ env.OCI_SOURCE }}
+            org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
+"""),
+    ("build step build-args", r"""          build-args: |
+            BUILD_VERSION=${{ steps.addon.outputs.version }}
+            EBUSGATEWAY_VERSION=<gateway-pin>
+            VRCEXPLORER_VERSION=<explorer-release>
+            BUILD_FROM=${{ matrix.base }}
+"""),
+    ("build step secrets", r"""          secrets: |
+            github_token=${{ secrets.REPO_READ_TOKEN }}
+
+"""),
+    ("manifest job header", r"""  manifest:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+"""),
+    ("manifest job checkout step", r"""      - name: Checkout
+        uses: actions/checkout@v4
+
+"""),
+    ("manifest job version-output step", VERSION_OUTPUT_STEP),
+    ("manifest job registry login step", r"""      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+"""),
+    ("latest manifest command", r"""      - name: Create multi-arch manifests
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
+            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
+            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
+            -t "${IMAGE_NAME}:latest" \
+            "${IMAGE_NAME}:latest-amd64" \
+            "${IMAGE_NAME}:latest-aarch64" \
+            "${IMAGE_NAME}:latest-armv7" \
+            "${IMAGE_NAME}:latest-armhf" \
+            "${IMAGE_NAME}:latest-i386"
+"""),
+    ("version manifest member list", r"""          docker buildx imagetools create \
+            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
+            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
+            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
+            -t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-aarch64" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armv7" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armhf" \
+            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"
+
+"""),
+    ("GHCR visibility check step", r"""      - name: Verify GHCR package is public
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          visibility="$(gh api "/orgs/${{ github.repository_owner }}/packages/container/helianthus-ha-addon" --jq '.visibility')"
+          if [ "${visibility}" != "public" ]; then
+            echo "GHCR package visibility is '${visibility}'. Home Assistant Supervisor needs anonymous pull access."
+            echo "Open https://github.com/orgs/${{ github.repository_owner }}/packages/container/package/helianthus-ha-addon and set visibility to public."
+            exit 1
+          fi
+"""),
+)
+# Nothing may follow the final newline of the GHCR visibility check step.
+END_OF_WORKFLOW = "end of the workflow after the GHCR visibility check step"
+
+
+def _canonical_lines() -> list[tuple[str, re.Pattern[str]]]:
+    """One (element, exact line pattern) per canonical line, ending with the empty final line."""
+    lines = []
+    for element, block in CANONICAL_BUILD_WORKFLOW:
+        for line in block.split("\n")[:-1]:
+            pattern = re.escape(line)
+            for name, slot in SLOTS:
+                pattern = f"(?P<{name}>{SLOT_VALUE})".join(pattern.split(re.escape(slot)))
+            lines.append((element, re.compile(pattern)))
+    lines.append((END_OF_WORKFLOW, re.compile("")))
+    return lines
+
+
+CANONICAL_LINES = _canonical_lines()
 
 
 class _Invalid(Exception):
@@ -348,16 +553,31 @@ def _inside(path: Path, root: Path) -> bool:
 
 
 def _read_package(root: Path, report: _Report) -> dict[str, Any] | None:
-    if not root.is_dir():
+    """Read each packaging input from its resolved location, which must lie inside the package root."""
+    try:
+        base = root.resolve(strict=True)
+    except (OSError, RuntimeError):
+        base = None
+    if base is None or not base.is_dir():
         report.unavailable.append("package root is not a readable directory")
         return None
     package: dict[str, Any] = {}
     for key, relative, kind in PACKAGE_INPUTS:
-        if not _inside(root / relative, root):
-            report.unavailable.append(f"package input {relative} resolves outside the package root")
+        try:
+            target = (base / relative).resolve(strict=True)
+        except OSError as exc:
+            report.unavailable.append(
+                f"package input {relative} cannot be read ({exc.strerror or type(exc).__name__})")
+            continue
+        except RuntimeError:  # A symlink loop on interpreters before 3.13.
+            report.unavailable.append(f"package input {relative} cannot be read (symlink loop)")
+            continue
+        if not target.is_relative_to(base):
+            report.public.append(
+                f"unrecognised packaging shape: package input {relative} resolves outside the package root")
             continue
         try:
-            text = (root / relative).read_bytes().decode("utf-8")
+            text = target.read_bytes().decode("utf-8")
             value = json.loads(text) if kind == "json" else yaml.safe_load(text) if kind == "yaml" else text
         except OSError as exc:
             report.unavailable.append(
@@ -405,131 +625,46 @@ def _absent_locally(ref: dict[str, Any] | None, root: Path) -> bool:
         return True
 
 
-def _version_manifest_members(run: str) -> list[set[str]]:
-    """Members of each active imagetools command whose destination is the version tag."""
-    text = "\n".join(line for line in run.splitlines() if not line.strip().startswith("#"))
-    text = re.sub(r"\\\n", " ", text)
-    manifests: list[set[str]] = []
-    for line in text.splitlines():
-        if "imagetools create" not in line:
-            continue
-        try:
-            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
-            lexer.whitespace_split = True
-            tokens = list(lexer)
-        except ValueError:
-            continue
-        for start in range(len(tokens) - 1):
-            if tokens[start:start + 2] != ["imagetools", "create"]:
-                continue
-            command: list[str] = []
-            for token in tokens[start + 2:]:
-                if set(token) <= set(CONTROL_CHARACTERS):
-                    break
-                command.append(token)
-            for index, token in enumerate(command[:-1]):
-                target = command[index + 1]
-                if token != "-t" or not VERSION_TAG.fullmatch(target):
-                    continue
-                repository = target.rsplit(":", 1)[0]
-                manifests.append({found[1] for source in command
-                                  if (found := MANIFEST_MEMBER.fullmatch(source))
-                                  and source.startswith(repository + ":")})
-    return manifests
+def _match_build_workflow(text: str) -> tuple[dict[str, str], str | None]:
+    """Match the build workflow line for line against CANONICAL_BUILD_WORKFLOW.
+
+    Return the slot values and None when the text is the canonical shape, otherwise no slot values
+    and the canonical element expected where the first difference occurs.
+    """
+    lines = text.split("\n")
+    slots: dict[str, str] = {}
+    for number, (element, pattern) in enumerate(CANONICAL_LINES, start=1):
+        match = pattern.fullmatch(lines[number - 1]) if number <= len(lines) else None
+        if match is None:
+            return {}, f"{element} at line {number}"
+        for name, value in match.groupdict().items():
+            if slots.setdefault(name, value) != value:  # Each slot is one literal wherever it occurs.
+                return {}, f"{element} at line {number}"
+    if len(lines) > len(CANONICAL_LINES):
+        return {}, f"{END_OF_WORKFLOW} at line {len(CANONICAL_LINES) + 1}"
+    return slots, None
 
 
-def _derives_version(run: str) -> bool:
-    """Prove the step's only version output is assigned from the config.json version."""
-    lines = [line.strip() for line in run.splitlines() if line.strip() and not line.strip().startswith("#")]
-    writers = [line for line in lines if "version=" in line or "GITHUB_OUTPUT" in line]
-    return len(writers) == 1 and CONFIG_VERSION_STEP.fullmatch(writers[0]) is not None
-
-
-def _publishes_version_tags(step: dict[str, Any]) -> bool:
-    settings = step.get("with") if type(step.get("with")) is dict else {}
-    tags = settings.get("tags")
-    if type(tags) is not str:
-        return False
-    return any(VERSION_ARCH_TAG.fullmatch(tag.strip()) for tag in re.split(r"[\n,]", tags))
-
-
-def _build_workflow(workflow: dict[str, Any], report: _Report) -> tuple[dict[str, set[Any]], set[str], set[str]]:
-    """Return build-argument values, matrix architectures and version-manifest members."""
-    values: dict[str, set[Any]] = {}
-    step_names: list[set[str]] = []
-    matrix: set[str] = set()
-    manifest: set[str] = set()
-    manifest_commands = 0
-    jobs = workflow.get("jobs")
-    if type(jobs) is not dict:
-        report.conflict.append("build workflow has no jobs mapping")
-        return values, matrix, manifest
-    for job in jobs.values():
-        steps = job.get("steps", []) if type(job) is dict else []
-        steps = [step for step in steps if type(step) is dict] if type(steps) is list else []
-        for step in steps:
-            run = step.get("run")
-            if type(run) is str and "imagetools create" in run:
-                for members in _version_manifest_members(run):
-                    manifest.update(members)
-                    manifest_commands += 1
-        builds = [(position, step) for position, step in enumerate(steps)
-                  if str(step.get("uses", "")).startswith("docker/build-push-action@")]
-        if not builds:
-            continue
-        publishers = [step for _, step in builds if _publishes_version_tags(step)]
-        if len(publishers) != len(builds):
-            report.public.append("build workflow build step does not publish version-architecture tags")
-        if not publishers:
-            continue
-        strategy = job.get("strategy") if type(job.get("strategy")) is dict else {}
-        include = strategy.get("matrix", {}).get("include", []) if type(strategy.get("matrix")) is dict else []
-        for entry in include if type(include) is list else []:
-            if type(entry) is dict and type(entry.get("arch")) is str:
-                matrix.add(entry["arch"])
-        producers = [index for index, step in enumerate(steps) if step.get("id") == "addon"
-                     and type(step.get("run")) is str and _derives_version(step["run"])]
-        for position, step in builds:
-            reads_version = any(index < position for index in producers)
-            settings = step.get("with") if type(step.get("with")) is dict else {}
-            build_args = settings.get("build-args", "")
-            try:
-                records = list(k25.build_arg_records(build_args if type(build_args) is str else ""))
-            except csv.Error:
-                report.conflict.append("build workflow build-args are malformed CSV")
-                continue
-            seen: set[str] = set()
-            for name, separator, value in records:
-                name, value = name.strip(), value.strip()
-                if "${{" in name:
-                    report.conflict.append("build workflow build-args contain an opaque expression record")
-                    continue
-                seen.add(name)
-                if name == "BUILD_VERSION" and separator and reads_version and DERIVED_VERSION.fullmatch(value):
-                    values.setdefault(name, set()).add(CONFIG_VERSION)
-                else:
-                    values.setdefault(name, set()).add(value if separator else None)
-            step_names.append(seen)
-    if manifest_commands > 1:
-        report.public.append("build workflow creates the version manifest more than once")
-    for name, found in values.items():
-        if any(name not in seen for seen in step_names):
-            found.add(DOCKERFILE_DEFAULT)
-    return values, matrix, manifest
-
-
-def _effective(values: dict[str, set[Any]], name: str, default: str, report: _Report) -> str | None:
-    found = {default if value is DOCKERFILE_DEFAULT else value for value in values.get(name, ())}
-    if not found:
-        return default
-    if len(found) > 1:
-        report.conflict.append(f"build workflow declares conflicting {name} values")
-        return None
-    (value,) = found
-    if type(value) is not str or "${{" in value:
-        report.conflict.append(f"build workflow {name} is not a literal")
-        return None
-    return value
+def _check_overrides(labels: dict[str, str | None], slots: dict[str, str], report: _Report) -> None:
+    """Compare the canonical workflow's Explorer and gateway overrides with the cohort and labels."""
+    explorer = slots["explorer"]
+    try:
+        in_cohort = k25.cohort(explorer) == COHORT_RELEASE
+    except ValueError:
+        in_cohort = False
+    if not in_cohort:
+        report.conflict.append("effective Explorer release for published outputs is outside the 0.7 cohort")
+    elif labels["explorer"] is not None and labels["explorer"] != explorer:
+        report.conflict.append("components.explorer.release_label differs from the effective VRCEXPLORER_VERSION")
+    gateway = slots["gateway"]
+    try:
+        pin_release = k25.cohort(gateway)
+    except ValueError:
+        pin_release = None  # Opaque pin: only the private package mapping can bind it.
+    if pin_release is not None and pin_release != COHORT_RELEASE:
+        report.conflict.append("effective gateway release pin is outside the 0.7 cohort")
+    elif pin_release is not None and labels["gateway"] not in (None, gateway):
+        report.conflict.append("components.gateway.release_label differs from the effective gateway release pin")
 
 
 def _check_package(meta: dict[str, Any], package: dict[str, Any], root: Path,
@@ -555,58 +690,22 @@ def _check_package(meta: dict[str, Any], package: dict[str, Any], root: Path,
             report.conflict.append("provisioned add-on version is outside the 0.7 cohort")
             messages = None
 
-    values, matrix, manifest = _build_workflow(package["build"], report)
-    if labels["addon"] is not None:
-        if labels["addon"] != package["config"].get("version"):
-            report.conflict.append("components.addon.release_label differs from the helianthus/config.json version")
-        build_version = values.get("BUILD_VERSION", set())
-        literals = {value for value in build_version if type(value) is str and "${{" not in value}
-        if len(build_version) > 1:
-            report.conflict.append("build workflow declares conflicting BUILD_VERSION values")
-        elif literals and literals != {labels["addon"]}:
-            report.conflict.append("build workflow BUILD_VERSION differs from components.addon.release_label")
-        elif build_version != {CONFIG_VERSION} and not literals:
+    # The canonical workflow derives BUILD_VERSION from the config.json version in both jobs.
+    if labels["addon"] is not None and labels["addon"] != package["config"].get("version"):
+        report.conflict.append("components.addon.release_label differs from the helianthus/config.json version")
+
+    published: set[str] | None = None
+    slots, unrecognised = _match_build_workflow(package["build"])
+    if unrecognised is not None:
+        report.public.append(
+            f"unrecognised packaging shape: build workflow does not match the canonical {unrecognised}")
+    else:
+        published = set(CANONICAL_ARCHITECTURES)
+        if set(meta["architectures"]) != published:
             report.public.append(
-                "build workflow BUILD_VERSION cannot be tied to the helianthus/config.json version offline")
-
-    if messages is not None:  # K25 passed for a 0.7 add-on: compare effective build arguments.
-        explorer = _effective(values, "VRCEXPLORER_VERSION",
-                              k25.arg_default(package["dockerfile"], "VRCEXPLORER_VERSION"), report)
-        if explorer is not None:
-            try:
-                in_cohort = k25.cohort(explorer) == COHORT_RELEASE
-            except ValueError:
-                in_cohort = False
-            if not in_cohort:
-                report.conflict.append("effective Explorer release for published outputs is outside the 0.7 cohort")
-            elif labels["explorer"] is not None and labels["explorer"] != explorer:
-                report.conflict.append(
-                    "components.explorer.release_label differs from the effective VRCEXPLORER_VERSION")
-        gateway = _effective(values, "EBUSGATEWAY_VERSION",
-                             k25.arg_default(package["dockerfile"], "EBUSGATEWAY_VERSION"), report)
-        if gateway is not None:
-            try:
-                pin_release = k25.cohort(gateway)
-            except ValueError:
-                pin_release = None  # Opaque pin: only the private package mapping can bind it.
-            if pin_release is not None and pin_release != COHORT_RELEASE:
-                report.conflict.append("effective gateway release pin is outside the 0.7 cohort")
-            elif pin_release is not None and labels["gateway"] not in (None, gateway):
-                report.conflict.append(
-                    "components.gateway.release_label differs from the effective gateway release pin")
-
-    published: set[str] | None = matrix
-    if not matrix:
-        report.public.append("build workflow publishes no recognizable architecture matrix")
-        published = None
-    elif matrix != manifest:
-        report.public.append("build workflow matrix and version manifest members differ")
-        published = None
-    elif not matrix <= set(ARCHITECTURES):
-        report.public.append("build workflow publishes an architecture outside the metadata schema")
-        published = None
-    elif set(meta["architectures"]) != matrix:
-        report.public.append("architectures differ from the set the build workflow publishes under the version tag")
+                "architectures differ from the set the build workflow publishes under the version tag")
+        if messages is not None:  # K25 passed for a 0.7 add-on: compare the canonical overrides.
+            _check_overrides(labels, slots, report)
 
     freeze = package["bom"].get("freeze")
     if not (type(freeze) is dict and freeze.get("owner") == "INT-16" and freeze.get("status") == "frozen"):
@@ -797,7 +896,9 @@ def main(argv: list[str] | None = None) -> int:
             "a K25 failure), EVIDENCE_MISMATCH or DISPOSITION_MISMATCH. Exit 2: PRIVATE_EVIDENCE_REQUIRED "
             "or INPUT_UNAVAILABLE. Without --verification-context the result is public-only and never "
             "above not-ready. An elevated claim blocked by an unmet public prerequisite is "
-            "DISPOSITION_MISMATCH in either mode. The receipt is trusted as supplied, never authenticated, and must stay "
+            "DISPOSITION_MISMATCH in either mode. The build workflow must be the one canonical packaging shape "
+            "on main (owner decision on issue #270); anything else is NOT_READY: unrecognised packaging shape, "
+            "naming the element. The receipt is trusted as supplied, never authenticated, and must stay "
             "outside the checkout. Structural verification only: no fetch, tag resolution, build, "
             "write, publication or tag; a valid result is not a release or hardware qualification."
         ),

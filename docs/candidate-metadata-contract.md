@@ -129,15 +129,15 @@ accepted. No acceptance entry is optional or silently not applicable.
    `helianthus/config.json`, `helianthus/Dockerfile` and
    `.github/workflows/test-image.yml` to K25 as `--addon-config`, `--dockerfile`
    and `--test-image-workflow`. A non-null `components.addon.release_label`
-   must equal the config's `version` literally (also the build workflow's
-   `BUILD_VERSION`).
+   must equal the config's `version` literally; the canonical build workflow
+   derives `BUILD_VERSION` from that version.
    Pass non-null `components.gateway.release_label` as
    `--gateway-release-version`; privately verify its mapping to the effective
-   `EBUSGATEWAY_VERSION` Dockerfile ARG, including build-workflow overrides.
+   `EBUSGATEWAY_VERSION`, the canonical build workflow's override.
    A non-null `components.explorer.release_label` must equal the effective
-   `VRCEXPLORER_VERSION` ARG for the bound output literally, using the Dockerfile
-   default when no override applies. Sharing a cohort alone is insufficient for
-   that identity check. K25 still checks all Explorer Dockerfile defaults and
+   `VRCEXPLORER_VERSION` for the bound output literally: the canonical build
+   workflow's override, which is also the release tag its verification step
+   checks. Sharing a cohort alone is insufficient for that identity check. K25 still checks all Explorer Dockerfile defaults and
    test-image overrides for cohort consistency; a differently labelled override
    needs its own bundle to bind its outputs. Add-on, Explorer and gateway must
    all declare the 0.7 cohort here. A conflicting release fails; an opaque
@@ -148,7 +148,8 @@ accepted. No acceptance entry is optional or silently not applicable.
 3. Check architecture coverage, complete dependency inventory and all output
    bindings against the private record. The declared architecture set must equal
    the set published under the version tag by the provisioned
-   `.github/workflows/build.yml`, including its matrix and manifest members.
+   `.github/workflows/build.yml`, which must be the canonical packaging shape
+   described below.
    The current workflow publishes `aarch64`, `amd64`, `armv7`, `armhf`, `i386`;
    matching only `config.json`'s two architectures leaves the bundle `not-ready`.
    Bind and verify every published architecture, including those outside the
@@ -167,6 +168,47 @@ accepted. No acceptance entry is optional or silently not applicable.
    private record for this same association. No public self-declaration can
    promote the result. A claimed disposition differing from the derived result
    fails validation.
+
+### Canonical packaging shape
+
+Per the [owner decision on issue #270](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/270),
+M45 recognises exactly one canonical packaging shape: this repository's
+`.github/workflows/build.yml`, including its manifest job, as it stands on
+main. M45 matches the provisioned file line for line, element by element,
+against that form and never interprets workflow or shell constructs:
+
+- the triggers, permissions and image environment, and the build job header;
+- the architecture matrix: `amd64`, `aarch64`, `armv7`, `armhf`, `i386`;
+- each job's checkout step;
+- the version-output step `addon`, which runs `set -euo pipefail` followed by
+  the single assignment
+  `echo "version=$(jq -r '.version' helianthus/config.json)" >> "$GITHUB_OUTPUT"`;
+  the build job and the manifest job must each contain exactly this step, and
+  both are matched by the same rule;
+- the Explorer release-tag verification step and the set-up and registry
+  login steps;
+- the build step after them, with its explicit
+  `push: ${{ github.event_name != 'pull_request' }}` input, platform,
+  version-architecture tags, labels, build-args (`BUILD_VERSION` from the
+  version output, `BUILD_FROM` from the matrix) and secrets;
+- the manifest job header, its registry login step, the `latest` manifest
+  command, the version manifest member list and the GHCR visibility check,
+  with nothing after it.
+
+The only variable values are two plain literals: the Explorer release,
+identical in the release-tag verification step and the `VRCEXPLORER_VERSION`
+override, and the `EBUSGATEWAY_VERSION` override. Every packaging input named
+in steps 2–4 must resolve, after following symlinks, to a file inside the
+package root. Anything unrecognised, reordered, unreachable or extra, such as
+a comment, a step moved before the version output, a guarded or early-exited
+assignment, an omitted or different `push` input, a changed manifest member, or
+an additional job, step, build-arg record or manifest command, derives
+`not-ready` with `NOT_READY: unrecognised packaging shape: …`. The reason names
+the canonical element expected where the first difference occurs, or the input
+that resolves outside the package root. Generalising M45 to other packaging
+shapes is out of scope for 0.7. A change to the build workflow on main must
+update the validator's canonical form in the same change; the validator tests
+check that this checkout's workflow is recognised.
 
 ### Offline verification context and M45 results
 
