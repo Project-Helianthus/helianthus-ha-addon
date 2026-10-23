@@ -381,8 +381,8 @@ def _shared_records(evidence: list[_Evidence], meta: dict[str, Any] | None, root
     counts: dict[tuple[Any, ...], int] = {}
     for gate in PHYSICAL_GATE_IDS:
         live = [entry for entry in evidence if entry.gate == gate and _current(entry, meta) and entry.live]
-        if len(live) == 1 and live[0].evidence_ref is not None:
-            key = _record_key(live[0].evidence_ref, root, root_fd)
+        keys = {_record_key(entry.evidence_ref, root, root_fd) for entry in live if entry.evidence_ref is not None}
+        for key in keys:  # One count per gate, however many of its own entries link the record.
             counts[key] = counts.get(key, 0) + 1
     return {key for key, count in counts.items() if count > 1}
 

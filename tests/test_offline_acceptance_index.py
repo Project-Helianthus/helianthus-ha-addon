@@ -1659,3 +1659,60 @@ def test_a_listing_below_a_swapped_ancestor_never_lists_the_replacement(tmp_path
         os.close(root_fd)
     assert absent is True and present is False
     assert identity(replacement / "docs/records") not in listed and identity(replacement / "docs") not in listed
+
+
+# ------------------------- a gate with several live entries never lets a partner pass
+
+TWO_LIVE = "2 live operator evidence records were supplied for this gate; exactly one is required"
+
+
+def ambiguous_run(tmp_path: Path, first_refs: tuple, prepare=None, second_ref: dict | None = None) -> oai.Index:
+    """FIRST has two live entries (one per document) linking first_refs; SECOND optionally relinks."""
+    tree = make_worktree(tmp_path)
+    if prepare:
+        prepare(tree)
+    primary, extra = evidence_doc(), evidence_doc(gates=(FIRST,))
+    gate_entry(primary, FIRST)["evidence_ref"], gate_entry(extra, FIRST)["evidence_ref"] = first_refs
+    if second_ref is not None:
+        gate_entry(primary, SECOND)["evidence_ref"] = second_ref
+    return run(tmp_path, results=(results_doc(),), evidence=(primary, extra), tree=tree)
+
+
+def only_ambiguous(index: oai.Index, shared: tuple = ()) -> None:
+    for gate, found in rows(index).items():
+        if gate == FIRST:
+            assert (found["status"], found["reasons"]) == ("unverified", [TWO_LIVE])
+        elif gate in shared:
+            assert (found["status"], found["reasons"]) == ("unverified", [SHARED]), gate
+        else:
+            assert (found["status"], found["reasons"]) == ("pass", []), gate
+
+
+def test_a_gate_with_two_live_entries_does_not_let_a_partner_share_its_record(tmp_path):
+    index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref(record(SECOND))))
+    assert index.exit_code == 2
+    only_ambiguous(index, shared=(SECOND,))
+
+
+def test_a_partner_of_an_ambiguous_gate_is_shared_only_for_the_record_it_links(tmp_path):
+    index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref(record(SECOND))), second_ref=ref(record(SECOND)))
+    assert index.exit_code == 2
+    only_ambiguous(index, shared=(SECOND,))
+    assert row(index, "adapter-direct-ad03") == ("pass", [])
+
+
+def test_one_gate_linking_a_record_twice_is_not_shared_with_another_gate(tmp_path):
+    index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref(record(FIRST))))
+    assert index.exit_code == 2
+    only_ambiguous(index)
+
+
+def test_the_ambiguous_gate_partner_is_shared_through_a_hard_link(tmp_path):
+    def prepare(tree):
+        try:
+            os.link(tree / record(SECOND), tree / "docs/alias.md")
+        except OSError:
+            pytest.skip("this platform cannot create hard links")
+    index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref("docs/alias.md")), prepare=prepare)
+    assert index.exit_code == 2
+    only_ambiguous(index, shared=(SECOND,))
