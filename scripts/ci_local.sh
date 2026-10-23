@@ -75,6 +75,9 @@ python3 -m pytest \
 echo "==> serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)"
 python3 -m pytest tests/test_serial_can_options.py -q
 
+echo "==> Portal Ingress wiring and minimal startup"
+python3 -m pytest tests/test_portal_ingress_wiring.py -q
+
 echo "==> Fronius-to-Home-Assistant rollout contract"
 python3 -m pytest tests/test_fronius_ha_rollout.py tests/test_m2m_runtime_wiring.py -q
 python3 scripts/check_fronius_ha_rollout.py \

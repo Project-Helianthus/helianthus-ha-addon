@@ -15,6 +15,30 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 - GraphQL: `http://<host>:8080/graphql`
 - Subscriptions: `http://<host>:8080/graphql/subscriptions`
 - MCP: `http://<host>:8080/mcp`
+- Portal: `http://<host>:8080/portal/`
+
+## Portal and Home Assistant Ingress
+
+The add-on declares Home Assistant Ingress on its existing HTTP listener
+(port 8080) with an administrator-only **Helianthus** sidebar panel that opens
+the Portal directory (`portal/`). Opening the Portal does not require the
+Helianthus Home Assistant integration. The wrapper pins the gateway Portal
+mount with `-portal-path /portal`, starts no second listener or process, and
+keeps the adapter proxy, eeBUS and M2M listeners off Ingress.
+
+- Ingress reaches the Portal only while the HTTP listener stays on port 8080.
+  With another `http_port` (or `port`) the panel is unavailable, the startup log
+  says so, and the direct Portal endpoint keeps working.
+- The packaged gateway accepts no trusted external path prefix yet. The Portal
+  shell, its assets, relative API routes and the live stream use relative URLs
+  and stay under the Ingress path. Sections that use the GraphQL, Portal catalog
+  or eeBUS admin endpoints advertised by the Portal bootstrap address root paths,
+  so they work only on the direct endpoint until the gateway accepts that prefix.
+- Ingress adds no authentication or authorization. The gateway does not trust
+  forwarded identity headers, and the direct listener stays reachable as before.
+- Gateway builds that persist Portal configuration keep it under their default
+  root, the add-on's `/data` directory; the wrapper never reads, repairs or
+  removes that record.
 
 ## Configuration
 

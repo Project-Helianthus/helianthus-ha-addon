@@ -23,6 +23,12 @@
     "8080/tcp": "GraphQL + MCP HTTP server",
     "8443/tcp": "Dedicated canonical PV M2M HTTPS server"
   },
+  "ingress": true,
+  "ingress_port": 8080,
+  "ingress_entry": "portal/",
+  "panel_icon": "mdi:flower",
+  "panel_title": "Helianthus",
+  "panel_admin": true,
   "image": "ghcr.io/project-helianthus/helianthus-ha-addon",
   "options": {
     "adapter_direct_enabled": true,
