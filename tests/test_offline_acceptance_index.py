@@ -462,6 +462,28 @@ def test_physical_rows_need_every_case_a_review_and_a_record(tmp_path, gate, edi
     assert all(row(index, other) == ("pass", []) for other in oai.PHYSICAL_GATE_IDS if other != gate)
 
 
+def test_a_record_that_vanishes_after_the_existence_check_is_not_verified(tmp_path, monkeypatch):
+    tree = make_worktree(tmp_path)
+    record = write_at(tree / "docs/vanishing-record.json", "placeholder")
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    results = write(tree, "results.json", results_doc())
+    evidence = write(tree, "evidence.json", edit_evidence(
+        "adapter-direct-ad07", lambda entry: entry.update(evidence_ref=ref("docs/vanishing-record.json"))))
+    original = ccm._absent_locally
+
+    def spy(reference, root):
+        answer = original(reference, root)
+        if reference and reference["path"] == "docs/vanishing-record.json" and record.exists():
+            record.unlink()
+        return answer
+    monkeypatch.setattr(ccm, "_absent_locally", spy)
+    index = oai.build_index(tree, metadata, [results], [evidence])
+    assert not record.exists()
+    assert index.exit_code == 2
+    assert row(index, "adapter-direct-ad07") == (
+        "unverified", ["the linked per-row evidence record does not exist in the worktree"])
+
+
 def test_each_row_needs_its_own_review(tmp_path):
     doc = evidence_doc()
     gate_entry(doc, "adapter-direct-ad07")["independent_review"] = "missing"
@@ -1442,3 +1464,34 @@ def test_help_documents_usage_and_limits():
                      "simulated evidence never upgrades", "public-only", "promotes no disposition",
                      "no execution", "listing outside the worktree", "hardware qualification"]:
         assert expected in help_text, expected
+
+
+PRIVATE_PATH = "/private/operator-records/customer-secret.json"
+
+
+def test_usage_errors_never_echo_option_text_or_values(tmp_path, capsys):
+    tree = make_worktree(tmp_path)
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    good = ["--package-root", str(tree), "--metadata", str(metadata)]
+    cases = [
+        good + ["--results-file", PRIVATE_PATH],
+        ["--metadata", str(metadata)],
+        good + ["--results", PRIVATE_PATH + "-x", "--bogus-option"],
+    ]
+    for argv in cases:
+        with pytest.raises(SystemExit) as raised:
+            oai.main(argv)
+        assert raised.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        for text in (captured.err, captured.out):
+            assert PRIVATE_PATH not in text and "results-file" not in text and "bogus" not in text
+            assert str(tmp_path) not in text
+        assert "the command line cannot be used" in captured.err
+        done = subprocess.run([sys.executable, str(SCRIPT)] + argv, capture_output=True, text=True, timeout=60)
+        assert done.returncode == 1
+        assert done.stdout == ""
+        for text in (done.stderr, done.stdout):
+            assert PRIVATE_PATH not in text and "results-file" not in text and "bogus" not in text
+            assert str(tmp_path) not in text
+        assert "the command line cannot be used" in done.stderr

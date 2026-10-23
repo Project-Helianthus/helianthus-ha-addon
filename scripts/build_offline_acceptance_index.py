@@ -369,8 +369,12 @@ def _record_problem(ref: dict[str, str] | None, root: Path, inputs: set[tuple[in
         return "the linked per-row evidence record is not in a Project-Helianthus repository"
     if ccm._absent_locally(ref, root):  # Only references into this repository are looked up.
         return "the linked per-row evidence record does not exist in the worktree"
-    if ref["repository"].lower() == ccm.ADDON_REPOSITORY and _file_identity(root, ref["path"]) in inputs:
-        return "the linked per-row evidence record is one of the supplied inputs"
+    if ref["repository"].lower() == ccm.ADDON_REPOSITORY:
+        identity = _file_identity(root, ref["path"])
+        if identity is None:  # Vanished or unopenable since the existence check: nothing to verify.
+            return "the linked per-row evidence record does not exist in the worktree"
+        if identity in inputs:
+            return "the linked per-row evidence record is one of the supplied inputs"
     return None
 
 
@@ -487,8 +491,9 @@ def build_index(package_root: str | Path, metadata: str | Path, results: list[st
 
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> None:  # A usage error is an input that cannot be used: exit 1, not 2.
+        # The message can carry option names, values and paths; only the fixed usage line is printed.
         self.print_usage(sys.stderr)
-        self.exit(1, f"{self.prog}: error: {message}\n")
+        self.exit(1, f"{self.prog}: error: the command line cannot be used\n")
 
 
 def main(argv: list[str] | None = None) -> int:
