@@ -133,6 +133,17 @@ adapter-direct mode; `proxy_profile` is reserved for an external proxy endpoint.
 The integrated proxy listener remains available through `proxy_listen_addr` for
 both adapter protocols.
 
+For a serial adapter, set `adapter_direct_address` to a device path instead of
+`<host>:<port>`, for example `/dev/serial/by-id/<device>` (replace `<device>`
+with the identifier listed on your system; the stable `/dev/serial/by-id/` form
+is recommended). The add-on already declares `uart` access. The link speed
+follows `adapter_direct_protocol`: `ens` runs at 115200 Baud, `enh` at 9600
+Baud. An `ens:` or `enh:` prefix on a device path (`ens:/dev/...` or
+`ens:///dev/...`) must match `adapter_direct_protocol`; a mismatch stops the
+add-on at startup with a message naming both values. On a `<host>:<port>`
+address a scheme prefix is ignored as before and `adapter_direct_protocol`
+decides.
+
 Upgrade compatibility is deterministic: `adapter_direct_protocol` is optional
 at the Supervisor schema boundary so persisted options created before 0.6.49
 remain saveable. When persisted options do not yet
