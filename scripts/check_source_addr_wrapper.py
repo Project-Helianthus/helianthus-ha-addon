@@ -114,6 +114,15 @@ def _write_gateway_stub(path: Path, mode: str) -> None:
             "  -semantic-cache-path string\n"
         ),
     }
+    if mode == "long-help":
+        # -instance-guid sits on the first line of a help text far larger than
+        # a 64 KB pipe buffer, so a probe that keeps writing after grep -q has
+        # matched and exited would hit EPIPE under pipefail.
+        help_by_mode[mode] = (
+            "  -instance-guid string\n"
+            + help_by_mode["new"].split("\n", 1)[1]
+            + "".join(f"  filler line {i:05d} padding the usage text\n" for i in range(2500))
+        )
     if mode == "missing-instance-guid":
         help_by_mode[mode] = "Usage of gateway:\n  -source-addr string\n"
     script = f"""#!/usr/bin/env python3
@@ -619,6 +628,19 @@ def _check_runtime_cases() -> None:
     _assert(argv == [], "gateway lacking -instance-guid must fail before invocation")
     _assert(not state_exists, "required-interface failure must not create wrapper state")
     _assert("does not support required -instance-guid" in stderr, "required-interface failure must name -instance-guid")
+
+    argv, _logs, _state_exists, _state_content, _ = _run_wrapper_case(
+        source_addr="auto",
+        gateway_mode="long-help",
+    )
+    _assert(
+        "-instance-guid" in argv,
+        "gateway with a help text over 64 KB listing -instance-guid first must start normally",
+    )
+    _assert(
+        "-semantic-cache-path" in argv,
+        "long help text must not make the capability probe drop later flags",
+    )
 
 
 def main() -> int:

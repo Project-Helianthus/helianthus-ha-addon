@@ -663,7 +663,7 @@ binary_supports_flag() {
   binary="$1"
   flag="$2"
   output=$("${binary}" --help 2>&1 || true)
-  printf '%s\n' "${output}" | grep -Eq -- "(^|[[:space:]])-${flag}([[:space:],=]|$)"
+  grep -Eq -- "(^|[[:space:]])-${flag}([[:space:],=]|$)" <<<"${output}"
 }
 
 gateway_supports_flag() {
