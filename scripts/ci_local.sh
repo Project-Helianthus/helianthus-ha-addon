@@ -81,6 +81,9 @@ python3 -m pytest \
 echo "==> serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)"
 python3 -m pytest tests/test_serial_can_options.py -q
 
+echo "==> serial adapter-direct address handling (device path, scheme prefix versus protocol)"
+python3 -m pytest tests/test_adapter_direct_serial_address.py -q
+
 echo "==> Portal Ingress wiring and minimal startup"
 python3 -m pytest tests/test_portal_ingress_wiring.py -q
 

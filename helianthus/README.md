@@ -46,7 +46,7 @@ Key options are exposed in `config.json`:
 
 - `adapter_direct_enabled`: connect through the gateway adapter-direct path
 - `adapter_direct_protocol`: explicit physical adapter protocol, `enh` or `ens` (default `enh`)
-- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (`<host>:<port>`)
+- `adapter_direct_address`: physical adapter endpoint for adapter-direct mode (`<host>:<port>`, or a serial device path such as `/dev/serial/by-id/<device>`)
 - `proxy_listen_addr`: gateway-embedded adaptermux proxy listener address (default `0.0.0.0:19001`)
 - `transport`: `enh`, `ens`, `udp-plain`, or `ebusd-tcp`
 - `network`: `tcp`, `udp`, or `unix`
@@ -120,6 +120,17 @@ and `proxy_listen_addr=<listen-host:port>`. ENH emits
 Keep `proxy_profile=disabled`: adapter-direct and an external proxy endpoint are
 mutually exclusive configurations. The gateway-integrated proxy listener is
 preserved for both adapter protocols.
+
+A serial adapter is configured by device path instead of `<host>:<port>`, for
+example `adapter_direct_address=/dev/serial/by-id/<device>` (replace `<device>`
+with the identifier listed on your system). The stable `/dev/serial/by-id/`
+form is recommended because it survives re-enumeration. The add-on already
+declares `uart` access. The link speed follows `adapter_direct_protocol`: `ens`
+runs at 115200 Baud, `enh` at 9600 Baud. An `ens:` or `enh:` prefix on a
+device path (`ens:/dev/...` or `ens:///dev/...`) must match
+`adapter_direct_protocol`; a mismatch stops the add-on at startup naming both
+values. On a `<host>:<port>` address a scheme prefix is ignored as before and
+`adapter_direct_protocol` decides.
 
 For upgrade compatibility only, when persisted options do not yet contain
 `adapter_direct_protocol`, the wrapper recognizes the exact old adapter-direct

@@ -521,10 +521,32 @@ fi
 
 # adapter-direct mode: override transport to adapter-direct:// URI
 if bashio::var.true "${adapter_direct_enabled}"; then
-  # Strip whitespace, then strip any scheme prefix (ens://, enh://, adapter-direct://)
+  # Strip whitespace, then any scheme prefix (ens://, enh://, adapter-direct://)
   # for compatibility. The typed adapter_direct_protocol option remains the
   # only authority for selecting ENH versus ENS.
-  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s|^[a-zA-Z][-a-zA-Z0-9]*://||')
+  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  # Serial device path only: an ens: or enh: prefix in front of an absolute
+  # device path (ens:/dev/..., ens:///dev/...) must agree with
+  # adapter_direct_protocol. A disagreement would silently run the link at the
+  # other speed, so it stops startup instead. A <host>:<port> address, with or
+  # without a scheme prefix, is not touched here and keeps its previous
+  # behaviour below: the prefix is ignored and the typed protocol decides.
+  if [[ "${adapter_direct_address_trimmed}" =~ ^([eE][nN][sShH]): ]]; then
+    adapter_direct_address_prefix=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
+    adapter_direct_address_remainder="${adapter_direct_address_trimmed#*:}"
+    if [ "${adapter_direct_address_remainder#//}" != "${adapter_direct_address_remainder}" ]; then
+      adapter_direct_address_remainder="${adapter_direct_address_remainder#//}"
+    fi
+    case "${adapter_direct_address_remainder}" in
+      /*)
+        if [ "${adapter_direct_address_prefix}" != "${adapter_direct_protocol}" ]; then
+          bashio::exit.nok "adapter_direct_address prefix '${adapter_direct_address_prefix}:' disagrees with adapter_direct_protocol='${adapter_direct_protocol}'; set adapter_direct_protocol to '${adapter_direct_address_prefix}' or remove the prefix from adapter_direct_address"
+        fi
+        adapter_direct_address_trimmed="${adapter_direct_address_remainder}"
+        ;;
+    esac
+  fi
+  adapter_direct_address_trimmed=$(printf '%s' "${adapter_direct_address_trimmed}" | sed -E 's|^[a-zA-Z][-a-zA-Z0-9]*://||')
   if [ -z "${adapter_direct_address_trimmed}" ]; then
     bashio::exit.nok "adapter_direct_address is required when adapter_direct_enabled=true"
   fi
