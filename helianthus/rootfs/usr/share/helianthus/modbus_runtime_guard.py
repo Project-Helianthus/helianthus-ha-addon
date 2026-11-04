@@ -176,6 +176,7 @@ def _endpoint_key(endpoint: object) -> tuple[str, int]:
     try:
         host = str(ipaddress.ip_address(host))
     except ValueError:
+        # Not an IP literal: a DNS name keeps its lowercase-insensitive text form as the identity.
         pass
     return host, int(parsed.port or 0)
 
@@ -318,6 +319,7 @@ def _remove(path: Path) -> None:
     try:
         os.unlink(path)
     except FileNotFoundError:
+        # Nothing to remove: the target already being absent is the wanted end state.
         pass
 
 
