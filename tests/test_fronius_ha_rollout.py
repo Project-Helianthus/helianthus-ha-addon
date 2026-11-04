@@ -14,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.6.58"
-GATEWAY = "e017a547967e449ffbe76ea779d5892596306f07"
+GATEWAY = "df10991f5a589a59b2a1f8fdfca2c056518561fc"
 HA_INTEGRATION = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 FIXTURE = ROOT / "scripts/fixtures/fronius_ha_rollout_contract_pass.json"
 VERIFIER = ROOT / "scripts/check_fronius_ha_rollout.py"

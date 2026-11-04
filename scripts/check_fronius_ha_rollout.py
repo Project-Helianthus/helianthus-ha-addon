@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 
 CONTRACT_ID = "helianthus.fronius-ha-rollout/v1"
 ADDON_VERSION = "0.6.58"
-GATEWAY_REF = "e017a547967e449ffbe76ea779d5892596306f07"
+GATEWAY_REF = "df10991f5a589a59b2a1f8fdfca2c056518561fc"
 HA_INTEGRATION_REF = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 IMAGE_REPOSITORY = "ghcr.io/project-helianthus/helianthus-ha-addon"
 REQUIRED_ASSERTIONS = {

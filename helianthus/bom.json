@@ -10,8 +10,8 @@
   },
   "gateway": {
     "repository": "https://github.com/Project-Helianthus/helianthus-ebusgateway",
-    "commit": "e017a547967e449ffbe76ea779d5892596306f07",
-    "tree": "c83e23ac9109a00462cbcee6043c6c60ac29d42a"
+    "commit": "df10991f5a589a59b2a1f8fdfca2c056518561fc",
+    "tree": "55d128886435f0dc82709dbcbdb663e26338886a"
   },
   "vrc_explorer": {
     "repository": "https://github.com/Project-Helianthus/helianthus-vrc-explorer",
@@ -24,42 +24,42 @@
     "requires": [
       {
         "path": "github.com/Project-Helianthus/helianthus-ebusgo",
-        "version": "v0.5.1-0.20260921041247-2ebba9fb05fe",
+        "version": "v0.5.1-0.20261027131913-af6c5843b1e3",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-ebusreg",
-        "version": "v0.0.0-20260906140547-e24532a50caa",
+        "version": "v0.0.0-20261016182529-f90a3e330da7",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-eebus-go",
-        "version": "v0.7.1-helianthus.20",
+        "version": "v0.7.1-helianthus.21",
         "indirect": true
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-eebusreg",
-        "version": "v0.1.35",
+        "version": "v0.1.36",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-modbus",
-        "version": "v0.3.1-0.20260909115211-f670287d0d86",
+        "version": "v0.3.1-0.20261016201245-8407c5250771",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-modbusreg",
-        "version": "v0.6.8-0.20260905063817-ed75fdfbed0d",
+        "version": "v0.6.8-0.20261025102717-d4a92a1d2613",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-semreg",
-        "version": "v0.0.0-20260911082644-089ed6ae9004",
+        "version": "v0.0.0-20261024114030-40eb069a9e59",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-ship-go",
-        "version": "v0.6.1-helianthus.18",
+        "version": "v0.6.1-helianthus.19",
         "indirect": true
       },
       {
@@ -189,9 +189,9 @@
       }
     ],
     "replace": [],
-    "go_mod_sha256": "55a995a24c50414c128beab7641b6c48c9dd00bd1caf33b102d05bb9826dc4d6",
-    "go_sum_sha256": "40ee643aa786df71a3c3ac3dc770a0e1b1b5c91885e8ee32b7d6f9390a3e295e",
-    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/e017a547967e449ffbe76ea779d5892596306f07/go.mod",
+    "go_mod_sha256": "e1b12beb3baefeb58d60fe494435708e995538d87f15df8e96798ea3ac704ae6",
+    "go_sum_sha256": "24464a64063b3911447fe9a7adf803d126f0769b362b7ebe844b523764b6e0a2",
+    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/df10991f5a589a59b2a1f8fdfca2c056518561fc/go.mod",
     "build_mode": "GOWORK=off GOFLAGS=-mod=readonly (Dockerfile builder stage)"
   },
   "images": {
@@ -217,6 +217,9 @@
     "observed_at": "2026-10-14T09:10:46Z"
   },
   "gateway_cli_flags": [
+    "adapter-mux-idle-release-grace",
+    "adapter-mux-max-ownership-duration",
+    "adapter-mux-read-timeout",
     "address",
     "boot-live-timeout",
     "broadcast",
@@ -231,6 +234,7 @@
     "eebus-enabled",
     "eebus-interfaces",
     "eebus-listen-port",
+    "eebus-operator-socket-dir",
     "eebus-pairing-window-mode",
     "eebus-private-key-path",
     "eebus-remote-ski-allowlist",
@@ -269,11 +273,13 @@
     "modbus-tcp-enabled",
     "modbus-tcp-endpoint",
     "modbus-tcp-endpoint-file",
+    "modbus-tcp-endpoints-file",
     "network",
     "observe-first-enabled",
     "passive-config-direct-apply",
     "passive-state-direct-apply",
     "phantom-initiator-reject-bytes",
+    "portal-config-root",
     "portal-modbus-raw-read-enabled",
     "portal-path",
     "portal-pv-asset-ref",

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Add the optional `modbus_tcp_endpoints` list (up to eight entries with label, family,
+  endpoint, dial timeout, unit allowlist and pacing members) for several read-only
+  Modbus TCP endpoints. The guard validates the whole list atomically, the wrapper
+  writes one owner-only endpoints document and passes only `-modbus-tcp-endpoints-file`
+  when the packaged gateway advertises it, and refuses the list otherwise. The list
+  cannot be mixed with `modbus_tcp_endpoint` or a changed `modbus_tcp_dial_timeout`
+  (`MIXED_CONFIGURATION`). With an empty list, and with Modbus disabled, startup and the
+  gateway arguments are unchanged. The offline acceptance index gains the twelve Huawei
+  Modbus TCP rows, unverified until reviewed live operator evidence exists. The catalog
+  version is unchanged.
+- Pin gateway `df10991f5a589a59b2a1f8fdfca2c056518561fc`, a gateway main revision that
+  defines `-modbus-tcp-endpoints-file` and serves Portal requests under the Ingress
+  path prefix. The wrapper names that flag, and the BOM check fails while the pinned
+  gateway does not define every flag the wrapper uses. The BOM is regenerated for the
+  new pin (gateway commit and tree, Go module pins, `go.mod` and `go.sum` digests, six
+  new gateway flags); `m2m-graphql-denied-principals` stays out of the flag set. The
+  Dockerfile, the build workflow, the parity artifact fixture and the pin checks move
+  with it. The catalog version is unchanged.
 - Add the opt-in `test-image` workflow (manual dispatch with a gateway commit) that
   publishes only `test-<label>-<short sha>` images. The catalog version, the BOM and
   the stable gateway pin are unchanged.

@@ -41,6 +41,17 @@ ARTIFACTS = {"addon": "artifact-addon-index", "gateway": "artifact-gateway-index
              "explorer": "artifact-explorer-index", "ha_integration": "artifact-integration-index"}
 RANGE = "transport-proxy-dual-client"
 SINGLE = "adapter-direct-ad01"
+# The gateway handoff's Huawei Modbus TCP rows, per gateway family and kind of evidence, in its order.
+HUAWEI_FAMILIES = ("smartlogger", "emma", "sdongle")
+HUAWEI_KINDS = ("identity", "monitoring-publication", "degraded-reconnect", "negative-cross-family")
+HUAWEI_GATES = (
+    "huawei-smartlogger-identity", "huawei-smartlogger-monitoring-publication",
+    "huawei-smartlogger-degraded-reconnect", "huawei-smartlogger-negative-cross-family",
+    "huawei-emma-identity", "huawei-emma-monitoring-publication",
+    "huawei-emma-degraded-reconnect", "huawei-emma-negative-cross-family",
+    "huawei-sdongle-identity", "huawei-sdongle-monitoring-publication",
+    "huawei-sdongle-degraded-reconnect", "huawei-sdongle-negative-cross-family",
+)
 # Computed, never embedded: a commit-like fragment that must never reach the index.
 COMMIT_LIKE = hashlib.sha1(b"synthetic commit").hexdigest()
 HEXLIKE = re.compile(r"[0-9A-Fa-f]{7,}")
@@ -565,7 +576,8 @@ def test_more_than_one_live_record_for_a_gate_is_ambiguous(tmp_path):
 @pytest.mark.parametrize("edit, message", [
     (lambda doc: doc["gates"].__setitem__(1, copy.deepcopy(doc["gates"][0])),
      "gates[1].gate repeats transport-direct-adapter"),
-    (lambda doc: doc["gates"].append(copy.deepcopy(doc["gates"][0])), "gates must not exceed 52 entries"),
+    (lambda doc: doc["gates"].append(copy.deepcopy(doc["gates"][0])),
+     f"gates must not exceed {len(oai.PHYSICAL_GATES)} entries"),
     (lambda doc: doc["gates"][0]["cases"].append(dict(doc["gates"][0]["cases"][0])),
      "gates[0].cases must not exceed 4 entries"),
     (lambda doc: doc["gates"][0]["cases"].__setitem__(1, {"case": "T01", "outcome": "pass"}),
@@ -1396,12 +1408,13 @@ def test_physical_gates_mirror_the_consolidated_handoff_rows():
                      + [f"legacy-identity-p{number}" for number in range(1, 7)]
                      + [f"legacy-identity-n{number}" for number in range(1, 6)]
                      + ["legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle",
-                        "explorer-pi", "eebus-output-binding", "matter-output-binding"])
+                        "explorer-pi", "eebus-output-binding", "matter-output-binding"]
+                     + list(HUAWEI_GATES))
     assert list(oai.ROW_GATES) == expected_rows
     assert all(cases[gate] == (gate,) for gate in expected_rows)
     assert list(oai.PHYSICAL_GATE_IDS) == ranges + expected_rows
-    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 52
-    assert sum(len(gate_cases) for _, gate_cases in oai.PHYSICAL_GATES) == 147
+    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 64
+    assert sum(len(gate_cases) for _, gate_cases in oai.PHYSICAL_GATES) == 159
     assert not any("rtu" in gate for gate in oai.PHYSICAL_GATE_IDS), "historical RTU evidence is never a live row"
     assert all(ccm.OPAQUE_ID.fullmatch(gate) for gate in oai.PHYSICAL_GATE_IDS)
 
@@ -1716,3 +1729,146 @@ def test_the_ambiguous_gate_partner_is_shared_through_a_hard_link(tmp_path):
     index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref("docs/alias.md")), prepare=prepare)
     assert index.exit_code == 2
     only_ambiguous(index, shared=(SECOND,))
+
+
+# ------------------------------------------------------ Huawei Modbus TCP rows
+# The rows are the gateway handoff's blank Huawei rows: per gateway family, identity, monitoring
+# publication, degraded and reconnect, and negative cross-family. Fields of a row's identity: the
+# family and the kind. Each test below varies both, so a production mutation that keys a row by
+# family alone, by kind alone or by neither is caught (the mutations are listed in the PR report).
+
+HUAWEI_PAIRS = [(family, kind) for family in HUAWEI_FAMILIES for kind in HUAWEI_KINDS]
+HUAWEI_BY_PAIR = dict(zip(HUAWEI_PAIRS, HUAWEI_GATES))
+OTHERS = tuple(gate for gate in oai.PHYSICAL_GATE_IDS if gate not in HUAWEI_GATES)
+
+
+def huawei_gate(family: str, kind: str) -> str:
+    return HUAWEI_BY_PAIR[(family, kind)]
+
+
+def test_the_huawei_rows_are_one_single_case_gate_per_family_and_kind_after_the_other_rows():
+    assert tuple(oai.HUAWEI_GATES) == HUAWEI_GATES and len(set(HUAWEI_GATES)) == 12
+    assert list(oai.PHYSICAL_GATE_IDS[-12:]) == list(HUAWEI_GATES)
+    assert oai.PHYSICAL_GATE_IDS[-13] == "matter-output-binding"
+    for family, kind in HUAWEI_PAIRS:
+        gate = huawei_gate(family, kind)
+        assert gate == f"huawei-{family}-{kind}" and oai.CASES[gate] == (gate,)
+    assert {gate.split("-")[1] for gate in HUAWEI_GATES} == set(HUAWEI_FAMILIES)
+    assert all(ccm.OPAQUE_ID.fullmatch(gate) and not HEXLIKE.search(gate) for gate in HUAWEI_GATES)
+    assert not set(HUAWEI_GATES) & set(oai.SOFTWARE_GATE_IDS)
+
+
+def test_the_huawei_rows_stay_unverified_without_operator_evidence(tmp_path):
+    index = run(tmp_path, results=(results_doc(),), evidence=(evidence_doc(gates=OTHERS),))
+    assert index.exit_code == 2 and index.document["evidence"] == "incomplete"
+    for gate in HUAWEI_GATES:
+        assert row(index, gate) == ("unverified", ["no operator evidence was supplied"]), gate
+    assert all(row(index, gate) == ("pass", []) for gate in OTHERS)
+    assert index.document["blocking"] == [f"{gate}: no operator evidence was supplied" for gate in HUAWEI_GATES]
+    assert index.document["physical"]["status"] == "incomplete"
+
+
+def test_software_results_alone_cannot_reach_a_huawei_row(tmp_path):
+    for gate in HUAWEI_GATES:
+        smuggled = results_doc()
+        smuggled["results"].append({"gate": gate, "artifact_id": ARTIFACTS["gateway"], "outcome": "pass",
+                                    "omitted_checks": []})
+        index = run(tmp_path, results=(smuggled,))
+        assert index.exit_code == 1
+        assert index.document["input_errors"] == [
+            f"results[0]: results[{len(smuggled['results']) - 1}].gate must be one of "
+            f"{', '.join(oai.SOFTWARE_GATE_IDS)}"]
+        assert row(index, gate) == ("unverified", ["no operator evidence was supplied"])
+
+
+def test_simulated_evidence_cannot_pass_a_huawei_row(tmp_path):
+    simulated = evidence_doc(environment="simulated", gates=HUAWEI_GATES)
+    index = run(tmp_path, results=(results_doc(),), evidence=(evidence_doc(gates=OTHERS), simulated))
+    assert index.exit_code == 2
+    for gate in HUAWEI_GATES:
+        assert row(index, gate) == (
+            "unverified", ["only simulated evidence was supplied; it cannot establish live acceptance"]), gate
+    assert all(row(index, gate) == ("pass", []) for gate in OTHERS)
+
+
+def test_a_failing_simulated_huawei_record_never_becomes_a_failure_or_a_pass(tmp_path):
+    failing = evidence_doc(environment="simulated", gates=HUAWEI_GATES)
+    for entry_ in failing["gates"]:
+        entry_["cases"][0]["outcome"] = "fail"
+    index = run(tmp_path, results=(results_doc(),), evidence=(evidence_doc(gates=OTHERS), failing))
+    assert [row(index, gate)[0] for gate in HUAWEI_GATES] == ["unverified"] * 12
+
+
+def test_live_reviewed_recorded_evidence_is_what_passes_a_huawei_row(tmp_path):
+    index = complete(tmp_path)
+    assert index.exit_code == 0 and index.document["evidence"] == "complete"
+    assert [row(index, gate) for gate in HUAWEI_GATES] == [("pass", [])] * 12
+
+
+@pytest.mark.parametrize("gate", HUAWEI_GATES)
+def test_evidence_for_one_huawei_row_passes_that_row_alone(tmp_path, gate):
+    index = run(tmp_path, results=(results_doc(),), evidence=(evidence_doc(gates=OTHERS + (gate,)),))
+    assert row(index, gate) == ("pass", [])
+    assert [row(index, other) for other in HUAWEI_GATES if other != gate] == [
+        ("unverified", ["no operator evidence was supplied"])] * 11
+
+
+@pytest.mark.parametrize("gate", HUAWEI_GATES)
+@pytest.mark.parametrize("edit, status, reason", [
+    (lambda entry_: entry_["cases"][0].update(outcome="fail"), "fail", "1 case(s) failed"),
+    (lambda entry_: entry_["cases"][0].update(outcome="blocked"), "unverified", "1 case(s) were blocked or not run"),
+    (lambda entry_: entry_["cases"][0].update(outcome="not-run"), "unverified", "1 case(s) were blocked or not run"),
+    (lambda entry_: entry_.update(independent_review="missing"), "unverified",
+     "independent review of this row's evidence is missing"),
+    (lambda entry_: entry_.update(evidence_ref=None), "unverified", "no per-row evidence record is linked"),
+    (lambda entry_: entry_.update(evidence_ref=ref("docs/absent-evidence.md")), "unverified",
+     "the linked per-row evidence record does not exist in the worktree"),
+], ids=["fail", "blocked", "not-run", "unreviewed", "unlinked", "absent-record"])
+def test_a_huawei_row_needs_a_passing_case_a_review_and_its_own_record(tmp_path, gate, edit, status, reason):
+    doc = evidence_doc()
+    edit(gate_entry(doc, gate))
+    index = run(tmp_path, results=(results_doc(),), evidence=(doc,))
+    assert index.exit_code == 2
+    assert row(index, gate) == (status, [reason])
+    assert all(row(index, other) == ("pass", []) for other in oai.PHYSICAL_GATE_IDS if other != gate)
+
+
+@pytest.mark.parametrize("family, kind", HUAWEI_PAIRS)
+def test_a_huawei_case_belongs_to_exactly_one_family_and_kind(tmp_path, family, kind):
+    gate = huawei_gate(family, kind)
+    same_family = huawei_gate(family, HUAWEI_KINDS[(HUAWEI_KINDS.index(kind) + 1) % len(HUAWEI_KINDS)])
+    same_kind = huawei_gate(HUAWEI_FAMILIES[(HUAWEI_FAMILIES.index(family) + 1) % len(HUAWEI_FAMILIES)], kind)
+    for foreign in (same_family, same_kind, "adapter-direct-ad01"):
+        doc = evidence_doc(gates=(gate,))
+        doc["gates"][0]["cases"][0]["case"] = foreign
+        index = run(tmp_path, results=(results_doc(),), evidence=(doc,))
+        assert index.exit_code == 1
+        assert index.document["input_errors"] == [f"operator evidence[0]: gates[0].cases[0].case is not a case of {gate}"]
+
+
+def test_a_family_record_cannot_stand_in_for_its_four_rows(tmp_path):
+    for family in HUAWEI_FAMILIES:
+        shared = [huawei_gate(family, kind) for kind in HUAWEI_KINDS]
+        case_dir = tmp_path / family
+        case_dir.mkdir()
+        index = shared_run(case_dir, {gate: ref(record(shared[0])) for gate in shared})
+        assert index.exit_code == 2
+        only_shared(index, *shared)
+
+
+def test_one_family_record_shared_across_families_fails_each_sharing_row(tmp_path):
+    cross = [huawei_gate(family, "identity") for family in HUAWEI_FAMILIES]
+    index = shared_run(tmp_path, {gate: ref(record(cross[0])) for gate in cross})
+    assert index.exit_code == 2
+    only_shared(index, *cross)
+
+
+def test_the_huawei_rows_appear_in_the_companion_page_with_their_limits():
+    page = DOC.read_text(encoding="utf-8")
+    for gate in HUAWEI_GATES:
+        assert f"`{gate}`" in page, gate
+    for family in ("huawei.smartlogger", "huawei.emma", "huawei.sdongle"):
+        assert f"`{family}`" in page
+    for statement in ["HUAWEI-SMARTLOGGER", "HUAWEI-EMMA", "HUAWEI-SDONGLE", "twelve Huawei rows", "withheld",
+                      "stay `unverified`", "simulated evidence", "not a\nqualification, an admission or a support claim"]:
+        assert statement in page, statement

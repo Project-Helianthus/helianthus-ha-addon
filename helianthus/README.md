@@ -66,6 +66,7 @@ Key options are exposed in `config.json`:
 - `modbus_tcp_enabled`: opt in to the read-only Modbus TCP sidecar (default `false`)
 - `modbus_tcp_endpoint`: one visible `tcp://host:port` routing endpoint; embedded credentials are rejected
 - `modbus_tcp_dial_timeout`: bounded `ms` or `s` dial timeout from 100 ms through 30 s
+- `modbus_tcp_endpoints`: optional list of up to eight Modbus TCP endpoints, one read-only driver instance each (default empty; see [Several Modbus TCP endpoints](#several-modbus-tcp-endpoints))
 
 The add-on validates the closed option bundle, materializes the admitted
 endpoint in a private runtime file, appends the three Modbus flags when enabled,
@@ -129,6 +130,89 @@ Once the typed key is persisted it remains authoritative even if the stale
 profile remains. Save `adapter_direct_protocol` explicitly and reset
 `proxy_profile=disabled` after upgrading. Adapter-direct plus a populated
 external `proxy_endpoint` is rejected.
+
+## Several Modbus TCP endpoints
+
+`modbus_tcp_endpoints` replaces the three scalar options when the gateway should
+read several Modbus TCP endpoints (up to eight entries), each as its own read-only
+driver instance with its own connection, pacing and failure isolation. The contract is the
+[multi-endpoint runtime page](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/modbus-multi-endpoint-runtime.md)
+of the public eBUS documentation; this add-on only validates the list, writes it
+and passes the gateway one path.
+
+Each entry has these members (a bold name is required):
+
+| Member | Rule | Default when omitted |
+| --- | --- | --- |
+| **`label`** | 1 to 32 characters: lowercase letters and digits, single hyphens between them, starting with a letter; unique in the list. `default` keeps the driver identity of the single endpoint. The label becomes part of the driver ID that every gateway surface shows, so never encode an address, serial number or site detail in it. | |
+| **`family`** | `sunspec`, `huawei.smartlogger`, `huawei.emma` or `huawei.sdongle`. The declared family is the only family tried. | |
+| **`endpoint`** | `tcp://host:port` with an IP literal or DNS name, port 1 to 65535, at most 288 characters, no credentials, path or query; unique after lowercasing the host, dropping one trailing dot and normalizing the IP spelling and port. Rendered as a password field. | |
+| `dial_timeout` | `ms` or `s` duration from 100 ms through 30 s. | `5s` |
+| `units` | Allowlist of 1 to 32 distinct routed unit numbers from 1 to 247. It narrows what a family reports and never widens it. For `sunspec` leave it out or use exactly `[1]`. | the family's own routing |
+| `pacing_gap_ms` | Idle time between two transactions on the connection, 50 to 2000. | 200 |
+| `pacing_settle_ms` | Wait after each connect before the first request, 0 to 10000. | 1000 |
+| `pacing_cycle_s` | Interval between acquisition cycles, 15 to 3600. | 30 (15 for `sunspec`) |
+| `pacing_backoff_floor_s` | First reconnect delay, 1 to 300; each further failure doubles it. | 5 |
+| `pacing_backoff_ceiling_s` | Largest reconnect delay, 5 to 3600, not below the floor. | 300 |
+
+The defaults are applied by the gateway, not written by the add-on; they are the
+contract's recommendation for production sites, not measured guarantees. The
+pacing members are flat options because the Supervisor option schema cannot mark
+a nested object optional; the add-on writes them as the `pacing` object of the
+endpoints document.
+
+```yaml
+modbus_tcp_enabled: true
+modbus_tcp_endpoint: ""
+modbus_tcp_dial_timeout: 5s
+modbus_tcp_endpoints:
+  - label: default
+    family: sunspec
+    endpoint: tcp://sunspec-a.example.invalid:502
+  - label: roof
+    family: sunspec
+    endpoint: tcp://sunspec-b.example.invalid:1502
+    pacing_gap_ms: 300
+```
+
+Selection and refusal:
+
+- `modbus_tcp_enabled: false` ignores the list and the scalars and validates
+  neither. An empty list keeps the single-endpoint configuration exactly as it
+  was: the same three flags and the same private endpoint file.
+- A non-empty list needs `modbus_tcp_endpoint` empty and `modbus_tcp_dial_timeout`
+  at `5s`. Otherwise startup stops with `MIXED_CONFIGURATION` before the gateway
+  starts. To move from the single endpoint to the list, copy it into an entry
+  labelled `default` with family `sunspec`, then clear the scalar endpoint. The
+  driver identity, source, stored state and tools stay the same, but pacing does
+  not: an entry allows one request in flight instead of up to four, adds a gap
+  between requests and a settle wait after each connect, and reconnects with a
+  backoff of 5 s to 300 s instead of 1 s to 30 s (the 15 s `sunspec` cycle is
+  kept). Moving back to the scalar options restores the single-endpoint limits and
+  drops every pacing value; none is translated.
+- The whole list is validated before anything is written, in the contract's
+  order, and the first failing check stops startup with one category and, for an
+  entry-local case, its zero-based position (for example
+  `INVALID_ENDPOINT (entry 1)`). The categories are `MIXED_CONFIGURATION`,
+  `INVALID_DOCUMENT`, `TOO_MANY_ENTRIES`, `MISSING_FIELD`, `UNKNOWN_MEMBER`,
+  `INVALID_LABEL`, `UNKNOWN_FAMILY`, `INVALID_ENDPOINT`, `INVALID_TIMEOUT`,
+  `INVALID_UNITS`, `INVALID_PACING`, `DUPLICATE_LABEL` and `DUPLICATE_ENDPOINT`.
+  Messages never carry an endpoint, label or other value.
+- The valid list becomes one JSON document in the private runtime directory (file
+  mode `0600` in a `0700` directory), staged and renamed atomically. Earlier
+  material is removed before validation, so a rejected list leaves no document.
+  The gateway receives only `-modbus-tcp-endpoints-file` with that path: the
+  endpoints appear in no argument, environment variable or log line.
+- A gateway that does not advertise `-modbus-tcp-endpoints-file` cannot read the
+  list. Startup then stops with a message naming the option instead of ignoring
+  it; the single-endpoint configuration and the disabled default are unaffected.
+- A change to the list takes effect at the next add-on start. An entry that is
+  removed is not registered at that start.
+- A Huawei family is accepted as configuration only. The gateway lists its
+  instance as withheld and sends nothing until that family's own native contract
+  admits a qualification, and the physical acceptance rows for those families
+  stay unverified in the [offline acceptance index](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/offline-acceptance-index.md)
+  until reviewed operator evidence exists.
 
 ## Serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)
 

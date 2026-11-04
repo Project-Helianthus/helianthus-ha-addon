@@ -4,7 +4,7 @@
   "mode": "contract",
   "release": {
     "addon_version": "0.6.58",
-    "gateway_ref": "e017a547967e449ffbe76ea779d5892596306f07",
+    "gateway_ref": "df10991f5a589a59b2a1f8fdfca2c056518561fc",
     "ha_integration_ref": "e614e63898d4ddc317c66f1a673fefe0e2786245"
   },
   "required_assertions": {

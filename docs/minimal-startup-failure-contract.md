@@ -52,6 +52,12 @@ The wrapper captures successful shell assignments in a protected temporary
 file, stages the endpoint privately and atomically, passes an endpoint-file
 flag rather than its value, and cleans pre-exec material on exit. It removes
 the retired health record; that file is not a supported diagnostic interface.
+A non-empty `modbus_tcp_endpoints` list selects a second validated shape: the
+guard checks the whole list, and a second guard call writes one owner-only
+endpoints document instead of the single-line file. Handled list failures keep
+the `invalid Modbus TCP configuration` prefix and append one static category and,
+for an entry-local case, the zero-based entry position, never a value. A packaged
+gateway that does not advertise the document flag stops startup before launch.
 
 The serial/CAN helper's name does not imply CAN hardware probing. `_family`
 emits nothing for a disabled family, including dormant fields. Enabled
