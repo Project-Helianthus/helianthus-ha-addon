@@ -10,8 +10,8 @@
   },
   "gateway": {
     "repository": "https://github.com/Project-Helianthus/helianthus-ebusgateway",
-    "commit": "df10991f5a589a59b2a1f8fdfca2c056518561fc",
-    "tree": "55d128886435f0dc82709dbcbdb663e26338886a"
+    "commit": "94fcf9c21c334b837a63dcff28e33de5f11af0c4",
+    "tree": "1dae73dc78e641932a2444cf19e8b262282d0cb0"
   },
   "vrc_explorer": {
     "repository": "https://github.com/Project-Helianthus/helianthus-vrc-explorer",
@@ -191,7 +191,7 @@
     "replace": [],
     "go_mod_sha256": "e1b12beb3baefeb58d60fe494435708e995538d87f15df8e96798ea3ac704ae6",
     "go_sum_sha256": "24464a64063b3911447fe9a7adf803d126f0769b362b7ebe844b523764b6e0a2",
-    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/df10991f5a589a59b2a1f8fdfca2c056518561fc/go.mod",
+    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/94fcf9c21c334b837a63dcff28e33de5f11af0c4/go.mod",
     "build_mode": "GOWORK=off GOFLAGS=-mod=readonly (Dockerfile builder stage)"
   },
   "images": {
@@ -201,7 +201,7 @@
     },
     "builder_python": {
       "ref": "python:3.12-alpine",
-      "observed_digest": "sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4"
+      "observed_digest": "sha256:e6dae589c1c05976188fd3bd019afd091445fc533ed2ea29001beddc7368a9c8"
     },
     "base": {
       "amd64": {
@@ -214,7 +214,7 @@
       }
     },
     "digest_note": "Digests were observed at generation time; the build references tags. INT-16 replaces them with pinned digests when it freezes the BOM.",
-    "observed_at": "2026-10-14T09:10:46Z"
+    "observed_at": "2026-11-05T16:58:46Z"
   },
   "gateway_cli_flags": [
     "adapter-mux-idle-release-grace",
@@ -244,6 +244,10 @@
     "enable-static-seed-table",
     "external-write-policy",
     "graphql-path",
+    "growatt-bms-can-enabled",
+    "growatt-bms-can-interface",
+    "growatt-bms-can-listen-only-confirmed",
+    "growatt-bms-can-stale-after",
     "growatt-bms-rs485-asset-id",
     "growatt-bms-rs485-baud",
     "growatt-bms-rs485-driver-generation",
@@ -262,10 +266,12 @@
     "instance-guid-source",
     "m2m-graphql-allowed-assets",
     "m2m-graphql-client-ca",
+    "m2m-graphql-denied-principals",
     "m2m-graphql-listen",
     "m2m-graphql-server-cert",
     "m2m-graphql-server-key",
     "m2m-graphql-server-name",
+    "matter-library-enabled",
     "mcp-path",
     "mdns",
     "mdns-instance",

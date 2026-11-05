@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Map the add-on's serial acquisition options to gateway argv.
 
-Two independent, disabled-by-default families are handled here:
+Three independent, disabled-by-default families are handled here:
 
 * Growatt BMS RS-485 observer (``growatt-bms-rs485-*`` gateway flags).
 * Tesla Gen3 HSC retained owner (``tesla-gen3-hsc-*`` gateway flags). The owner
   is non-send on the pinned gateway: these options configure identity and epochs
   only and open no serial or network path.
+* Growatt BMS CAN receive-only observer (``growatt-bms-can-*`` gateway flags). The
+  options name one SocketCAN interface and record the operator's precondition
+  that the controller is already in listen-only mode; the add-on neither sets nor
+  verifies controller mode, bit rate or interface state.
 
 The gateway rejects a disabled family that carries any active field, so a
 disabled family contributes no flag at all (not even ``=false``). The result is
@@ -32,6 +36,8 @@ TESLA_PROFILE = "wc3_24_44_3"
 _DURATION_RE = re.compile(r"^[1-9][0-9]*(ms|s)$")
 _PARITIES = ("none", "even", "odd")
 MAX_LABEL_LENGTH = 256
+# IFNAMSIZ without the terminator.
+MAX_CAN_INTERFACE_LENGTH = 15
 
 # (option key, gateway flag, kind). Order is the emitted argv order.
 GROWATT_FIELDS = (
@@ -59,6 +65,13 @@ TESLA_FIELDS = (
     ("tesla_gen3_hsc_driver_generation", "tesla-gen3-hsc-driver-generation", "uint"),
     ("tesla_gen3_hsc_node", "tesla-gen3-hsc-node", "unit"),
 )
+CAN_FIELDS = (
+    ("growatt_bms_can_interface", "growatt-bms-can-interface", "can_interface"),
+    ("growatt_bms_can_stale_after", "growatt-bms-can-stale-after", "duration"),
+)
+GROWATT_CAN_ENABLED = ("growatt_bms_can_enabled", "growatt-bms-can-enabled")
+# A precondition the operator records, never a capability the add-on provides.
+GROWATT_CAN_LISTEN_ONLY = ("growatt_bms_can_listen_only_confirmed", "growatt-bms-can-listen-only-confirmed")
 GROWATT_ENABLED = ("growatt_bms_rs485_enabled", "growatt-bms-rs485-enabled")
 TESLA_ENABLED = ("tesla_gen3_hsc_retained_enabled", "tesla-gen3-hsc-retained-enabled")
 # Fixed, not an option: the only profile the pinned gateway accepts.
@@ -66,9 +79,16 @@ TESLA_PROFILE_FLAG = "tesla-gen3-hsc-profile"
 
 
 def all_flags() -> set[str]:
-    """Every gateway flag this module can emit."""
+    """Every RS-485 and Tesla gateway flag this module can emit."""
     flags = {GROWATT_ENABLED[1], TESLA_ENABLED[1], TESLA_PROFILE_FLAG}
     flags.update(flag for _, flag, _ in GROWATT_FIELDS + TESLA_FIELDS)
+    return flags
+
+
+def can_flags() -> set[str]:
+    """Every gateway flag the CAN family can emit."""
+    flags = {GROWATT_CAN_ENABLED[1], GROWATT_CAN_LISTEN_ONLY[1]}
+    flags.update(flag for _, flag, _ in CAN_FIELDS)
     return flags
 
 
@@ -108,6 +128,19 @@ def _convert(value: object, key: str, kind: str) -> str:
         if not isinstance(value, str) or not _DURATION_RE.fullmatch(value):
             raise ConfigError(f"{key} must be a positive duration such as 500ms or 2s")
         return value
+    if kind == "can_interface":
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value) > MAX_CAN_INTERFACE_LENGTH
+            or value in (".", "..")
+            or any(ord(char) <= 0x20 or ord(char) >= 0x7F or char in "/:" for char in value)
+        ):
+            raise ConfigError(
+                f"{key} must be a CAN interface name of 1..{MAX_CAN_INTERFACE_LENGTH} "
+                "printable ASCII characters without '/', ':' or whitespace"
+            )
+        return value
     if kind == "path":
         if (
             not isinstance(value, str)
@@ -144,7 +177,7 @@ def _family(
 
 
 def build_args(payload: dict) -> list[str]:
-    """Return the gateway argv for ``payload``; empty when both families are off."""
+    """Return the gateway argv for ``payload``; empty when every family is off."""
     argv: list[str] = []
 
     growatt = _family(payload, GROWATT_ENABLED, GROWATT_FIELDS)
@@ -165,6 +198,22 @@ def build_args(payload: dict) -> list[str]:
             raise ConfigError("tesla_gen3_hsc_asset_id and tesla_gen3_hsc_source_id must differ")
         argv.extend(tesla_argv)
         argv.extend((f"-{TESLA_PROFILE_FLAG}", TESLA_PROFILE))
+
+    can = _family(payload, GROWATT_CAN_ENABLED, CAN_FIELDS)
+    if can is not None:
+        can_argv, _ = can
+        confirmed = payload.get(GROWATT_CAN_LISTEN_ONLY[0], False)
+        if type(confirmed) is not bool:
+            raise ConfigError(f"{GROWATT_CAN_LISTEN_ONLY[0]} must be a boolean")
+        if not confirmed:
+            raise ConfigError(
+                f"{GROWATT_CAN_LISTEN_ONLY[0]} must be true when {GROWATT_CAN_ENABLED[0]} is true: "
+                "put the CAN controller in listen-only mode first"
+            )
+        # Flag order: enabled, interface, listen-only precondition, staleness bound.
+        argv.extend(can_argv[:3])
+        argv.append(f"-{GROWATT_CAN_LISTEN_ONLY[1]}=true")
+        argv.extend(can_argv[3:])
     return argv
 
 

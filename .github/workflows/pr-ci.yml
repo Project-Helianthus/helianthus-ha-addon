@@ -148,6 +148,12 @@ jobs:
             --artifact scripts/fixtures/fronius_ha_rollout_contract_pass.json \
             --mode contract
 
+      - name: Validate serial acquisition options
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pytest tests/test_serial_can_options.py -q
+
       - name: Validate serial adapter-direct address handling
         shell: bash
         run: |

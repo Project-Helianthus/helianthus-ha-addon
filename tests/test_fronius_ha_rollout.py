@@ -14,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.6.58"
-GATEWAY = "df10991f5a589a59b2a1f8fdfca2c056518561fc"
+GATEWAY = "94fcf9c21c334b837a63dcff28e33de5f11af0c4"
 HA_INTEGRATION = "e614e63898d4ddc317c66f1a673fefe0e2786245"
 FIXTURE = ROOT / "scripts/fixtures/fronius_ha_rollout_contract_pass.json"
 VERIFIER = ROOT / "scripts/check_fronius_ha_rollout.py"
@@ -142,7 +142,8 @@ def test_release_pins_exact_m5_06_gateway_and_m5_07_consumer() -> None:
     assert f"ARG EBUSGATEWAY_VERSION={GATEWAY}" in dockerfile
     assert f"EBUSGATEWAY_VERSION={GATEWAY}" in workflow
     assert f"## {VERSION} " in changelog
-    assert GATEWAY in changelog
+    assert "`helianthus/Dockerfile`" in changelog
+    assert "`.github/workflows/build.yml`" in changelog
     assert HA_INTEGRATION in changelog
 
 
