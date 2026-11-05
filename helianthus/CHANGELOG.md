@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add the opt-in receive-only Growatt BMS CAN options `growatt_bms_can_enabled`,
+  `growatt_bms_can_interface`, `growatt_bms_can_listen_only_confirmed` and
+  `growatt_bms_can_stale_after` (default `10s`). They map to the
+  `-growatt-bms-can-*` gateway flags only while the family is enabled; the disabled
+  default passes no flag, so the gateway arguments are unchanged. Enabling requires
+  the listen-only precondition to be recorded as `true` and an interface name; the
+  add-on sets no bit rate or controller mode and adds no transmit path. The add-on
+  pins the merged gateway interface and records all four flags in the BOM from its
+  actual help output. Startup still refuses a binary lacking any required flag,
+  naming the missing flags. Hardware qualification remains separate.
+  The catalog version is unchanged.
 - Add the optional `modbus_tcp_endpoints` list (up to eight entries with label, family,
   endpoint, dial timeout, unit allowlist and pacing members) for several read-only
   Modbus TCP endpoints. The guard validates the whole list atomically, the wrapper
@@ -12,14 +23,12 @@
   gateway arguments are unchanged. The offline acceptance index gains the twelve Huawei
   Modbus TCP rows, unverified until reviewed live operator evidence exists. The catalog
   version is unchanged.
-- Pin gateway `df10991f5a589a59b2a1f8fdfca2c056518561fc`, a gateway main revision that
-  defines `-modbus-tcp-endpoints-file` and serves Portal requests under the Ingress
-  path prefix. The wrapper names that flag, and the BOM check fails while the pinned
-  gateway does not define every flag the wrapper uses. The BOM is regenerated for the
-  new pin (gateway commit and tree, Go module pins, `go.mod` and `go.sum` digests, six
-  new gateway flags); `m2m-graphql-denied-principals` stays out of the flag set. The
-  Dockerfile, the build workflow, the parity artifact fixture and the pin checks move
-  with it. The catalog version is unchanged.
+- Update the gateway pin in `helianthus/Dockerfile` and
+  `.github/workflows/build.yml` to the merged receive-only CAN interface. The gateway
+  retains `-modbus-tcp-endpoints-file` and Portal Ingress support. Regenerate the BOM
+  from the pinned gateway's help, dependency metadata and observed image digests;
+  update the parity artifact and conventional pin checks together. The catalog
+  version is unchanged.
 - Add the opt-in `test-image` workflow (manual dispatch with a gateway commit) that
   publishes only `test-<label>-<short sha>` images. The catalog version, the BOM and
   the stable gateway pin are unchanged.

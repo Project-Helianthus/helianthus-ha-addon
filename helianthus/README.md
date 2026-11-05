@@ -225,12 +225,12 @@ Selection and refusal:
   stay unverified in the [offline acceptance index](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/offline-acceptance-index.md)
   until reviewed operator evidence exists.
 
-## Serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)
+## Serial acquisition options (Growatt BMS RS-485, Growatt BMS CAN, Tesla Gen3 HSC)
 
 The add-on declares `uart: true`, which gives the container access to the host's
 serial adapters (for example a USB RS-485 adapter) through the Supervisor. It
 adds no `devices` entry, so no adapter has to exist for the add-on to start, and
-it does not make the add-on privileged. Both families below are **disabled by
+it does not make the add-on privileged. Every family below is **disabled by
 default**. While a family is disabled the wrapper passes none of its flags,
 because the gateway refuses a disabled family that carries any other field.
 
@@ -264,6 +264,37 @@ battery before relying on them. Durations use the form `500ms` or `2s`. When the
 M2M GraphQL listener is also enabled, the gateway additionally requires the
 quiescence plus four reads to fit below the M2M deadline and refuses to start
 otherwise.
+
+### Growatt BMS CAN (receive-only V1.04 observer)
+
+| Option | Gateway flag | Default |
+| --- | --- | --- |
+| `growatt_bms_can_enabled` | `-growatt-bms-can-enabled` | `false` |
+| `growatt_bms_can_interface` | `-growatt-bms-can-interface` | required when enabled; one SocketCAN interface name of 1-15 characters, without `/`, `:` or whitespace |
+| `growatt_bms_can_listen_only_confirmed` | `-growatt-bms-can-listen-only-confirmed` | `false`; must be `true` when enabled |
+| `growatt_bms_can_stale_after` | `-growatt-bms-can-stale-after` | `10s`, a positive duration |
+
+The driver is **receive-only**: it reads frames from the named interface and has
+no transmit, acknowledge, probe or interface-configuration path. These options
+therefore do not set the CAN bit rate or controller mode and do not bring the
+interface up. `growatt_bms_can_listen_only_confirmed` records your statement that
+the controller is already in physical listen-only mode before the add-on opens
+the interface; the add-on cannot verify it, and startup is refused while it is
+`false`. The public [receive-only SocketCAN contract](https://github.com/Project-Helianthus/helianthus-docs-canbus/blob/main/contracts/socketcan-receive-only.md)
+owns that precondition and the frame handling. The interface must already be
+visible in the add-on's host network namespace (`host_network` is on).
+
+`growatt_bms_can_stale_after` bounds the age of the oldest source frame of the
+published tuple; an older tuple is withheld rather than served as current. The
+`10s` value is an add-on starting value, not a value taken from the BMS
+specification. Durations use the form `500ms` or `2s`.
+
+The packaged gateway defines all four `-growatt-bms-can-*` flags, and the BOM
+records them from that gateway build. Startup still probes each emitted flag and
+stops with the missing flags named if the packaged binary lacks support; it never
+starts without the CAN driver while reporting it enabled. Enabling the options
+does not by itself establish that a particular battery is supported: that stays with the V1.04
+qualification card, and the add-on makes no hardware claim.
 
 ### Tesla Gen3 HSC retained owner (identity only)
 

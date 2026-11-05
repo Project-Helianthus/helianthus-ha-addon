@@ -48,14 +48,14 @@ def test_listener_client_auth_flags_are_not_configuration_options(flag: str) -> 
         assert flag.replace("-", "_") not in config[section]
 
 
-def test_wrapper_omits_retired_listener_client_auth_flags() -> None:
+def test_wrapper_omits_gateway_listener_client_auth_flags() -> None:
     used = bom_manifest.gateway_flag_mentions(
         bom_manifest.WRAPPER.read_text(encoding="utf-8")
     )
-    # The pinned gateway still defines the retired no-op; the wrapper never uses it.
+    # The pinned gateway defines both flags; the wrapper exposes neither.
     assert "m2m-graphql-client-ca" in BOM["gateway_cli_flags"]
     assert "m2m-graphql-client-ca" not in used
-    assert "m2m-graphql-denied-principals" not in BOM["gateway_cli_flags"]
+    assert "m2m-graphql-denied-principals" in BOM["gateway_cli_flags"]
     assert "m2m-graphql-denied-principals" not in used
 
 
@@ -112,10 +112,11 @@ def test_parse_go_mod_reads_blocks_and_indirect_markers() -> None:
     assert parsed["requires"][1]["indirect"] is False
 
 
-def test_wrapper_scan_flags_denied_principals_and_omits_retired_client_ca() -> None:
+def test_wrapper_scan_detects_an_unsupported_flag_and_omits_client_auth() -> None:
     wrapper = bom_manifest.WRAPPER.read_text(encoding="utf-8")
     assert "m2m-graphql-client-ca" not in bom_manifest.gateway_flag_mentions(wrapper)
-    injected = wrapper + '\n-m2m-graphql-denied-principals "x"\n'
+    assert "m2m-graphql-denied-principals" not in bom_manifest.gateway_flag_mentions(wrapper)
+    injected = wrapper + '\n-unsupported-test-only-flag "x"\n'
     used = bom_manifest.gateway_flag_mentions(injected)
-    assert "m2m-graphql-denied-principals" in used
+    assert "unsupported-test-only-flag" in used
     assert not used <= set(BOM["gateway_cli_flags"])
