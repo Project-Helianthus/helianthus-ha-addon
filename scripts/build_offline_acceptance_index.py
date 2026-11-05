@@ -76,6 +76,13 @@ RANGE_GATES = (
     ("transport-proxy-dual-client", _ids("T", 25, 88)),
     ("proxy-semantics-adjunct", _ids("PX", 1, 12)),
 )
+# The handoff's Huawei Modbus TCP rows: for each gateway family of the multi-endpoint contract, in the
+# handoff's order, one row per kind of evidence. The gateway registers every Huawei instance withheld until
+# that family's own native contract admits a qualification, so these gates stay unverified until the
+# operator supplies reviewed live evidence for them. Simulated evidence and software results never count.
+HUAWEI_FAMILIES = ("smartlogger", "emma", "sdongle")
+HUAWEI_ROWS = ("identity", "monitoring-publication", "degraded-reconnect", "negative-cross-family")
+HUAWEI_GATES = tuple(f"huawei-{family}-{row}" for family in HUAWEI_FAMILIES for row in HUAWEI_ROWS)
 ROW_GATES = (
     _rows("adapter-direct", _ids("AD", 1, 12))
     + _rows("passive-smoke", _ids("P", 1, 6))
@@ -84,6 +91,7 @@ ROW_GATES = (
     + _rows("legacy-identity", _ids("P", 1, 6, 1) + _ids("N", 1, 5, 1))
     + ("legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle", "explorer-pi",
        "eebus-output-binding", "matter-output-binding")
+    + HUAWEI_GATES
 )  # The handoff's prior RTU applicability row is historical evidence, never a live result: not required.
 PHYSICAL_GATES = RANGE_GATES + tuple((gate, (gate,)) for gate in ROW_GATES)
 PHYSICAL_GATE_IDS = tuple(gate for gate, _ in PHYSICAL_GATES)

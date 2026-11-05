@@ -69,6 +69,7 @@
     "modbus_tcp_enabled": false,
     "modbus_tcp_endpoint": "",
     "modbus_tcp_dial_timeout": "5s",
+    "modbus_tcp_endpoints": [],
     "m2m_graphql_enabled": false,
     "m2m_graphql_server_name": "",
     "m2m_graphql_asset_ref": "",
@@ -132,6 +133,22 @@
     "modbus_tcp_enabled": "bool",
     "modbus_tcp_endpoint": "str",
     "modbus_tcp_dial_timeout": "str",
+    "modbus_tcp_endpoints": [
+      {
+        "label": "match(^(?=.{1,32}$)[a-z][a-z0-9]*(-[a-z0-9]+)*$)",
+        "family": "list(sunspec|huawei.smartlogger|huawei.emma|huawei.sdongle)",
+        "endpoint": "password(1,288)",
+        "dial_timeout": "match(^[1-9][0-9]*(ms|s)$)?",
+        "units": [
+          "int(1,247)?"
+        ],
+        "pacing_gap_ms": "int(50,2000)?",
+        "pacing_settle_ms": "int(0,10000)?",
+        "pacing_cycle_s": "int(15,3600)?",
+        "pacing_backoff_floor_s": "int(1,300)?",
+        "pacing_backoff_ceiling_s": "int(5,3600)?"
+      }
+    ],
     "m2m_graphql_enabled": "bool",
     "m2m_graphql_server_name": "str",
     "m2m_graphql_asset_ref": "str",

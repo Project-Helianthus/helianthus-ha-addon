@@ -162,6 +162,21 @@ gate, with its own per-row record and review.
 | `ha-ingress-routing`, `ha-ingress-trust`, `ha-ingress-lifecycle` | HA/Ingress routing, trust, lifecycle and identity | the gate's own ID |
 | `explorer-pi` | Explorer Pi | the gate's own ID |
 | `eebus-output-binding`, `matter-output-binding` | INT-12 eeBUS and INT-13 Matter output binding | the gate's own ID |
+| `huawei-smartlogger-identity`, `huawei-smartlogger-monitoring-publication`, `huawei-smartlogger-degraded-reconnect`, `huawei-smartlogger-negative-cross-family` | HUAWEI-SMARTLOGGER identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
+| `huawei-emma-identity`, `huawei-emma-monitoring-publication`, `huawei-emma-degraded-reconnect`, `huawei-emma-negative-cross-family` | HUAWEI-EMMA identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
+| `huawei-sdongle-identity`, `huawei-sdongle-monitoring-publication`, `huawei-sdongle-degraded-reconnect`, `huawei-sdongle-negative-cross-family` | HUAWEI-SDONGLE identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
+
+The twelve Huawei rows are the handoff's Modbus TCP rows for the gateway families
+`huawei.smartlogger`, `huawei.emma` and `huawei.sdongle` of the
+[multi-endpoint contract](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/modbus-multi-endpoint-runtime.md):
+four per family, each a single-case gate with its own record and review. A family
+summary cannot replace its four rows, and the evidence of one family or kind of
+row never reaches another gate. The gateway registers every Huawei instance as
+withheld until that family's own native contract admits a qualification, so these
+rows stay `unverified` until the operator supplies reviewed live evidence for them.
+A software result, simulated evidence or a record shared with another gate cannot
+pass one. A pass is an index result for the supplied evidence, not a
+qualification, an admission or a support claim.
 
 The handoff makes `PX01`–`PX12` conditional on proxy wire semantics being in
 scope; the index cannot decide scope, so the row stays required until an owner

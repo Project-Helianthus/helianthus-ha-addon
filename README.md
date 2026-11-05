@@ -100,7 +100,10 @@ mdns: true
 modbus_tcp_enabled: false
 modbus_tcp_endpoint: ""
 modbus_tcp_dial_timeout: 5s
+modbus_tcp_endpoints: []
 ```
+
+Leave `modbus_tcp_endpoints` empty to use the single-endpoint options above, or list up to eight read-only Modbus TCP endpoints in it instead; the two cannot be mixed. See [Several Modbus TCP endpoints](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/README.md#several-modbus-tcp-endpoints).
 
 `source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The add-on no longer exposes `source_addr_state_file`; a leftover `/data/source_addr.last` is retained only as a rollback marker for older add-on versions and is never read as active source authority or rewritten during startup. For source-selection-capable direct transports, exact `source_addr` values are sent only as explicit validate-only gateway startup override input. If a gateway binary does not advertise that startup validation interface, startup fails closed instead of falling back to legacy active source configuration. For `transport=ebusd-tcp`, exact `source_addr` values are passed through the ebusd-compatible `-source-addr` gateway argument because startup source-selection admission is not used on that transport.
 
@@ -124,6 +127,7 @@ mdns: true
 modbus_tcp_enabled: false
 modbus_tcp_endpoint: ""
 modbus_tcp_dial_timeout: 5s
+modbus_tcp_endpoints: []
 ```
 
 `adapter_direct_protocol` is the sole ENH/ENS selector for the physical adapter:

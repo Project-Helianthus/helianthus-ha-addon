@@ -1,0 +1,52 @@
+configuration:
+  modbus_tcp_endpoints:
+    name: Modbus TCP endpoints
+    description: >-
+      Up to eight read-only Modbus TCP endpoints, one driver instance each. Leave
+      the list empty to keep the single endpoint option. A non-empty list cannot
+      be combined with the single endpoint option or a changed dial timeout, and
+      needs Modbus TCP enabled. A change takes effect at the next add-on start.
+    fields:
+      label:
+        name: Label
+        description: >-
+          Public identifier, unique in the list: lowercase letters, digits and
+          single hyphens, starting with a letter, 1 to 32 characters. It becomes
+          part of the driver ID, so never put an address, serial number or site
+          detail in it. The label default keeps the single endpoint identity.
+      family:
+        name: Family
+        description: >-
+          The device family this endpoint is read as: sunspec,
+          huawei.smartlogger, huawei.emma or huawei.sdongle. No other family is
+          tried. A Huawei family is accepted as configuration only and stays
+          withheld until its own contract admits it.
+      endpoint:
+        name: Endpoint
+        description: >-
+          tcp://host:port with a host name or IP address and port 1 to 65535. No
+          credentials, path or query. It is hidden here and never appears in
+          logs or process arguments.
+      dial_timeout:
+        name: Dial timeout
+        description: Connection timeout in ms or s, from 100ms through 30s. Default 5s.
+      units:
+        name: Routed units
+        description: >-
+          Optional allowlist of 1 to 32 distinct unit numbers from 1 to 247. It
+          only narrows what the family reports. For sunspec leave it out or use 1.
+      pacing_gap_ms:
+        name: Gap between requests (ms)
+        description: Idle time between two transactions, 50 to 2000. Default 200.
+      pacing_settle_ms:
+        name: Settle after connect (ms)
+        description: Wait after each connect before the first request, 0 to 10000. Default 1000.
+      pacing_cycle_s:
+        name: Cycle interval (s)
+        description: Time between acquisition cycles, 15 to 3600. Default 30 (15 for sunspec).
+      pacing_backoff_floor_s:
+        name: Reconnect delay start (s)
+        description: First reconnect delay, 1 to 300, doubled after each failure. Default 5.
+      pacing_backoff_ceiling_s:
+        name: Reconnect delay limit (s)
+        description: Largest reconnect delay, 5 to 3600, not below the start. Default 300.

@@ -69,11 +69,17 @@ v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)
 modbus_options_path="${HELIANTHUS_MODBUS_OPTIONS_PATH:-/data/options.json}"
 modbus_guard="${HELIANTHUS_MODBUS_RUNTIME_GUARD:-/usr/share/helianthus/modbus_runtime_guard.py}"
 modbus_endpoint_file="${HELIANTHUS_MODBUS_ENDPOINT_FILE:-/run/helianthus/modbus-endpoint}"
+# Configuration v2 (the modbus_tcp_endpoints list) is materialized by the guard as one protected
+# endpoints document; the wrapper only names its path and removes it, with its staging file, whenever
+# it removes the single-line endpoint file.
+modbus_endpoints_file="${HELIANTHUS_MODBUS_ENDPOINTS_FILE:-/run/helianthus/modbus-endpoints.json}"
+modbus_endpoints_staging="${modbus_endpoints_file}.tmp"
 modbus_eval_file=""
 modbus_endpoint_staging=""
 modbus_pre_exec_signal=""
 cleanup_modbus_pre_exec() {
   rm -f -- "${modbus_endpoint_file}" || true
+  rm -f -- "${modbus_endpoints_file}" "${modbus_endpoints_staging}" || true
   if [ -n "${modbus_eval_file}" ]; then
     rm -f -- "${modbus_eval_file}" || true
   fi
@@ -94,7 +100,11 @@ trap 'modbus_pre_exec_signal=INT' INT
 MODBUS_TCP_ENABLED=""
 MODBUS_TCP_ENDPOINT=""
 MODBUS_TCP_DIAL_TIMEOUT=""
+MODBUS_TCP_CONFIG=""
 if ! rm -f -- "${modbus_endpoint_file}"; then
+  bashio::exit.nok "Unable to remove stale Modbus endpoint material"
+fi
+if ! rm -f -- "${modbus_endpoints_file}" "${modbus_endpoints_staging}"; then
   bashio::exit.nok "Unable to remove stale Modbus endpoint material"
 fi
 modbus_eval_file=$(mktemp /tmp/helianthus-modbus-validate.XXXXXX) || \
@@ -120,7 +130,13 @@ case "${MODBUS_TCP_ENABLED}" in
 esac
 modbus_tcp_enabled="${MODBUS_TCP_ENABLED}"
 modbus_tcp_dial_timeout="${MODBUS_TCP_DIAL_TIMEOUT}"
-if [ "${modbus_tcp_enabled}" = "true" ]; then
+# Only the endpoint list reports a selection; a v1 or disabled result carries none.
+case "${MODBUS_TCP_CONFIG}" in
+  "") modbus_tcp_config="v1" ;;
+  v2) modbus_tcp_config="v2" ;;
+  *) bashio::exit.nok "Modbus TCP validator returned an incomplete result" ;;
+esac
+if [ "${modbus_tcp_enabled}" = "true" ] && [ "${modbus_tcp_config}" = "v1" ]; then
   modbus_endpoint_dir="${modbus_endpoint_file%/*}"
   if [ "${modbus_endpoint_dir}" = "${modbus_endpoint_file}" ]; then
     bashio::exit.nok "Modbus endpoint file must include a parent directory"
@@ -140,10 +156,20 @@ if [ "${modbus_tcp_enabled}" = "true" ]; then
   mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"
   abort_modbus_pre_exec_on_signal
 fi
+if [ "${modbus_tcp_enabled}" = "true" ] && [ "${modbus_tcp_config}" = "v2" ]; then
+  modbus_materialize_status=0
+  python3 "${modbus_guard}" materialize \
+    --options "${modbus_options_path}" \
+    --document "${modbus_endpoints_file}" || modbus_materialize_status=$?
+  abort_modbus_pre_exec_on_signal
+  if [ "${modbus_materialize_status}" -ne 0 ]; then
+    bashio::exit.nok "Modbus TCP endpoint list could not be materialized; endpoints remain redacted"
+  fi
+fi
 trap 'exit 143' TERM
 trap 'exit 130' INT
 abort_modbus_pre_exec_on_signal
-unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_pre_exec_signal
+unset MODBUS_TCP_ENDPOINT modbus_eval modbus_validation_status modbus_materialize_status modbus_pre_exec_signal
 
 # Validate protected eeBUS values before bashio captures them. Bash command
 # substitution cannot preserve NUL, and textual bashio output cannot retain
@@ -883,7 +909,17 @@ else
 fi
 
 modbus_args=()
-if bashio::var.true "${modbus_tcp_enabled}"; then
+if bashio::var.true "${modbus_tcp_enabled}" && [ "${modbus_tcp_config}" = "v2" ]; then
+  # Configuration v2 passes only the endpoints document path. The list is refused, never ignored,
+  # when the packaged gateway cannot read the document.
+  if ! gateway_supports_flag "modbus-tcp-endpoints-file"; then
+    bashio::exit.nok "gateway does not support the Modbus TCP endpoint list; remove modbus_tcp_endpoints or install an add-on release with a gateway that supports it"
+  fi
+  modbus_args=(
+    -modbus-tcp-endpoints-file "${modbus_endpoints_file}"
+  )
+  bashio::log.info "Modbus TCP runtime: enabled (endpoint list)"
+elif bashio::var.true "${modbus_tcp_enabled}"; then
   missing_modbus_flags=()
   for required_flag in modbus-tcp-enabled modbus-tcp-endpoint-file modbus-tcp-dial-timeout; do
     if ! gateway_supports_flag "${required_flag}"; then
