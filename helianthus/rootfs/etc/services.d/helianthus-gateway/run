@@ -939,7 +939,7 @@ else
   bashio::log.info "Modbus TCP runtime: disabled"
 fi
 
-# Serial acquisition options (Growatt BMS RS-485, Growatt BMS CAN receive-only)
+# Serial acquisition options (Growatt BMS RS-485, V1.04/PCS/LINK CAN receive-only)
 # and Tesla Gen3 HSC retained owner identity. All families are disabled by
 # default and a disabled family contributes no flag at all, because the gateway
 # rejects a disabled family that carries any active field. The Tesla owner is non-send on the pinned gateway:
@@ -1005,7 +1005,7 @@ if [ "${#SERIAL_CAN_ARGS[@]}" -ne 0 ]; then
   # flag named instead of failing on an unknown argument.
   for serial_can_arg in "${serial_can_flags[@]}"; do
     case "${serial_can_arg}" in
-      -growatt-bms-can-*)
+      -growatt-bms-can-*|-growatt-bms-pcs-can-*|-growatt-bms-link-can-*)
         can_flag="${serial_can_arg#-}"
         can_flag="${can_flag%%=*}"
         if ! gateway_supports_flag "${can_flag}"; then

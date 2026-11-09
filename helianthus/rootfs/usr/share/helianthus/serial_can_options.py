@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Map the add-on's serial acquisition options to gateway argv.
 
-Three independent, disabled-by-default families are handled here:
+Independent, disabled-by-default families are handled here:
 
 * Growatt BMS RS-485 observer (``growatt-bms-rs485-*`` gateway flags).
 * Tesla Gen3 HSC retained owner (``tesla-gen3-hsc-*`` gateway flags). The owner
@@ -11,6 +11,8 @@ Three independent, disabled-by-default families are handled here:
   options name one SocketCAN interface and record the operator's precondition
   that the controller is already in listen-only mode; the add-on neither sets nor
   verifies controller mode, bit rate or interface state.
+* Explicit Growatt PCS and LINK receive-only families. Native selection and
+  evidence remain gateway responsibilities; no traffic can fill missing options.
 
 The gateway rejects a disabled family that carries any active field, so a
 disabled family contributes no flag at all (not even ``=false``). The result is
@@ -25,6 +27,7 @@ import json
 import re
 import shlex
 import sys
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 
@@ -38,6 +41,192 @@ _PARITIES = ("none", "even", "odd")
 MAX_LABEL_LENGTH = 256
 # IFNAMSIZ without the terminator.
 MAX_CAN_INTERFACE_LENGTH = 15
+PROJECT_SUFFIXES = (
+    "enabled", "interface", "listen-only-confirmed", "stale-after",
+    "project-code", "release", "native-profile", "scope", "bank", "context",
+)
+PROJECT_EXTRA = {"pcs": "native-contract", "link": "source-selectors"}
+_GO_DURATION_PART = re.compile(r"([0-9]+(?:\.[0-9]*)?|\.[0-9]+)(ns|us|µs|μs|ms|s|m|h)")
+_DURATION_SCALE = {"ns": 1, "us": 1000, "µs": 1000, "μs": 1000,
+                   "ms": 1000000, "s": 1000000000, "m": 60000000000, "h": 3600000000000}
+
+
+def project_flags() -> set[str]:
+    return {f"growatt-bms-{family}-can-{suffix}"
+            for family, extra in PROJECT_EXTRA.items() for suffix in (*PROJECT_SUFFIXES, extra)}
+
+
+def _duration(value: object, key: str, *, positive: bool = True) -> str:
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise ConfigError(f"{key} requires a Go duration")
+    text = value[1:] if value.startswith("+") else value
+    parts = list(_GO_DURATION_PART.finditer(text))
+    if text == "0" and not positive:
+        return value
+    if not parts or "".join(part.group() for part in parts) != text:
+        raise ConfigError(f"{key} requires a Go duration")
+    with localcontext() as precision:
+        precision.prec = 256
+        total = sum(int(Decimal(part[1]) * _DURATION_SCALE[part[2]]) for part in parts)
+    if total < int(positive) or total > 2**63 - 1:
+        raise ConfigError(f"{key} duration outside runtime bounds")
+    return value
+
+
+def _strict_json(value: object, key: str, limit: int) -> list:
+    def pairs(items: list) -> dict:
+        result = {}
+        for name, item in items:
+            if name in result:
+                raise ConfigError(f"{key} contains duplicate JSON keys")
+            result[name] = item
+        return result
+
+    def constant(_: str) -> None:
+        raise ConfigError(f"{key} contains a non-JSON number")
+
+    if not isinstance(value, str) or len(value.encode("utf-8")) > limit:
+        raise ConfigError(f"{key} requires bounded JSON text")
+    try:
+        result = json.loads(value, object_pairs_hook=pairs, parse_constant=constant)
+    except (ValueError, RecursionError) as error:
+        raise ConfigError(f"{key} requires strict JSON") from error
+    if not isinstance(result, list) or not 1 <= len(result) <= 32:
+        raise ConfigError(f"{key} requires 1..32 entries")
+    return result
+
+
+def _keys(value: object, keys: set[str], key: str) -> dict:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ConfigError(f"{key} requires exactly the documented keys")
+    return value
+
+
+def _selection(project: object, release: object, key: str) -> None:
+    # Syntax only. The native owner admits exact project/release combinations
+    # before opening an interface; packaging never infers or normalizes them.
+    if not isinstance(project, str) or not re.fullmatch(r"[A-Z][A-Za-z0-9]{3}", project):
+        raise ConfigError(f"{key} requires an exact-case four-character project-code")
+    if not isinstance(release, str) or not re.fullmatch(r"[0-9]{4}", release):
+        raise ConfigError(f"{key} requires an explicit four-digit release")
+
+
+def _selectors(value: object, project: object, release: object, key: str) -> list[dict]:
+    entries = _strict_json(value, key, 16384)
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ConfigError(f"{key} requires source objects")
+        defaults = "use_default" in entry
+        _keys(entry, {"source", "use_default", "contract"} if defaults else
+              {"source", "project_code", "release", "contract"}, key)
+        source = _int(entry["source"], key, 1, 254)
+        if source in (244, 245) or source in seen:
+            raise ConfigError(f"{key} contains a reserved or duplicate source")
+        seen.add(source)
+        if entry["contract"] not in ("legacy19", "release11"):
+            raise ConfigError(f"{key} requires an exact native contract")
+        if defaults:
+            if entry["use_default"] is not True:
+                raise ConfigError(f"{key} use_default must be true")
+            _selection(project, release, key)
+        else:
+            _selection(entry["project_code"], entry["release"], key)
+    return entries
+
+
+_CONTEXT_BYTES = {"source", "destination", "serial_slot", "native_slot", "native_group"}
+_CONTEXT_LABELS = {"endpoint", "group", "slot"}
+_CONTEXT_BOOLS = {"serial_slot_valid", "slot_valid", "group_valid", "publisher_resolved",
+                  "measurement_valid", "temperature_valid", "topology_associated"}
+
+
+def _contexts(value: object, key: str, family: str, selectors: list[dict] | None) -> None:
+    entries = _strict_json(value, key, 131072)
+    if len(entries) != (len(selectors) if selectors is not None else 1):
+        raise ConfigError(f"{key} requires one context per ordered selection")
+    common = None
+    for index, entry in enumerate(entries):
+        _keys(entry, _CONTEXT_BYTES | _CONTEXT_LABELS | _CONTEXT_BOOLS |
+              {"interface_index", "epoch", "field_age", "cells", "sensors"}, key)
+        for name in _CONTEXT_BYTES:
+            _int(entry[name], key, 0, 255)
+        _int(entry["interface_index"], key, 1, 2**63 - 1)
+        _int(entry["epoch"], key, 1, 2**64 - 1)
+        for name in _CONTEXT_LABELS:
+            label = _label(entry[name], key)
+            if any(char.isspace() or not char.isprintable() for char in label):
+                raise ConfigError(f"{key} requires labels without whitespace or controls")
+        for name in _CONTEXT_BOOLS:
+            if type(entry[name]) is not bool:
+                raise ConfigError(f"{key} requires explicit boolean validity")
+        _duration(entry["field_age"], key, positive=False)
+        for name, maximum in (("cells", 16), ("sensors", 8)):
+            vector = _keys(entry[name], {"count", "count_valid", "gates"}, key)
+            count = _int(vector["count"], key, 0, maximum)
+            if type(vector["count_valid"]) is not bool or (vector["count_valid"] and count == 0):
+                raise ConfigError(f"{key} requires an explicit count and validity")
+            if not isinstance(vector["gates"], list) or len(vector["gates"]) != 4:
+                raise ConfigError(f"{key} requires four measurement gates")
+            for gate in vector["gates"]:
+                _keys(gate, {"configured", "valid", "status", "age"}, key)
+                if type(gate["configured"]) is not bool or type(gate["valid"]) is not bool:
+                    raise ConfigError(f"{key} requires boolean measurement gates")
+                if gate["status"] not in ("", "absent", "invalid", "unsupported", "stale", "conflict"):
+                    raise ConfigError(f"{key} has an unknown measurement status")
+                _duration(gate["age"], key, positive=False)
+        if family == "link":
+            if entry["source"] != selectors[index]["source"] or entry["destination"] not in (244, 245):
+                raise ConfigError(f"{key} requires a matching source and coordinator destination")
+            identity = tuple(entry[name] for name in
+                             ("interface_index", "destination", "endpoint", "group", "slot", "epoch"))
+            if common is not None and common != identity:
+                raise ConfigError(f"{key} requires one common route and association identity")
+            common = identity
+
+
+def _project_family(payload: dict, family: str) -> list[str]:
+    prefix = f"growatt_bms_{family}_can_"
+    flag_prefix = prefix.replace("_", "-")
+    enabled = payload.get(prefix + "enabled", False)
+    if type(enabled) is not bool:
+        raise ConfigError(f"{prefix}enabled must be a boolean")
+    if not enabled:
+        return []
+    values = {suffix: payload.get(prefix + suffix.replace("-", "_"), "")
+              for suffix in (*PROJECT_SUFFIXES, PROJECT_EXTRA[family])}
+    if values["listen-only-confirmed"] is not True:
+        raise ConfigError(f"{prefix}listen_only_confirmed must record the external precondition")
+    interface = _convert(values["interface"], prefix + "interface", "can_interface")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", interface):
+        raise ConfigError(f"{prefix}interface contains unsafe characters")
+    _duration(values["stale-after"], prefix + "stale_after")
+    if values["native-profile"] not in ("standard", "extended19", "parallel"):
+        raise ConfigError(f"{prefix}native_profile requires an explicit supported profile")
+    if values["scope"] not in (("local",) if family == "link" else ("local", "aggregate")):
+        raise ConfigError(f"{prefix}scope requires an explicit supported scope")
+    bank = "parallel" if values["native-profile"] == "parallel" else "ordinary"
+    if values["bank"] != bank:
+        raise ConfigError(f"{prefix}bank must explicitly match the profile")
+    selectors = None
+    if family == "pcs":
+        _selection(values["project-code"], values["release"], prefix)
+        if values["native-contract"] not in ("", "legacy19", "release11"):
+            raise ConfigError(f"{prefix}native_contract must be legacy19 or release11")
+    else:
+        if values["project-code"] or values["release"]:
+            _selection(values["project-code"], values["release"], prefix)
+        selectors = _selectors(values["source-selectors"], values["project-code"], values["release"],
+                               prefix + "source_selectors")
+    _contexts(values["context"], prefix + "context", family, selectors)
+    argv = [f"-{flag_prefix}enabled=true"]
+    for suffix in (*PROJECT_SUFFIXES[1:], PROJECT_EXTRA[family]):
+        value = values[suffix]
+        if suffix == "listen-only-confirmed":
+            argv.append(f"-{flag_prefix}{suffix}=true")
+        elif value != "":
+            argv.extend((f"-{flag_prefix}{suffix}", value))
+    return argv
 
 # (option key, gateway flag, kind). Order is the emitted argv order.
 GROWATT_FIELDS = (
@@ -214,6 +403,15 @@ def build_args(payload: dict) -> list[str]:
         argv.extend(can_argv[:3])
         argv.append(f"-{GROWATT_CAN_LISTEN_ONLY[1]}=true")
         argv.extend(can_argv[3:])
+    interfaces = [payload["growatt_bms_can_interface"]] if can is not None else []
+    for family in PROJECT_EXTRA:
+        project_argv = _project_family(payload, family)
+        if project_argv:
+            interface = payload[f"growatt_bms_{family}_can_interface"]
+            if interface in interfaces:
+                raise ConfigError("enabled CAN families require distinct interfaces")
+            interfaces.append(interface)
+            argv.extend(project_argv)
     return argv
 
 

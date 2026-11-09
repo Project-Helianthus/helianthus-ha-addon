@@ -91,6 +91,7 @@ def test_every_option_has_a_schema_entry_and_every_schema_entry_is_used() -> Non
         serial_can_options.GROWATT_CAN_ENABLED[0],
         serial_can_options.GROWATT_CAN_LISTEN_ONLY[0],
     }
+    emitted |= {flag.replace("-", "_") for flag in serial_can_options.project_flags()}
     assert schema_keys == emitted
     assert set(SERIAL_KEYS) <= schema_keys
     # Options without a default must be optional in the schema.
@@ -325,8 +326,8 @@ def test_a_rejected_can_family_emits_no_partial_argv_for_the_others(tmp_path: Pa
 
 def test_wrapper_probes_emitted_can_flags_by_prefix_and_names_the_missing_ones() -> None:
     run = RUN.read_text(encoding="utf-8")
-    assert "-growatt-bms-can-*)" in run
-    probe = run.index("-growatt-bms-can-*)")
+    assert "-growatt-bms-can-*|-growatt-bms-pcs-can-*|-growatt-bms-link-can-*)" in run
+    probe = run.index("-growatt-bms-can-*|")
     assert run.index("missing_serial_can_flags=()") < probe
     assert probe < run.index('bashio::exit.nok "gateway does not support the serial acquisition flags')
     subprocess.run(["bash", "-n", str(RUN)], check=True, capture_output=True)
