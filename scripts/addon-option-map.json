@@ -1,0 +1,2660 @@
+{
+  "format": 1,
+  "options": {
+    "adapter_direct_enabled": {
+      "kind": "gateway",
+      "description": "Enable adapter-direct routing; rejects an external proxy endpoint and overrides transport, network and address.",
+      "read": "run_1",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "adapter_direct_protocol": {
+      "kind": "gateway",
+      "description": "Select ENH or ENS for adapter-direct routing. Omitted values use ENH; an old proxy profile can supply the selector until explicitly persisted.",
+      "read": "run_66",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "adapter_direct_address": {
+      "kind": "gateway",
+      "description": "Adapter endpoint or serial device path. Trim whitespace and the scheme; a serial protocol prefix must agree with the selector.",
+      "read": "run_67",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "proxy_listen_addr": {
+      "kind": "derived",
+      "description": "Gateway-integrated proxy listener address. Empty disables it; a configured listener requires gateway flag support.",
+      "read": "run_68",
+      "transforms": [],
+      "consumer": "run_69",
+      "flags": [
+        "proxy-listen"
+      ]
+    },
+    "transport": {
+      "kind": "gateway",
+      "description": "Transport input before adapter-direct or proxy overrides.",
+      "read": "run_70",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "network": {
+      "kind": "gateway",
+      "description": "Network input before adapter-direct or proxy overrides.",
+      "read": "run_71",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "address": {
+      "kind": "gateway",
+      "description": "Address input before adapter-direct or proxy overrides.",
+      "read": "run_72",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "proxy_profile": {
+      "kind": "gateway",
+      "description": "External proxy profile, disabled, ENH or ENS. Selects effective transport and address; legacy adapter-direct configuration is migrated in memory.",
+      "read": "run_73",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "proxy_endpoint": {
+      "kind": "gateway",
+      "description": "External proxy endpoint, required for an active external proxy profile and forbidden with adapter-direct mode.",
+      "read": "run_74",
+      "transforms": [
+        "run_2",
+        "run_3",
+        "run_4",
+        "run_5",
+        "run_6",
+        "run_7",
+        "run_8",
+        "run_9",
+        "run_10",
+        "run_11",
+        "run_12",
+        "run_13",
+        "run_14",
+        "run_15",
+        "run_16",
+        "run_17",
+        "run_18",
+        "run_19",
+        "run_20",
+        "run_21",
+        "run_22",
+        "run_23",
+        "run_24",
+        "run_25",
+        "run_21",
+        "run_26",
+        "run_27",
+        "run_18",
+        "run_28",
+        "run_21",
+        "run_29",
+        "run_30",
+        "run_31",
+        "run_13",
+        "run_32",
+        "run_33",
+        "run_13",
+        "run_34",
+        "run_35",
+        "run_36",
+        "run_37",
+        "run_9",
+        "run_38",
+        "run_39",
+        "run_9",
+        "run_40",
+        "run_41",
+        "run_42",
+        "run_43",
+        "run_44",
+        "run_45",
+        "run_46",
+        "run_31",
+        "run_47",
+        "run_48",
+        "run_49",
+        "run_50",
+        "run_51",
+        "run_52",
+        "run_53",
+        "run_54",
+        "run_55",
+        "run_56",
+        "run_57",
+        "run_58",
+        "run_55",
+        "run_59",
+        "run_60",
+        "run_61",
+        "run_62",
+        "run_55",
+        "run_63",
+        "run_64",
+        "run_9"
+      ],
+      "consumer": "run_65",
+      "flags": [
+        "transport",
+        "network",
+        "address"
+      ]
+    },
+    "host": {
+      "kind": "wrapper-only",
+      "description": "Host label used only in logged HTTP URLs. Does not select the listener bind address.",
+      "read": "run_75",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_77",
+      "flags": []
+    },
+    "port": {
+      "kind": "gateway",
+      "description": "Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default.",
+      "read": "run_78",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_79",
+      "flags": [
+        "http-addr"
+      ]
+    },
+    "path": {
+      "kind": "gateway",
+      "description": "Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default.",
+      "read": "run_80",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_81",
+      "flags": [
+        "graphql-path"
+      ]
+    },
+    "http_port": {
+      "kind": "gateway",
+      "description": "HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only.",
+      "read": "run_82",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_79",
+      "flags": [
+        "http-addr"
+      ]
+    },
+    "graphql_path": {
+      "kind": "gateway",
+      "description": "GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it.",
+      "read": "run_83",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_81",
+      "flags": [
+        "graphql-path"
+      ]
+    },
+    "subscription_path": {
+      "kind": "gateway",
+      "description": "Subscription route. Adds a leading slash; the default route follows a changed GraphQL route.",
+      "read": "run_84",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_85",
+      "flags": [
+        "subscription-path"
+      ]
+    },
+    "mcp_path": {
+      "kind": "gateway",
+      "description": "MCP HTTP route; the wrapper adds a leading slash when absent.",
+      "read": "run_86",
+      "transforms": [
+        "run_76"
+      ],
+      "consumer": "run_87",
+      "flags": [
+        "mcp-path"
+      ]
+    },
+    "mdns": {
+      "kind": "gateway",
+      "description": "Enable or disable gateway mDNS advertisement.",
+      "read": "run_88",
+      "transforms": [],
+      "consumer": "run_89",
+      "flags": [
+        "mdns"
+      ]
+    },
+    "mdns_instance": {
+      "kind": "gateway",
+      "description": "Gateway mDNS instance label.",
+      "read": "run_90",
+      "transforms": [],
+      "consumer": "run_91",
+      "flags": [
+        "mdns-instance"
+      ]
+    },
+    "broadcast": {
+      "kind": "gateway",
+      "description": "Enable or disable gateway broadcast handling.",
+      "read": "run_92",
+      "transforms": [],
+      "consumer": "run_93",
+      "flags": [
+        "broadcast"
+      ]
+    },
+    "source_addr": {
+      "kind": "derived",
+      "description": "Auto delegates source selection to the gateway. Explicit values use the ebusd-compatible source flag for that transport, otherwise require validate-only startup override support.",
+      "read": "run_94",
+      "transforms": [],
+      "consumer": "run_95",
+      "flags": [
+        "source-addr",
+        "startup-source-override",
+        "startup-source-override-validate"
+      ]
+    },
+    "scan_request_timeout": {
+      "kind": "gateway",
+      "description": "Gateway scan request timeout; empty values use 400ms.",
+      "read": "run_96",
+      "transforms": [],
+      "consumer": "run_97",
+      "flags": [
+        "scan-request-timeout"
+      ]
+    },
+    "read_timeout": {
+      "kind": "gateway",
+      "description": "Gateway read timeout.",
+      "read": "run_98",
+      "transforms": [],
+      "consumer": "run_99",
+      "flags": [
+        "read-timeout"
+      ]
+    },
+    "write_timeout": {
+      "kind": "gateway",
+      "description": "Gateway write timeout.",
+      "read": "run_100",
+      "transforms": [],
+      "consumer": "run_101",
+      "flags": [
+        "write-timeout"
+      ]
+    },
+    "dial_timeout": {
+      "kind": "gateway",
+      "description": "Gateway dial timeout.",
+      "read": "run_102",
+      "transforms": [],
+      "consumer": "run_103",
+      "flags": [
+        "dial-timeout"
+      ]
+    },
+    "observe_first_enabled": {
+      "kind": "gateway",
+      "description": "Gateway observe-first switch; missing values use true.",
+      "read": "run_104",
+      "transforms": [],
+      "consumer": "run_105",
+      "flags": [
+        "observe-first-enabled"
+      ]
+    },
+    "passive_state_direct_apply": {
+      "kind": "gateway",
+      "description": "Gateway passive state direct-apply switch; missing values use true.",
+      "read": "run_106",
+      "transforms": [],
+      "consumer": "run_107",
+      "flags": [
+        "passive-state-direct-apply"
+      ]
+    },
+    "passive_config_direct_apply": {
+      "kind": "gateway",
+      "description": "Gateway passive configuration direct-apply switch; missing values use false.",
+      "read": "run_108",
+      "transforms": [],
+      "consumer": "run_109",
+      "flags": [
+        "passive-config-direct-apply"
+      ]
+    },
+    "external_write_policy": {
+      "kind": "gateway",
+      "description": "Gateway external write policy; missing values use record_only.",
+      "read": "run_110",
+      "transforms": [],
+      "consumer": "run_111",
+      "flags": [
+        "external-write-policy"
+      ]
+    },
+    "enable_static_seed_table": {
+      "kind": "gateway",
+      "description": "Request the static seed table. Passed only when supported; an unsupported enabled request logs a warning.",
+      "read": "run_112",
+      "transforms": [],
+      "consumer": "run_113",
+      "flags": [
+        "enable-static-seed-table"
+      ]
+    },
+    "v8_classifier_mode": {
+      "kind": "environment",
+      "description": "Classifier mode, off, shadow or enforce; exported through the gateway environment. Missing values use enforce.",
+      "read": "run_114",
+      "transforms": [],
+      "consumer": "run_115",
+      "flags": []
+    },
+    "eebus_enabled": {
+      "kind": "derived",
+      "description": "Enable the eeBUS argument bundle after validation and gateway support checks; pairing remains closed.",
+      "read": "run_116",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-enabled",
+        "eebus-listen-port",
+        "eebus-interfaces",
+        "eebus-subnets",
+        "eebus-state-root",
+        "eebus-discovery-enabled",
+        "eebus-remote-ski-allowlist",
+        "eebus-pairing-window-mode"
+      ]
+    },
+    "eebus_listen_port": {
+      "kind": "derived",
+      "description": "eeBUS listener port, validated from 1 through 65535 when enabled.",
+      "read": "run_120",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-listen-port"
+      ]
+    },
+    "eebus_interface": {
+      "kind": "derived",
+      "description": "One explicit interface; validated and used for the gateway interface argument and stable machine identity derivation.",
+      "read": "run_121",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-interfaces"
+      ]
+    },
+    "eebus_subnets": {
+      "kind": "derived",
+      "description": "Nonempty prefix list, trimmed before the enabled eeBUS bundle is emitted.",
+      "read": "run_122",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-subnets"
+      ]
+    },
+    "eebus_discovery_enabled": {
+      "kind": "derived",
+      "description": "Boolean discovery control emitted with the enabled eeBUS bundle.",
+      "read": "run_123",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-discovery-enabled"
+      ]
+    },
+    "eebus_remote_ski_allowlist": {
+      "kind": "derived",
+      "description": "Optional comma-separated remote SKI allowlist; every entry must be 40 hexadecimal characters.",
+      "read": "run_124",
+      "transforms": [
+        "run_117",
+        "run_118"
+      ],
+      "consumer": "run_119",
+      "flags": [
+        "eebus-remote-ski-allowlist"
+      ]
+    },
+    "modbus_tcp_enabled": {
+      "kind": "derived",
+      "description": "Enable validated Modbus TCP configuration. Select the scalar endpoint file or the endpoints document; disabled configuration emits no Modbus arguments.",
+      "read": "modbus_runtime_guard_125",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "run_127",
+        "run_128",
+        "run_129",
+        "modbus_shell_values"
+      ],
+      "consumer": "run_130",
+      "flags": [
+        "modbus-tcp-enabled",
+        "modbus-tcp-endpoint-file",
+        "modbus-tcp-dial-timeout",
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoint": {
+      "kind": "protected-file",
+      "description": "Scalar Modbus TCP endpoint. Validated and written to a protected endpoint file; the gateway receives the file path only.",
+      "read": "modbus_runtime_guard_131",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "run_132",
+        "run_128",
+        "run_129",
+        "modbus_shell_values",
+        "run_130"
+      ],
+      "consumer": "run_127",
+      "flags": [
+        "modbus-tcp-endpoint-file"
+      ]
+    },
+    "modbus_tcp_dial_timeout": {
+      "kind": "derived",
+      "description": "Scalar Modbus dial timeout. Validated in the helper; a nonempty endpoint list requires this scalar to retain its default.",
+      "read": "modbus_runtime_guard_133",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "run_128",
+        "run_129",
+        "modbus_shell_values",
+        "run_130"
+      ],
+      "consumer": "run_127",
+      "flags": [
+        "modbus-tcp-dial-timeout"
+      ]
+    },
+    "modbus_tcp_endpoints": {
+      "kind": "protected-file",
+      "description": "Optional endpoint list. The helper validates and materializes one protected document; the gateway receives only its path.",
+      "read": "modbus_runtime_guard_134",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "run_127",
+        "run_128",
+        "run_129",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "run_130",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "m2m_graphql_enabled": {
+      "kind": "derived",
+      "description": "Enable the dedicated TLS GraphQL listener and validate its fixed TLS files. The optional Portal client bundle enables additional Portal arguments only when complete.",
+      "read": "run_135",
+      "transforms": [
+        "run_136",
+        "run_137"
+      ],
+      "consumer": "run_138",
+      "flags": [
+        "m2m-graphql-listen",
+        "m2m-graphql-server-name",
+        "m2m-graphql-server-cert",
+        "m2m-graphql-server-key",
+        "m2m-graphql-allowed-assets",
+        "portal-pv-semantic-enabled",
+        "portal-pv-m2m-url",
+        "portal-pv-m2m-server-name",
+        "portal-pv-m2m-ca",
+        "portal-pv-m2m-client-cert",
+        "portal-pv-m2m-client-key",
+        "portal-pv-asset-ref"
+      ]
+    },
+    "m2m_graphql_server_name": {
+      "kind": "derived",
+      "description": "TLS server identity, validated before startup; also supplied to the optional Portal client.",
+      "read": "run_139",
+      "transforms": [
+        "run_136",
+        "run_137"
+      ],
+      "consumer": "run_138",
+      "flags": [
+        "m2m-graphql-server-name",
+        "portal-pv-m2m-server-name"
+      ]
+    },
+    "m2m_graphql_asset_ref": {
+      "kind": "derived",
+      "description": "Opaque allowed asset reference; also supplied to the optional Portal client.",
+      "read": "run_140",
+      "transforms": [
+        "run_136",
+        "run_137"
+      ],
+      "consumer": "run_138",
+      "flags": [
+        "m2m-graphql-allowed-assets",
+        "portal-pv-asset-ref"
+      ]
+    },
+    "growatt_bms_rs485_enabled": {
+      "kind": "helper-derived",
+      "description": "Enable this family; disabled families emit no arguments.",
+      "read": "serial_can_options_141",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-enabled"
+      ]
+    },
+    "growatt_bms_rs485_asset_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque asset identity, distinct from source identity.",
+      "read": "serial_can_options_144",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-asset-id"
+      ]
+    },
+    "growatt_bms_rs485_source_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque source identity, distinct from asset identity.",
+      "read": "serial_can_options_145",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-source-id"
+      ]
+    },
+    "growatt_bms_rs485_source_epoch": {
+      "kind": "helper-derived",
+      "description": "Required opaque source epoch label when the family is enabled.",
+      "read": "serial_can_options_146",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-source-epoch"
+      ]
+    },
+    "growatt_bms_rs485_driver_generation": {
+      "kind": "helper-derived",
+      "description": "Required positive driver generation.",
+      "read": "serial_can_options_147",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-driver-generation"
+      ]
+    },
+    "growatt_bms_rs485_unit_id": {
+      "kind": "helper-derived",
+      "description": "Required routed unit number from 1 through 247.",
+      "read": "serial_can_options_148",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-unit-id"
+      ]
+    },
+    "growatt_bms_rs485_serial_path": {
+      "kind": "helper-derived",
+      "description": "Required serial device path under /dev/, without traversal or whitespace.",
+      "read": "serial_can_options_149",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-serial-path"
+      ]
+    },
+    "growatt_bms_rs485_baud": {
+      "kind": "helper-derived",
+      "description": "Serial baud setting validated by the helper.",
+      "read": "serial_can_options_150",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-baud"
+      ]
+    },
+    "growatt_bms_rs485_parity": {
+      "kind": "helper-derived",
+      "description": "Serial parity: none, even or odd.",
+      "read": "serial_can_options_151",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-parity"
+      ]
+    },
+    "growatt_bms_rs485_stop_bits": {
+      "kind": "helper-derived",
+      "description": "Serial stop bits, 1 or 2.",
+      "read": "serial_can_options_152",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-stop-bits"
+      ]
+    },
+    "growatt_bms_rs485_response_timeout": {
+      "kind": "helper-derived",
+      "description": "Positive response timeout in milliseconds or seconds.",
+      "read": "serial_can_options_153",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-response-timeout"
+      ]
+    },
+    "growatt_bms_rs485_max_response_delay": {
+      "kind": "helper-derived",
+      "description": "Positive maximum response delay in milliseconds or seconds.",
+      "read": "serial_can_options_154",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-max-response-delay"
+      ]
+    },
+    "growatt_bms_rs485_max_quiescence": {
+      "kind": "helper-derived",
+      "description": "Positive quiescence duration, greater than the response delay.",
+      "read": "serial_can_options_155",
+      "transforms": [
+        "serial_can_options_142"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-rs485-max-quiescence"
+      ]
+    },
+    "growatt_bms_can_enabled": {
+      "kind": "helper-derived",
+      "description": "Enable this family; disabled families emit no arguments.",
+      "read": "serial_can_options_156",
+      "transforms": [
+        "serial_can_options_157"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-can-enabled"
+      ]
+    },
+    "growatt_bms_can_interface": {
+      "kind": "helper-derived",
+      "description": "One interface name validated by the helper; enabled CAN families require distinct interfaces.",
+      "read": "serial_can_options_158",
+      "transforms": [
+        "serial_can_options_157"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-can-interface"
+      ]
+    },
+    "growatt_bms_can_listen_only_confirmed": {
+      "kind": "helper-derived",
+      "description": "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode.",
+      "read": "serial_can_options_159",
+      "transforms": [
+        "serial_can_options_157"
+      ],
+      "consumer": "serial_can_options_160",
+      "flags": [
+        "growatt-bms-can-listen-only-confirmed"
+      ]
+    },
+    "growatt_bms_can_stale_after": {
+      "kind": "helper-derived",
+      "description": "Positive staleness duration, validated by the helper.",
+      "read": "serial_can_options_161",
+      "transforms": [
+        "serial_can_options_157"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "growatt-bms-can-stale-after"
+      ]
+    },
+    "growatt_bms_pcs_can_enabled": {
+      "kind": "helper-derived",
+      "description": "Enable this family; disabled families emit no arguments.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-enabled"
+      ]
+    },
+    "growatt_bms_pcs_can_interface": {
+      "kind": "helper-derived",
+      "description": "One interface name validated by the helper; enabled CAN families require distinct interfaces.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-interface"
+      ]
+    },
+    "growatt_bms_pcs_can_listen_only_confirmed": {
+      "kind": "helper-derived",
+      "description": "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-listen-only-confirmed"
+      ]
+    },
+    "growatt_bms_pcs_can_stale_after": {
+      "kind": "helper-derived",
+      "description": "Positive staleness duration, validated by the helper.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-stale-after"
+      ]
+    },
+    "growatt_bms_pcs_can_project_code": {
+      "kind": "helper-derived",
+      "description": "Explicit project selection, syntax-checked without inferring native support.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-project-code"
+      ]
+    },
+    "growatt_bms_pcs_can_release": {
+      "kind": "helper-derived",
+      "description": "Explicit release selection, syntax-checked without inferring native support.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-release"
+      ]
+    },
+    "growatt_bms_pcs_can_native_profile": {
+      "kind": "helper-derived",
+      "description": "Explicit native profile selection, validated by the helper; native admission remains with the gateway.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-native-profile"
+      ]
+    },
+    "growatt_bms_pcs_can_scope": {
+      "kind": "helper-derived",
+      "description": "Explicit scope, checked against the family selections.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-scope"
+      ]
+    },
+    "growatt_bms_pcs_can_bank": {
+      "kind": "helper-derived",
+      "description": "Explicit bank selection; must agree with the selected profile.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-bank"
+      ]
+    },
+    "growatt_bms_pcs_can_context": {
+      "kind": "helper-derived",
+      "description": "Explicit bounded JSON context, validated by the helper and passed unchanged for native admission.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-context"
+      ]
+    },
+    "growatt_bms_pcs_can_native_contract": {
+      "kind": "helper-derived",
+      "description": "Optional exact native contract selection; native admission remains with the gateway.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-pcs-can-native-contract"
+      ]
+    },
+    "growatt_bms_link_can_enabled": {
+      "kind": "helper-derived",
+      "description": "Enable this family; disabled families emit no arguments.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-enabled"
+      ]
+    },
+    "growatt_bms_link_can_interface": {
+      "kind": "helper-derived",
+      "description": "One interface name validated by the helper; enabled CAN families require distinct interfaces.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-interface"
+      ]
+    },
+    "growatt_bms_link_can_listen_only_confirmed": {
+      "kind": "helper-derived",
+      "description": "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-listen-only-confirmed"
+      ]
+    },
+    "growatt_bms_link_can_stale_after": {
+      "kind": "helper-derived",
+      "description": "Positive staleness duration, validated by the helper.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-stale-after"
+      ]
+    },
+    "growatt_bms_link_can_project_code": {
+      "kind": "helper-derived",
+      "description": "Explicit project selection, syntax-checked without inferring native support.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-project-code"
+      ]
+    },
+    "growatt_bms_link_can_release": {
+      "kind": "helper-derived",
+      "description": "Explicit release selection, syntax-checked without inferring native support.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-release"
+      ]
+    },
+    "growatt_bms_link_can_native_profile": {
+      "kind": "helper-derived",
+      "description": "Explicit native profile selection, validated by the helper; native admission remains with the gateway.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-native-profile"
+      ]
+    },
+    "growatt_bms_link_can_scope": {
+      "kind": "helper-derived",
+      "description": "Explicit scope, checked against the family selections.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-scope"
+      ]
+    },
+    "growatt_bms_link_can_bank": {
+      "kind": "helper-derived",
+      "description": "Explicit bank selection; must agree with the selected profile.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-bank"
+      ]
+    },
+    "growatt_bms_link_can_context": {
+      "kind": "helper-derived",
+      "description": "Explicit bounded JSON context, validated by the helper and passed unchanged for native admission.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-context"
+      ]
+    },
+    "growatt_bms_link_can_source_selectors": {
+      "kind": "helper-derived",
+      "description": "Explicit bounded JSON source selections, validated by the helper and passed unchanged for native admission.",
+      "read": "serial_can_options_162",
+      "transforms": [
+        "serial_can_options_163"
+      ],
+      "consumer": "serial_can_options_164",
+      "flags": [
+        "growatt-bms-link-can-source-selectors"
+      ]
+    },
+    "tesla_gen3_hsc_retained_enabled": {
+      "kind": "helper-derived",
+      "description": "Enable the retained identity owner; disabled emits no arguments.",
+      "read": "serial_can_options_165",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-retained-enabled"
+      ]
+    },
+    "tesla_gen3_hsc_endpoint_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque endpoint id label when the family is enabled.",
+      "read": "serial_can_options_167",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-endpoint-id"
+      ]
+    },
+    "tesla_gen3_hsc_asset_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque asset identity, distinct from source identity.",
+      "read": "serial_can_options_168",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-asset-id"
+      ]
+    },
+    "tesla_gen3_hsc_source_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque source identity, distinct from asset identity.",
+      "read": "serial_can_options_169",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-source-id"
+      ]
+    },
+    "tesla_gen3_hsc_source_epoch": {
+      "kind": "helper-derived",
+      "description": "Required opaque source epoch label when the family is enabled.",
+      "read": "serial_can_options_170",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-source-epoch"
+      ]
+    },
+    "tesla_gen3_hsc_clock_epoch": {
+      "kind": "helper-derived",
+      "description": "Required opaque clock epoch label when the family is enabled.",
+      "read": "serial_can_options_171",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-clock-epoch"
+      ]
+    },
+    "tesla_gen3_hsc_evse_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque evse id label when the family is enabled.",
+      "read": "serial_can_options_172",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-evse-id"
+      ]
+    },
+    "tesla_gen3_hsc_connector_id": {
+      "kind": "helper-derived",
+      "description": "Required opaque connector id label when the family is enabled.",
+      "read": "serial_can_options_173",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-connector-id"
+      ]
+    },
+    "tesla_gen3_hsc_driver_generation": {
+      "kind": "helper-derived",
+      "description": "Required positive driver generation.",
+      "read": "serial_can_options_174",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-driver-generation"
+      ]
+    },
+    "tesla_gen3_hsc_node": {
+      "kind": "helper-derived",
+      "description": "Required node label from 1 through 247.",
+      "read": "serial_can_options_175",
+      "transforms": [
+        "serial_can_options_166"
+      ],
+      "consumer": "serial_can_options_143",
+      "flags": [
+        "tesla-gen3-hsc-node"
+      ]
+    },
+    "modbus_tcp_endpoints[].label": {
+      "kind": "document-member",
+      "description": "Public identifier, unique in the list; validated before becoming the driver identity.",
+      "read": "modbus_runtime_guard_176",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_177",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].family": {
+      "kind": "document-member",
+      "description": "Exact declared family; no other family is tried. Configuration acceptance does not establish qualification.",
+      "read": "modbus_runtime_guard_176",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_177",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].endpoint": {
+      "kind": "document-member",
+      "description": "Validated endpoint, kept in the protected document and excluded from process arguments.",
+      "read": "modbus_runtime_guard_178",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_177",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].dial_timeout": {
+      "kind": "document-member",
+      "description": "Optional validated timeout; retained in the endpoints document.",
+      "read": "modbus_runtime_guard_179",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_177",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].units": {
+      "kind": "document-member",
+      "description": "Optional distinct routed-unit allowlist; narrows family routing.",
+      "read": "modbus_runtime_guard_180",
+      "transforms": [
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_177",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].pacing_gap_ms": {
+      "kind": "document-member",
+      "description": "Optional validated pacing gap ms value, written under pacing in the endpoints document.",
+      "read": "modbus_runtime_guard_181",
+      "transforms": [
+        "modbus_runtime_guard_182",
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_183",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].pacing_settle_ms": {
+      "kind": "document-member",
+      "description": "Optional validated pacing settle ms value, written under pacing in the endpoints document.",
+      "read": "modbus_runtime_guard_184",
+      "transforms": [
+        "modbus_runtime_guard_182",
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_183",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].pacing_cycle_s": {
+      "kind": "document-member",
+      "description": "Optional validated pacing cycle s value, written under pacing in the endpoints document.",
+      "read": "modbus_runtime_guard_185",
+      "transforms": [
+        "modbus_runtime_guard_182",
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_183",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].pacing_backoff_floor_s": {
+      "kind": "document-member",
+      "description": "Optional validated pacing backoff floor s value, written under pacing in the endpoints document.",
+      "read": "modbus_runtime_guard_186",
+      "transforms": [
+        "modbus_runtime_guard_182",
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_183",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    },
+    "modbus_tcp_endpoints[].pacing_backoff_ceiling_s": {
+      "kind": "document-member",
+      "description": "Optional validated pacing backoff ceiling s value, written under pacing in the endpoints document.",
+      "read": "modbus_runtime_guard_187",
+      "transforms": [
+        "modbus_runtime_guard_182",
+        "modbus_runtime_guard_126",
+        "modbus_document_serialization",
+        "modbus_list_validation",
+        "modbus_materialization",
+        "modbus_shell_values"
+      ],
+      "consumer": "modbus_runtime_guard_183",
+      "flags": [
+        "modbus-tcp-endpoints-file"
+      ]
+    }
+  },
+  "evidence": {
+    "run_1": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)"
+    },
+    "run_2": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "effective_transport=\"${transport}\""
+    },
+    "run_3": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "effective_network=\"${network}\""
+    },
+    "run_4": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "effective_address=\"${address}\""
+    },
+    "run_5": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_profile=$(printf '%s' \"${proxy_profile}\" | tr '[:upper:]' '[:lower:]')"
+    },
+    "run_6": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_endpoint_trimmed=$(printf '%s' \"${proxy_endpoint}\" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    },
+    "run_7": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if bashio::var.true \"${adapter_direct_enabled}\" && [ -n \"${proxy_endpoint_trimmed}\" ]; then"
+    },
+    "run_8": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  bashio::exit.nok \"adapter_direct_enabled=true requires proxy_endpoint to be empty\""
+    },
+    "run_9": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "fi"
+    },
+    "run_10": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "case \"${proxy_profile}\" in"
+    },
+    "run_11": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  \"\" | disabled)"
+    },
+    "run_12": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    proxy_profile=\"disabled\""
+    },
+    "run_13": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    ;;"
+    },
+    "run_14": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  enh | ens)"
+    },
+    "run_15": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    if bashio::var.true \"${adapter_direct_enabled}\"; then"
+    },
+    "run_16": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      if [ \"${adapter_direct_protocol_persisted}\" = true ]; then"
+    },
+    "run_17": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        bashio::log.warning \"Ignoring stale adapter-direct proxy_profile=${proxy_profile}; adapter_direct_protocol=${adapter_direct_protocol} is explicitly persisted; save proxy_profile=disabled in add-on options\""
+    },
+    "run_18": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      else"
+    },
+    "run_19": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        bashio::log.warning \"Migrating legacy adapter-direct proxy_profile=${proxy_profile} to adapter_direct_protocol=${proxy_profile}; save adapter_direct_protocol=${proxy_profile} and proxy_profile=disabled in add-on options\""
+    },
+    "run_20": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        adapter_direct_protocol=\"${proxy_profile}\""
+    },
+    "run_21": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      fi"
+    },
+    "run_22": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      proxy_profile=\"disabled\""
+    },
+    "run_23": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    else"
+    },
+    "run_24": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      if [ -z \"${proxy_endpoint_trimmed}\" ]; then"
+    },
+    "run_25": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        bashio::exit.nok \"proxy_endpoint is required when proxy_profile=${proxy_profile}\""
+    },
+    "run_26": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      if [[ \"${proxy_endpoint_trimmed}\" == *\"://\"* ]]; then"
+    },
+    "run_27": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        effective_address=\"${proxy_endpoint_trimmed}\""
+    },
+    "run_28": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        effective_address=\"${proxy_profile}://${proxy_endpoint_trimmed}\""
+    },
+    "run_29": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      effective_transport=\"${proxy_profile}\""
+    },
+    "run_30": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      effective_network=\"tcp\""
+    },
+    "run_31": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    fi"
+    },
+    "run_32": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  *)"
+    },
+    "run_33": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    bashio::exit.nok \"proxy_profile must be one of: disabled, enh, ens\""
+    },
+    "run_34": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "esac"
+    },
+    "run_35": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_endpoint_marker=\"(none)\""
+    },
+    "run_36": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ -n \"${proxy_endpoint_trimmed}\" ]; then"
+    },
+    "run_37": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  proxy_endpoint_marker=\"${proxy_endpoint_trimmed}\""
+    },
+    "run_38": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ \"${proxy_profile}\" = \"enh\" ] || [ \"${proxy_profile}\" = \"ens\" ]; then"
+    },
+    "run_39": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  proxy_endpoint_marker=\"${effective_address}\""
+    },
+    "run_40": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if bashio::var.true \"${adapter_direct_enabled}\"; then"
+    },
+    "run_41": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  adapter_direct_address_trimmed=$(printf '%s' \"${adapter_direct_address}\" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    },
+    "run_42": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  if [[ \"${adapter_direct_address_trimmed}\" =~ ^([eE][nN][sShH]): ]]; then"
+    },
+    "run_43": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    adapter_direct_address_prefix=$(printf '%s' \"${BASH_REMATCH[1]}\" | tr '[:upper:]' '[:lower:]')"
+    },
+    "run_44": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    adapter_direct_address_remainder=\"${adapter_direct_address_trimmed#*:}\""
+    },
+    "run_45": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    if [ \"${adapter_direct_address_remainder#//}\" != \"${adapter_direct_address_remainder}\" ]; then"
+    },
+    "run_46": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      adapter_direct_address_remainder=\"${adapter_direct_address_remainder#//}\""
+    },
+    "run_47": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    case \"${adapter_direct_address_remainder}\" in"
+    },
+    "run_48": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "      /*)"
+    },
+    "run_49": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        if [ \"${adapter_direct_address_prefix}\" != \"${adapter_direct_protocol}\" ]; then"
+    },
+    "run_50": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "          bashio::exit.nok \"adapter_direct_address prefix '${adapter_direct_address_prefix}:' disagrees with adapter_direct_protocol='${adapter_direct_protocol}'; set adapter_direct_protocol to '${adapter_direct_address_prefix}' or remove the prefix from adapter_direct_address\""
+    },
+    "run_51": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        fi"
+    },
+    "run_52": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        adapter_direct_address_trimmed=\"${adapter_direct_address_remainder}\""
+    },
+    "run_53": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "        ;;"
+    },
+    "run_54": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    esac"
+    },
+    "run_55": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  fi"
+    },
+    "run_56": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  adapter_direct_address_trimmed=$(printf '%s' \"${adapter_direct_address_trimmed}\" | sed -E 's|^[a-zA-Z][-a-zA-Z0-9]*://||')"
+    },
+    "run_57": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  if [ -z \"${adapter_direct_address_trimmed}\" ]; then"
+    },
+    "run_58": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    bashio::exit.nok \"adapter_direct_address is required when adapter_direct_enabled=true\""
+    },
+    "run_59": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  if [ \"${adapter_direct_protocol}\" = \"ens\" ]; then"
+    },
+    "run_60": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    effective_address=\"adapter-direct-ens://${adapter_direct_address_trimmed}\""
+    },
+    "run_61": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  else"
+    },
+    "run_62": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    effective_address=\"adapter-direct://${adapter_direct_address_trimmed}\""
+    },
+    "run_63": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  effective_transport=\"adapter-direct\""
+    },
+    "run_64": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  effective_network=\"tcp\""
+    },
+    "run_65": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "gateway_common_args=(\n  -transport \"${effective_transport}\"\n  -network \"${effective_network}\"\n  -address \"${effective_address}\"\n)"
+    },
+    "run_66": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_direct_protocol=$(bashio::config 'adapter_direct_protocol' 2>/dev/null || true)"
+    },
+    "run_67": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)"
+    },
+    "run_68": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_listen_addr=$(bashio::config 'proxy_listen_addr' 2>/dev/null || true)"
+    },
+    "run_69": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_listen_args=()\nif bashio::var.true \"${adapter_direct_enabled}\"; then\n  bashio::log.info \"Adapter-direct: enabled=${adapter_direct_enabled} protocol=${adapter_direct_protocol} address=${adapter_direct_address}\"\n  if [ -n \"${proxy_listen_addr}\" ]; then\n    proxy_listen_args=(-proxy-listen \"${proxy_listen_addr}\")"
+    },
+    "run_70": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "transport=$(bashio::config 'transport')"
+    },
+    "run_71": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "network=$(bashio::config 'network')"
+    },
+    "run_72": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "address=$(bashio::config 'address')"
+    },
+    "run_73": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_profile=$(bashio::config 'proxy_profile')"
+    },
+    "run_74": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "proxy_endpoint=$(bashio::config 'proxy_endpoint')"
+    },
+    "run_75": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "host=$(bashio::config 'host')"
+    },
+    "run_76": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ -z \"${http_port}\" ]; then\n  http_port=8080\nfi\n\nif [ -n \"${port}\" ] && { [ \"${http_port}\" = \"8080\" ] || [ \"${port}\" != \"8080\" ]; }; then\n  http_port=\"${port}\"\nfi\n\nif [ -z \"${path}\" ]; then\n  path=\"${graphql_path}\"\nfi\n\nif [ -n \"${path}\" ] && { [ \"${graphql_path}\" = \"/graphql\" ] || [ \"${path}\" != \"/graphql\" ]; }; then\n  graphql_path=\"${path}\"\nfi\n\nif [ -z \"${host}\" ]; then\n  host=\"127.0.0.1\"\nfi\n\nif [ \"${graphql_path#/}\" = \"${graphql_path}\" ]; then\n  graphql_path=\"/${graphql_path}\"\nfi\n\nif [ \"${subscription_path#/}\" = \"${subscription_path}\" ]; then\n  subscription_path=\"/${subscription_path}\"\nfi\n\nif [ \"${mcp_path#/}\" = \"${mcp_path}\" ]; then\n  mcp_path=\"/${mcp_path}\"\nfi\n\nif [ \"${subscription_path}\" = \"/graphql/subscriptions\" ] && [ \"${graphql_path}\" != \"/graphql\" ]; then\n  subscription_path=\"${graphql_path%/}/subscriptions\"\nfi\n\nhttp_addr=\"0.0.0.0:${http_port}\""
+    },
+    "run_77": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "bashio::log.info \"GraphQL endpoint: http://${host}:${http_port}${graphql_path}\""
+    },
+    "run_78": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "port=$(bashio::config 'port')"
+    },
+    "run_79": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -http-addr \"${http_addr}\""
+    },
+    "run_80": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "path=$(bashio::config 'path')"
+    },
+    "run_81": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -graphql-path \"${graphql_path}\""
+    },
+    "run_82": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "http_port=$(bashio::config 'http_port')"
+    },
+    "run_83": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "graphql_path=$(bashio::config 'graphql_path')"
+    },
+    "run_84": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "subscription_path=$(bashio::config 'subscription_path')"
+    },
+    "run_85": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -subscription-path \"${subscription_path}\""
+    },
+    "run_86": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "mcp_path=$(bashio::config 'mcp_path')"
+    },
+    "run_87": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -mcp-path \"${mcp_path}\""
+    },
+    "run_88": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "mdns=$(bashio::config 'mdns')"
+    },
+    "run_89": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -mdns=\"${mdns}\""
+    },
+    "run_90": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "mdns_instance=$(bashio::config 'mdns_instance')"
+    },
+    "run_91": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -mdns-instance \"${mdns_instance}\""
+    },
+    "run_92": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "broadcast=$(bashio::config 'broadcast')"
+    },
+    "run_93": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -broadcast=\"${broadcast}\""
+    },
+    "run_94": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "source_addr=$(bashio::config 'source_addr')"
+    },
+    "run_95": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "source_addr_normalized=$(printf '%s' \"${source_addr}\" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')\nsource_addr_intent=$(printf '%s' \"${source_addr}\" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')\nsource_addr_args=()\n\nif [ \"${source_addr_normalized}\" = \"auto\" ] || [ \"${source_addr_normalized}\" = \"null\" ] || [ -z \"${source_addr_normalized}\" ]; then\n  if [ -f \"${legacy_source_addr_last_file}\" ]; then\n    bashio::log.info \"Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; source_addr=auto uses gateway default source selection\"\n  fi\n  if [ \"${effective_transport}\" = \"ebusd-tcp\" ]; then\n    bashio::log.info \"source_addr=auto with transport=ebusd-tcp; using gateway default ebusd-compatible source selection\"\n  else\n    bashio::log.info \"source_addr=auto; using gateway default source-selection policy\"\n  fi\n  source_addr_args=(-source-addr \"auto\")\nelif [ \"${effective_transport}\" = \"ebusd-tcp\" ]; then\n  bashio::log.info \"source_addr=${source_addr_intent} with transport=ebusd-tcp; using ebusd-compatible gateway source input\"\n  if [ -f \"${legacy_source_addr_last_file}\" ]; then\n    bashio::log.info \"Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; explicit ebusd-tcp source_addr does not rewrite it\"\n  fi\n  source_addr_args=(-source-addr \"${source_addr_intent}\")\nelif gateway_supports_flag \"startup-source-override\" && gateway_supports_flag \"startup-source-override-validate\"; then\n  bashio::log.info \"source_addr=${source_addr_intent}; using validate-only gateway startup source override\"\n  if [ -f \"${legacy_source_addr_last_file}\" ]; then\n    bashio::log.info \"Legacy source address state file ${legacy_source_addr_last_file} is retained for rollback only; explicit source_addr does not rewrite it\"\n  fi\n  source_addr_args=(-startup-source-override \"${source_addr_intent}\" -startup-source-override-validate=true)"
+    },
+    "run_96": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "scan_request_timeout=$(bashio::config 'scan_request_timeout')"
+    },
+    "run_97": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -scan-request-timeout \"${scan_request_timeout}\""
+    },
+    "run_98": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "read_timeout=$(bashio::config 'read_timeout')"
+    },
+    "run_99": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -read-timeout \"${read_timeout}\""
+    },
+    "run_100": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "write_timeout=$(bashio::config 'write_timeout')"
+    },
+    "run_101": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -write-timeout \"${write_timeout}\""
+    },
+    "run_102": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "dial_timeout=$(bashio::config 'dial_timeout')"
+    },
+    "run_103": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -dial-timeout \"${dial_timeout}\""
+    },
+    "run_104": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "observe_first_enabled=$(bashio::config 'observe_first_enabled' 2>/dev/null || true)"
+    },
+    "run_105": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -observe-first-enabled=\"${observe_first_enabled}\""
+    },
+    "run_106": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "passive_state_direct_apply=$(bashio::config 'passive_state_direct_apply' 2>/dev/null || true)"
+    },
+    "run_107": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -passive-state-direct-apply=\"${passive_state_direct_apply}\""
+    },
+    "run_108": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "passive_config_direct_apply=$(bashio::config 'passive_config_direct_apply' 2>/dev/null || true)"
+    },
+    "run_109": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -passive-config-direct-apply=\"${passive_config_direct_apply}\""
+    },
+    "run_110": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "external_write_policy=$(bashio::config 'external_write_policy' 2>/dev/null || true)"
+    },
+    "run_111": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  -external-write-policy \"${external_write_policy}\""
+    },
+    "run_112": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "enable_static_seed_table=$(bashio::config 'enable_static_seed_table' 2>/dev/null || true)"
+    },
+    "run_113": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  static_seed_args=(-enable-static-seed-table=\"${enable_static_seed_table}\")"
+    },
+    "run_114": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "v8_classifier_mode=$(bashio::config 'v8_classifier_mode' 2>/dev/null || true)"
+    },
+    "run_115": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "export HELIANTHUS_V8_CLASSIFIER_MODE=\"${v8_classifier_mode}\""
+    },
+    "run_116": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_enabled=$(bashio::config 'eebus_enabled' 2>/dev/null || true)"
+    },
+    "run_117": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if bashio::var.true \"${eebus_enabled}\"; then"
+    },
+    "run_118": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  if bashio::var.true \"${eebus_discovery_enabled}\"; then"
+    },
+    "run_119": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  eebus_args=(\n    -eebus-enabled=true\n    -eebus-listen-port \"${eebus_listen_port}\"\n    -eebus-interfaces \"${eebus_interface}\"\n    -eebus-subnets \"${eebus_subnets}\"\n    -eebus-state-root \"/data/eebus\"\n    -eebus-discovery-enabled=\"${eebus_discovery_value}\"\n    -eebus-remote-ski-allowlist \"${eebus_remote_ski_allowlist}\"\n    -eebus-pairing-window-mode \"closed\"\n  )"
+    },
+    "run_120": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_listen_port=$(bashio::config 'eebus_listen_port' 2>/dev/null || true)"
+    },
+    "run_121": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_interface=$(bashio::config 'eebus_interface' 2>/dev/null || true)"
+    },
+    "run_122": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_subnets=$(bashio::config 'eebus_subnets' 2>/dev/null || true)"
+    },
+    "run_123": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_discovery_enabled=$(bashio::config 'eebus_discovery_enabled' 2>/dev/null || true)"
+    },
+    "run_124": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "eebus_remote_ski_allowlist=$(bashio::config 'eebus_remote_ski_allowlist' 2>/dev/null || true)"
+    },
+    "modbus_runtime_guard_125": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    enabled = payload.get(\"modbus_tcp_enabled\", False)"
+    },
+    "modbus_runtime_guard_126": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "def load_config(path: Path) -> Config:\n    try:\n        payload = json.loads(path.read_text(encoding=\"utf-8\")) if path.exists() else {}\n    except (OSError, UnicodeError, json.JSONDecodeError) as error:\n        raise ConfigError(\"invalid options document\") from error\n    if not isinstance(payload, dict):\n        raise ConfigError(\"options document must be an object\")\n\n    enabled = payload.get(\"modbus_tcp_enabled\", False)\n    if type(enabled) is not bool:\n        raise ConfigError(\"invalid enabled option type\")\n    if not enabled:\n        return Config(False, \"\", \"\")\n\n    listed = payload.get(\"modbus_tcp_endpoints\", [])\n    if type(listed) is not list or listed:\n        return _load_endpoint_list(payload, listed)\n\n    endpoint = payload.get(\"modbus_tcp_endpoint\", \"\")\n    dial_timeout = payload.get(\"modbus_tcp_dial_timeout\", \"5s\")\n    if not isinstance(endpoint, str) or not isinstance(dial_timeout, str):\n        raise ConfigError(\"invalid active option type\")\n    _duration_milliseconds(dial_timeout)\n    _validate_endpoint(endpoint)\n    return Config(True, endpoint, dial_timeout)"
+    },
+    "run_127": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  modbus_args=(\n    -modbus-tcp-enabled=true\n    -modbus-tcp-endpoint-file \"${modbus_endpoint_file}\"\n    -modbus-tcp-dial-timeout \"${modbus_tcp_dial_timeout}\"\n  )"
+    },
+    "run_128": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if bashio::var.true \"${modbus_tcp_enabled}\" && [ \"${modbus_tcp_config}\" = \"v2\" ]; then"
+    },
+    "run_129": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "elif bashio::var.true \"${modbus_tcp_enabled}\"; then"
+    },
+    "run_130": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  modbus_args=(\n    -modbus-tcp-endpoints-file \"${modbus_endpoints_file}\"\n  )"
+    },
+    "modbus_runtime_guard_131": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "        payload.get(\"modbus_tcp_endpoint\", \"\") != \"\""
+    },
+    "run_132": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  printf '%s' \"${MODBUS_TCP_ENDPOINT}\" > \"${modbus_endpoint_staging}\""
+    },
+    "modbus_runtime_guard_133": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "        or payload.get(\"modbus_tcp_dial_timeout\", V1_DIAL_TIMEOUT) != V1_DIAL_TIMEOUT"
+    },
+    "modbus_runtime_guard_134": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    listed = payload.get(\"modbus_tcp_endpoints\", [])"
+    },
+    "run_135": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  m2m_graphql_enabled=$(jq -r '.m2m_graphql_enabled // false' \"${eebus_options_path}\")"
+    },
+    "run_136": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if bashio::var.true \"${m2m_graphql_enabled}\"; then"
+    },
+    "run_137": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    m2m_args+=(\n      -portal-pv-semantic-enabled=true\n      -portal-pv-m2m-url \"https://127.0.0.1:8443/graphql/m2m/v1\"\n      -portal-pv-m2m-server-name \"${m2m_graphql_server_name}\"\n      -portal-pv-m2m-ca \"${m2m_portal_ca}\"\n      -portal-pv-m2m-client-cert \"${m2m_portal_client_cert}\"\n      -portal-pv-m2m-client-key \"${m2m_portal_client_key}\"\n      -portal-pv-asset-ref \"${m2m_graphql_asset_ref}\"\n    )"
+    },
+    "run_138": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  m2m_args=(\n    -m2m-graphql-listen \"0.0.0.0:8443\"\n    -m2m-graphql-server-name \"${m2m_graphql_server_name}\"\n    -m2m-graphql-server-cert \"${m2m_server_cert}\"\n    -m2m-graphql-server-key \"${m2m_server_key}\"\n    -m2m-graphql-allowed-assets \"${m2m_graphql_asset_ref}\"\n  )"
+    },
+    "run_139": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    m2m_graphql_server_name=$(jq -r '.m2m_graphql_server_name // \"\"' \"${eebus_options_path}\")"
+    },
+    "run_140": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    m2m_graphql_asset_ref=$(jq -r '.m2m_graphql_asset_ref // \"\"' \"${eebus_options_path}\")"
+    },
+    "serial_can_options_141": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "GROWATT_ENABLED = (\"growatt_bms_rs485_enabled\", \"growatt-bms-rs485-enabled\")"
+    },
+    "serial_can_options_142": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    growatt = _family(payload, GROWATT_ENABLED, GROWATT_FIELDS)"
+    },
+    "serial_can_options_143": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    value = payload.get(enabled[0], False)\n    if type(value) is not bool:\n        raise ConfigError(f\"{enabled[0]} must be a boolean\")\n    if not value:\n        return None\n    argv = [f\"-{enabled[1]}=true\"]\n    converted: dict[str, str] = {}\n    for key, flag, kind in fields:\n        if key not in payload:\n            raise ConfigError(f\"{key} is required when {enabled[0]} is true\")\n        converted[key] = _convert(payload[key], key, kind)\n        argv.extend((f\"-{flag}\", converted[key]))\n    return argv, converted"
+    },
+    "serial_can_options_144": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_asset_id\", \"growatt-bms-rs485-asset-id\", \"label\"),"
+    },
+    "serial_can_options_145": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_source_id\", \"growatt-bms-rs485-source-id\", \"label\"),"
+    },
+    "serial_can_options_146": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_source_epoch\", \"growatt-bms-rs485-source-epoch\", \"label\"),"
+    },
+    "serial_can_options_147": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_driver_generation\", \"growatt-bms-rs485-driver-generation\", \"uint\"),"
+    },
+    "serial_can_options_148": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_unit_id\", \"growatt-bms-rs485-unit-id\", \"unit\"),"
+    },
+    "serial_can_options_149": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_serial_path\", \"growatt-bms-rs485-serial-path\", \"path\"),"
+    },
+    "serial_can_options_150": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_baud\", \"growatt-bms-rs485-baud\", \"baud\"),"
+    },
+    "serial_can_options_151": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_parity\", \"growatt-bms-rs485-parity\", \"parity\"),"
+    },
+    "serial_can_options_152": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_stop_bits\", \"growatt-bms-rs485-stop-bits\", \"stop_bits\"),"
+    },
+    "serial_can_options_153": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_response_timeout\", \"growatt-bms-rs485-response-timeout\", \"duration\"),"
+    },
+    "serial_can_options_154": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_max_response_delay\", \"growatt-bms-rs485-max-response-delay\", \"duration\"),"
+    },
+    "serial_can_options_155": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_rs485_max_quiescence\", \"growatt-bms-rs485-max-quiescence\", \"duration\"),"
+    },
+    "serial_can_options_156": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "GROWATT_CAN_ENABLED = (\"growatt_bms_can_enabled\", \"growatt-bms-can-enabled\")"
+    },
+    "serial_can_options_157": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    can = _family(payload, GROWATT_CAN_ENABLED, CAN_FIELDS)"
+    },
+    "serial_can_options_158": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_can_interface\", \"growatt-bms-can-interface\", \"can_interface\"),"
+    },
+    "serial_can_options_159": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "GROWATT_CAN_LISTEN_ONLY = (\"growatt_bms_can_listen_only_confirmed\", \"growatt-bms-can-listen-only-confirmed\")"
+    },
+    "serial_can_options_160": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "        confirmed = payload.get(GROWATT_CAN_LISTEN_ONLY[0], False)\n        if type(confirmed) is not bool:\n            raise ConfigError(f\"{GROWATT_CAN_LISTEN_ONLY[0]} must be a boolean\")\n        if not confirmed:\n            raise ConfigError(\n                f\"{GROWATT_CAN_LISTEN_ONLY[0]} must be true when {GROWATT_CAN_ENABLED[0]} is true: \"\n                \"put the CAN controller in listen-only mode first\"\n            )\n        # Flag order: enabled, interface, listen-only precondition, staleness bound.\n        argv.extend(can_argv[:3])\n        argv.append(f\"-{GROWATT_CAN_LISTEN_ONLY[1]}=true\")"
+    },
+    "serial_can_options_161": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"growatt_bms_can_stale_after\", \"growatt-bms-can-stale-after\", \"duration\"),"
+    },
+    "serial_can_options_162": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    prefix = f\"growatt_bms_{family}_can_\"\n    flag_prefix = prefix.replace(\"_\", \"-\")\n    enabled = payload.get(prefix + \"enabled\", False)\n    if type(enabled) is not bool:\n        raise ConfigError(f\"{prefix}enabled must be a boolean\")\n    if not enabled:\n        return []\n    values = {suffix: payload.get(prefix + suffix.replace(\"-\", \"_\"), \"\")\n              for suffix in (*PROJECT_SUFFIXES, PROJECT_EXTRA[family])}"
+    },
+    "serial_can_options_163": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "PROJECT_SUFFIXES = (\n    \"enabled\", \"interface\", \"listen-only-confirmed\", \"stale-after\",\n    \"project-code\", \"release\", \"native-profile\", \"scope\", \"bank\", \"context\",\n)\nPROJECT_EXTRA = {\"pcs\": \"native-contract\", \"link\": \"source-selectors\"}"
+    },
+    "serial_can_options_164": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    argv = [f\"-{flag_prefix}enabled=true\"]\n    for suffix in (*PROJECT_SUFFIXES[1:], PROJECT_EXTRA[family]):\n        value = values[suffix]\n        if suffix == \"listen-only-confirmed\":\n            argv.append(f\"-{flag_prefix}{suffix}=true\")\n        elif value != \"\":\n            argv.extend((f\"-{flag_prefix}{suffix}\", value))\n    return argv"
+    },
+    "serial_can_options_165": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "TESLA_ENABLED = (\"tesla_gen3_hsc_retained_enabled\", \"tesla-gen3-hsc-retained-enabled\")"
+    },
+    "serial_can_options_166": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    tesla = _family(payload, TESLA_ENABLED, TESLA_FIELDS)"
+    },
+    "serial_can_options_167": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_endpoint_id\", \"tesla-gen3-hsc-endpoint-id\", \"label\"),"
+    },
+    "serial_can_options_168": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_asset_id\", \"tesla-gen3-hsc-asset-id\", \"label\"),"
+    },
+    "serial_can_options_169": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_source_id\", \"tesla-gen3-hsc-source-id\", \"label\"),"
+    },
+    "serial_can_options_170": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_source_epoch\", \"tesla-gen3-hsc-source-epoch\", \"label\"),"
+    },
+    "serial_can_options_171": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_clock_epoch\", \"tesla-gen3-hsc-clock-epoch\", \"label\"),"
+    },
+    "serial_can_options_172": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_evse_id\", \"tesla-gen3-hsc-evse-id\", \"label\"),"
+    },
+    "serial_can_options_173": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_connector_id\", \"tesla-gen3-hsc-connector-id\", \"label\"),"
+    },
+    "serial_can_options_174": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_driver_generation\", \"tesla-gen3-hsc-driver-generation\", \"uint\"),"
+    },
+    "serial_can_options_175": {
+      "file": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "text": "    (\"tesla_gen3_hsc_node\", \"tesla-gen3-hsc-node\", \"unit\"),"
+    },
+    "modbus_runtime_guard_176": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    label, family = raw[\"label\"], raw[\"family\"]"
+    },
+    "modbus_runtime_guard_177": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    return Entry(label, family, raw[\"endpoint\"], dial_timeout, units, tuple(pacing)), key"
+    },
+    "modbus_runtime_guard_178": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "        key = _endpoint_key(raw[\"endpoint\"])"
+    },
+    "modbus_runtime_guard_179": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "        dial_timeout = raw[\"dial_timeout\"]"
+    },
+    "modbus_runtime_guard_180": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "        listed = raw[\"units\"]"
+    },
+    "modbus_runtime_guard_181": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    (\"pacing_gap_ms\", \"gap_ms\", 50, 2000),"
+    },
+    "modbus_runtime_guard_182": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "            item[\"pacing\"] = dict(entry.pacing)"
+    },
+    "modbus_runtime_guard_183": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    for option, member, minimum, maximum in PACING_OPTIONS:\n        if option in raw:\n            value = raw[option]\n            if type(value) is not int or not minimum <= value <= maximum:\n                raise reject(\"INVALID_PACING\")\n            pacing.append((member, value))"
+    },
+    "modbus_runtime_guard_184": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    (\"pacing_settle_ms\", \"settle_ms\", 0, 10_000),"
+    },
+    "modbus_runtime_guard_185": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    (\"pacing_cycle_s\", \"cycle_s\", 15, 3600),"
+    },
+    "modbus_runtime_guard_186": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    (\"pacing_backoff_floor_s\", \"backoff_floor_s\", 1, 300),"
+    },
+    "modbus_runtime_guard_187": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "    (\"pacing_backoff_ceiling_s\", \"backoff_ceiling_s\", 5, 3600),"
+    },
+    "modbus_document_serialization": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "def endpoints_document(entries: tuple[Entry, ...]) -> bytes:\n    \"\"\"The closed endpoints document: compact ASCII JSON, members only when the operator set them.\"\"\"\n    members = []\n    for entry in entries:\n        item: dict[str, object] = {\"label\": entry.label, \"family\": entry.family, \"endpoint\": entry.endpoint}\n        if entry.dial_timeout is not None:\n            item[\"dial_timeout\"] = entry.dial_timeout\n        if entry.units is not None:\n            item[\"units\"] = list(entry.units)\n        if entry.pacing:\n            item[\"pacing\"] = dict(entry.pacing)\n        members.append(item)\n    body = json.dumps({\"contract\": ENDPOINTS_CONTRACT, \"endpoints\": members}, separators=(\",\", \":\")).encode(\"ascii\")\n    if len(body) > MAX_DOCUMENT_BYTES:\n        raise ConfigRejection(\"INVALID_DOCUMENT\")\n    return body"
+    },
+    "modbus_list_validation": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "def _load_endpoint_list(payload: dict, listed: object) -> Config:\n    \"\"\"Configuration v2. The first failing check decides the single reported category.\"\"\"\n    if (\n        payload.get(\"modbus_tcp_endpoint\", \"\") != \"\"\n        or payload.get(\"modbus_tcp_dial_timeout\", V1_DIAL_TIMEOUT) != V1_DIAL_TIMEOUT\n    ):\n        raise ConfigRejection(\"MIXED_CONFIGURATION\")\n    _scan_document(listed)\n    if type(listed) is not list:\n        raise ConfigRejection(\"INVALID_DOCUMENT\")\n    if len(listed) > MAX_ENTRIES:\n        raise ConfigRejection(\"TOO_MANY_ENTRIES\")\n    parsed = [_entry(position, raw) for position, raw in enumerate(listed)]\n    entries = tuple(entry for entry, _ in parsed)\n    keys = [key for _, key in parsed]\n    for category, values in (\n        (\"DUPLICATE_LABEL\", [entry.label for entry in entries]),\n        (\"DUPLICATE_ENDPOINT\", keys),\n    ):\n        if len(set(values)) != len(values):\n            raise ConfigRejection(category)\n    return Config(True, \"\", V1_DIAL_TIMEOUT, entries)"
+    },
+    "modbus_materialization": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "def materialize(config: Config, path: Path) -> None:\n    \"\"\"Write the endpoints document atomically: mode 0600 in a 0700 directory, staged then renamed.\"\"\"\n    if not config.endpoints:\n        raise ConfigError(\"no endpoint list\")\n    body = endpoints_document(config.endpoints)\n    directory = path.parent\n    directory.mkdir(mode=0o700, parents=True, exist_ok=True)\n    os.chmod(directory, 0o700)\n    staging = _staging(path)\n    _remove(staging)\n    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, \"O_NOFOLLOW\", 0)\n    try:\n        with os.fdopen(os.open(staging, flags, 0o600), \"wb\") as handle:\n            os.fchmod(handle.fileno(), 0o600)\n            handle.write(body)\n        os.replace(staging, path)\n    except BaseException:\n        _remove(staging)\n        raise\n"
+    },
+    "modbus_shell_values": {
+      "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "text": "def _validate_command(args: argparse.Namespace) -> int:\n    config = load_config(args.options)\n    print(_shell_assignment(\"MODBUS_TCP_ENABLED\", str(config.enabled).lower()))\n    print(_shell_assignment(\"MODBUS_TCP_ENDPOINT\", config.endpoint))\n    print(_shell_assignment(\"MODBUS_TCP_DIAL_TIMEOUT\", config.dial_timeout))\n    if config.endpoints:\n        print(_shell_assignment(\"MODBUS_TCP_CONFIG\", \"v2\"))\n    return 0"
+    }
+  }
+}
