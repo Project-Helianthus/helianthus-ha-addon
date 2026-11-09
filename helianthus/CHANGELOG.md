@@ -385,10 +385,6 @@ source-selection semantic bootstrap as soon as active source evidence exists,
 retries the DHW singleton before the startup zone sweep, and defers delayed
 physical serial identity enrichment beyond the L1 semantic window.
 
-Local HA override proof before this add-on pin:
-`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T150427Z_m4.txt`
-showed all 12 MCP planes non-null at 48s and
-`semantic_b524_root_discovery address=0x15` at 2026-05-23 18:04:36 local.
 
 Docs evidence:
 [helianthus-docs-ebus PR #315](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/315).
@@ -409,10 +405,6 @@ MCP adapters, and uses direct live B524 startup probes so the first-minute L1
 readiness path is not blocked by semantic read-breaker cooldown. Interpreted
 FM5 mode still requires non-empty cylinder evidence before startup L1 can pass.
 
-Local HA override proof before this add-on pin:
-`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T132412Z_m4.txt`
-showed all 12 MCP planes non-null at 48s; logs showed
-`semantic_b524_root_discovery address=0x15` about 12s after gateway startup.
 
 Docs evidence:
 [helianthus-docs-ebus PR #313](https://github.com/Project-Helianthus/helianthus-docs-ebus/pull/313)
@@ -434,9 +426,6 @@ radio devices, FM5 mode, solar, cylinders, system, and boiler status with
 bounded startup probes so all 12 MCP semantic planes can populate inside
 the 60-second O1 window.
 
-Local HA override proof before this add-on pin:
-`_work_adaptermux_audit/v8-enforce-stress/m4-verification/20260523T121840Z_m4.txt`
-showed `discoverB524Root` at 12s and all 12 MCP planes non-null at 47s.
 
 ## 0.6.27 (2026-05-23)
 
@@ -537,7 +526,6 @@ in-flight write. Legitimate terminator SYNs (the common case after
 non-0xAA-ending frames) are unaffected. To be empirically verified
 in the post-deploy stress test.
 
-Full diagnosis: `_work_adaptermux_audit/v8-enforce-stress/findings.md`.
 
 ## 0.6.24 (2026-05-21)
 
@@ -593,7 +581,6 @@ cross-proxy session byte streams.
 
 **Why this is safe** (live-bus validation evidence):
 
-- `_work_adaptermux_audit/v8-shadow-validation-20260520T055414Z.md`
   iter-7 captured the per-event distribution behind the aggregate
   `helianthus_v8_shadow_would_have_dropped_total` counter using the
   new `GET /debug/v8/admin-events?peek=true` endpoint added in
@@ -851,7 +838,6 @@ Expected metrics per operator's predicted outcome (batch-19 spec):
 - helianthus-ebusgo PR #154 (commit 5215685): F-23 ENH unescape.
 - helianthus-ebusgateway PR #632 (commit 6f44780): F-22 + F-23
   consumer cleanup + buildVersion 0.6.0.
-- `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-13-batch19.md`.
 
 ## 0.6.12 (2026-05-13)
 
@@ -923,7 +909,6 @@ passive_reconstructor abandon reason=unexpected_symbol phase=2
 ### Refs
 
 - helianthus-ebusgateway PR #631 (commit 259243c)
-- `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-13-batch18.md`
 
 ## 0.6.11 (2026-05-13)
 
@@ -1284,18 +1269,6 @@ review finding on the gateway PR).
 | `totalOverflowResets` increments | 0 | 0 |
 | `ebusctl scan 08` returns real BAI00 identity | from passive cache | from real ebusd-initiated scan |
 
-### Adversarial-review trail
-
-- Four independent agents (Explore code-walk, angry-tester
-  adversarial attack, consultant with direct john30/ebusd source
-  citations, and Codex CLI) converged on F-18 with no surviving
-  alternative hypothesis. Full agent reports in
-  `_work_adaptermux_audit/EBUSD-VERIFICATION-2026-05-12-batch13.md`.
-- Codex round-1 review on the gateway PR surfaced one LOW finding
-  (the phase-tracker unit test wasn't covering the full integration
-  path) and one P1 doc-gate finding. Both addressed in-PR /
-  companion docs-ebus#307.
-
 ### Gateway
 
 - Bump pin to `7aa1d8b`.
@@ -1306,8 +1279,7 @@ review finding on the gateway PR).
 
 ### F-17: close the ebusd retry-feedback-loop (pcap-confirmed root cause)
 
-**Headline.** Microsecond-resolution TCP capture (operator's batch-9
-audit, `EBUSD-VERIFICATION-2026-05-11-batch9.md`) showed every
+**Headline.** A TCP capture showed every
 `ReqStart(0x31)` from ebusd received `ENHResFailed(0x31)` within
 ~0.3 ms — far faster than the bus can physically arbitrate (eBUS
 bit-time ~4 ms). The proxy was synthesizing these failures locally
