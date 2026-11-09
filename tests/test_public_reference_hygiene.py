@@ -10,6 +10,7 @@ PATTERNS = (r'_work_[\w/-]+', r'(?i)\b(?:verification|audit)[-_][\w.-]+\.md\b', 
 
 
 def violations(text):
+    text = re.sub(r'https?://[^\s<>"`()]+', '', text, flags=re.IGNORECASE)
     return [pattern for pattern in PATTERNS if re.search(pattern, text)]
 
 
@@ -21,6 +22,21 @@ def test_public_paths_have_no_private_references():
 def test_hygiene_negative_controls():
     for text in ('_work_example/report.md', 'verification-example.md', '/Users/example/report.md'):
         assert violations(text)
+
+
+def test_hygiene_allows_public_document_urls():
+    for filename in ('verification-example.md', 'audit-example.md', 'EBUSD-VERIFICATION-2026.md'):
+        url = f'https://github.com/example/project/blob/main/{filename}'
+        for text in (url, f'[public document]({url})', f'<{url}>'):
+            assert not violations(text)
+
+
+def test_hygiene_rejects_local_references_alongside_public_urls():
+    url = 'https://github.com/example/project/blob/main/audit-example.md'
+    for reference in ('verification-example.md', 'audit-example.md', '_work_example/report.md', '/Users/example/report.md'):
+        assert violations(f'[{reference}]({url})')
+        assert violations(f'{url} and `{reference}`')
+        assert violations(f'[public document]({url}){reference}')
 
 
 def test_proxy_fallback_warning_and_value(tmp_path):
