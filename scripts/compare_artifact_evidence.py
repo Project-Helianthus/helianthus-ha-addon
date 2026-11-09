@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
+import stat
 import subprocess
 
 
@@ -37,6 +39,8 @@ def inspect_go(path):
     settings = {}
     deps = []
     for line in lines[1:]:
+        if not line.strip():
+            continue
         fields = line.strip().split('\t')
         if fields[0] == 'build':
             key, value = fields[1].split('=', 1)
@@ -57,14 +61,22 @@ def load_tree(root):
     require(manifest['version'] == 1 and bool(manifest['files']))
     actual = {}
     for path in root.rglob('*'):
-        require(not path.is_symlink())
-        if path.is_file() and path != root / 'evidence.json':
-            actual[path.relative_to(root).as_posix()] = path.read_bytes()
+        mode = path.lstat().st_mode
+        require(stat.S_ISREG(mode) or stat.S_ISDIR(mode))
+        if path != root / 'evidence.json':
+            actual[path.relative_to(root).as_posix()] = (
+                path.read_bytes() if stat.S_ISREG(mode) else None)
     require(set(actual) == set(manifest['files']))
     for name, entry in manifest['files'].items():
         require(isinstance(name, str) and not PurePosixPath(name).is_absolute()
                 and '..' not in PurePosixPath(name).parts)
-        require(set(entry) == {'kind', 'sha256'})
+        require(type(entry['mode']) is int and
+                entry['mode'] == stat.S_IMODE((root / name).stat().st_mode))
+        if actual[name] is None:
+            require(set(entry) == {'kind', 'mode'} and entry['kind'] == 'directory')
+            require(name in {'inputs', 'shipped'} or name.startswith(('inputs/', 'shipped/')))
+            continue
+        require(set(entry) == {'kind', 'sha256', 'mode'})
         require(entry['kind'] in {'python', 'data', 'gateway', 'input'})
         require(name.startswith('inputs/') if entry['kind'] == 'input' else name.startswith('shipped/'))
         require(entry['sha256'] == fingerprint(actual[name]))
@@ -92,9 +104,15 @@ def validate_recipe(recipe, inspection):
     require(settings.get('GOARCH') in {'amd64', 'arm64', 'arm', '386'})
     # -trimpath builds omit -ldflags from inspected metadata, so the linker
     # flags are recorded only in the build command and checked from there.
-    allowed = {'-trimpath', '-buildmode', '-compiler', '-tags',
+    allowed = {'-trimpath', '-buildmode', '-compiler', '-tags', 'DefaultGODEBUG',
                'CGO_ENABLED', 'GOOS', 'GOARCH', 'GOAMD64', 'GOARM', 'GOARM64', 'GO386'}
     require(set(settings) <= allowed)
+    if 'DefaultGODEBUG' in settings:
+        defaults = settings['DefaultGODEBUG']
+        require(isinstance(defaults, str) and
+                re.fullmatch(r'[a-z][a-z0-9]*=[0-9]+(?:,[a-z][a-z0-9]*=[0-9]+)*', defaults))
+        keys = [item.split('=', 1)[0] for item in defaults.split(',')]
+        require(len(keys) == len(set(keys)))
     command_args = recipe['command']
     require(isinstance(command_args, list) and command_args.count('-ldflags') == 1
             and command_args.index('-ldflags') + 1 < len(command_args))
@@ -129,8 +147,15 @@ def compare(before, after, inspector=inspect_go):
         require(set(bd) == set(ad))
         for name, entry in bm['files'].items():
             kind = entry['kind']
-            require(kind == am['files'][name]['kind'])
+            require(kind == am['files'][name]['kind'] and
+                    entry['mode'] == am['files'][name]['mode'])
             if kind == 'python':
+                def shebang(data):
+                    if not data.startswith(b'#!'):
+                        return None
+                    line, newline, _ = data.partition(b'\n')
+                    return line + newline
+                require(shebang(bd[name]) == shebang(ad[name]))
                 require(ast.dump(ast.parse(bd[name]), include_attributes=False) ==
                         ast.dump(ast.parse(ad[name]), include_attributes=False))
             elif kind == 'data':
@@ -143,7 +168,8 @@ def compare(before, after, inspector=inspect_go):
                     require(set(recipe['inputs']) == inputs and len(recipe['inputs']) == len(inputs))
                     validate_recipe(recipe, inspector(Path(root) / name))
                 require(bd[name] == ad[name])
-        return {'status': 'COMPARISONS_VERIFIED', 'files_compared': len(bd),
+        return {'status': 'COMPARISONS_VERIFIED',
+                'files_compared': sum(data is not None for data in bd.values()),
                 'provenance': 'operator-controlled builds required; not independently reproduced',
                 'candidate_acceptance': 'UNVERIFIED'}
     except (ValueError, TypeError, KeyError, IndexError, AttributeError, OSError,
@@ -152,7 +178,7 @@ def compare(before, after, inspector=inspect_go):
 
 
 def self_test():
-    # Exercise the same CLI comparison path with synthetic data and a fake inspector.
+    # Exercise the comparison path with synthetic pairs and a local build regression.
     import importlib.util
     test_path = Path(__file__).resolve().parents[1] / 'tests/test_artifact_evidence.py'
     spec = importlib.util.spec_from_file_location('artifact_self_tests', test_path)
@@ -171,7 +197,8 @@ def main():
     args = parser.parse_args()
     if args.self_test:
         ok = self_test()
-        print(json.dumps({'self_test': 'PASS' if ok else 'UNVERIFIED', 'synthetic_only': True}))
+        print(json.dumps({'self_test': 'PASS' if ok else 'UNVERIFIED',
+                          'candidate_acceptance': 'UNVERIFIED'}))
         return 0 if ok else 1
     if args.before is None or args.after is None:
         parser.error('--before and --after are required')
