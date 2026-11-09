@@ -71,6 +71,7 @@ def load_tree(root):
         data = actual[name]
         python_script = (name.endswith('.py') or
                          (data.startswith(b'#!') and b'python' in data.split(b'\n')[0]))
+        require(entry['kind'] != 'python' or python_script)
         require(not name.startswith('shipped/') or not python_script or entry['kind'] == 'python')
     gateways = {n for n, e in manifest['files'].items() if e['kind'] == 'gateway'}
     require(bool(gateways) and set(manifest['builds']) == gateways)

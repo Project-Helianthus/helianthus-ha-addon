@@ -54,6 +54,8 @@ match its actual bytes. Both trees must have the same paths and kinds. All
 shipped `.py` files and Python shebang scripts must use `python`. Their comparison
 is exactly `ast.dump(ast.parse(content), include_attributes=False)` using the
 running interpreter: comments and locations disappear, docstrings remain.
+The `python` kind is accepted only for `.py` files or Python shebang scripts in
+each tree; misclassified packaged data is rejected even when its AST matches.
 Unsupported syntax fails closed. Other packaged data is compared byte for byte.
 Input bytes may differ, but the input set must be identical; those differences
 are not themselves neutrality evidence. Actual gateway output equality is required.

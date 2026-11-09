@@ -87,6 +87,23 @@ class EvidenceTests(unittest.TestCase):
         self.write(self.after)
         self.assertEqual(self.compare(), 'UNVERIFIED')
 
+    def test_packaged_data_misclassified_as_python(self):
+        for filename, data in (('settings.json', b'{"enabled": 1}\n'),
+                               ('settings.conf', b'enabled = 1\n')):
+            with self.subTest(filename=filename):
+                before = Path(self.tmp.name) / filename / 'before'
+                after = Path(self.tmp.name) / filename / 'after'
+                name = 'shipped/' + filename
+                files = dict(self.files, **{name: ('python', data)})
+                self.write(before, files)
+                for suffix in (b'', b'# synthetic comment\n'):
+                    with self.subTest(suffix=suffix):
+                        files[name] = ('python', data + suffix)
+                        self.write(after, files)
+                        self.assertEqual(
+                            proof.compare(before, after, lambda _: self.inspection)['status'],
+                            'UNVERIFIED')
+
     def test_extra_deleted_and_omitted_inventory(self):
         path = self.after / 'shipped/data'
         path.unlink()
