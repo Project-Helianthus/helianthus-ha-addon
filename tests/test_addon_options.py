@@ -294,3 +294,18 @@ def test_transform_from_another_route_rejected(tree, key):
     value['options'][key]['transforms'] = [other]
     write_map(tree, value)
     reject(tree)
+
+
+HELPER_CONSUMERS = sorted({entry['consumer'] for key, entry in MAP['options'].items()
+                           if key.startswith(('growatt_', 'tesla_'))})
+
+
+@pytest.mark.parametrize('key', [k for k in KEYS if k.startswith(('growatt_', 'tesla_'))])
+def test_consumer_from_another_route_rejected(tree, key):
+    value = read_map(tree)
+    current = value['options'][key]['consumer']
+    for other in (ref for ref in HELPER_CONSUMERS if ref != current):
+        value = read_map(tree)
+        value['options'][key]['consumer'] = other
+        write_map(tree, value)
+        reject(tree)

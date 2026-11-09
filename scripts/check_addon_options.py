@@ -142,6 +142,20 @@ def expected_helper_transform(key: str) -> str | None:
     return None
 
 
+# Each helper-derived option must be proven by the sink that emits its own
+# flag; a consumer excerpt borrowed from another helper route is rejected.
+def expected_consumer_markers(key: str, serial: dict) -> tuple[str, ...] | None:
+    if re.match(r'growatt_bms_(pcs|link)_can_', key):
+        return ('argv = [f"-{flag_prefix}enabled=true"]', 'f"-{flag_prefix}{suffix}"')
+    if key == serial['GROWATT_CAN_LISTEN_ONLY'][0]:
+        return ('f"-{GROWATT_CAN_LISTEN_ONLY[1]}=true"',)
+    if not key.startswith(('growatt_', 'tesla_')):
+        return None
+    if key in (serial[name][0] for name in ('GROWATT_ENABLED', 'TESLA_ENABLED', 'GROWATT_CAN_ENABLED')):
+        return ('argv = [f"-{enabled[1]}=true"]',)
+    return ('argv.extend((f"-{flag}", converted[key]))',)
+
+
 # These are the final handoff edges, independent of the per-option map. A
 # helper table alone is insufficient if the wrapper stops invoking its helper.
 HANDOFFS = {
@@ -258,6 +272,9 @@ def validate(root: Path = ROOT) -> int:
                     raise ValueError('Missing generated config read: ' + key)
             elif '"' + key + '"' not in read_evidence['text']:
                 raise ValueError('Missing helper table read: ' + key)
+            markers = expected_consumer_markers(key, serial)
+            if markers is None or any(m not in entry['consumer']['text'] for m in markers):
+                raise ValueError('Consumer proof from another route: ' + key)
         elif key.startswith('modbus_'):
             if read_evidence['file'] != MODBUS:
                 raise ValueError('Invalid Modbus read route: ' + key)
