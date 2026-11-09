@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "ruff_version": "0.15.10",
+  "generation": "Measured with Ruff 0.15.10 against the original repository Python inputs before the readability guard was added.",
+  "findings": [
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "symbol": "ConfigRejection:ConfigRejection",
+      "rule": "N818",
+      "count": 1
+    },
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
+      "symbol": "_entry",
+      "rule": "C901",
+      "count": 17
+    },
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "symbol": "_contexts",
+      "rule": "C901",
+      "count": 17
+    },
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "symbol": "_convert",
+      "rule": "C901",
+      "count": 14
+    },
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "symbol": "_project_family",
+      "rule": "C901",
+      "count": 14
+    },
+    {
+      "path": "helianthus/rootfs/usr/share/helianthus/serial_can_options.py",
+      "symbol": "build_args",
+      "rule": "C901",
+      "count": 12
+    },
+    {
+      "path": "scripts/bom_manifest.py",
+      "symbol": "validate",
+      "rule": "C901",
+      "count": 31
+    },
+    {
+      "path": "scripts/bom_manifest.py",
+      "symbol": "validate",
+      "rule": "PLR0915",
+      "count": 67
+    },
+    {
+      "path": "scripts/build_offline_acceptance_index.py",
+      "symbol": "_physical_row",
+      "rule": "C901",
+      "count": 13
+    },
+    {
+      "path": "scripts/build_offline_acceptance_index.py",
+      "symbol": "_software_row",
+      "rule": "C901",
+      "count": 12
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_Invalid:_Invalid",
+      "rule": "N818",
+      "count": 1
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_WrongType:_WrongType",
+      "rule": "N818",
+      "count": 1
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_check_package",
+      "rule": "C901",
+      "count": 14
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_check_receipt",
+      "rule": "C901",
+      "count": 32
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_check_receipt",
+      "rule": "PLR0915",
+      "count": 51
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_read_package",
+      "rule": "C901",
+      "count": 12
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_validate",
+      "rule": "C901",
+      "count": 17
+    },
+    {
+      "path": "scripts/check_candidate_metadata.py",
+      "symbol": "_validate",
+      "rule": "PLR0915",
+      "count": 58
+    },
+    {
+      "path": "scripts/check_fronius_ha_rollout.py",
+      "symbol": "validate",
+      "rule": "C901",
+      "count": 24
+    },
+    {
+      "path": "scripts/check_fronius_ha_rollout.py",
+      "symbol": "validate",
+      "rule": "PLR0915",
+      "count": 56
+    },
+    {
+      "path": "scripts/check_gateway_parity_gate.py",
+      "symbol": "validate_artifact",
+      "rule": "C901",
+      "count": 25
+    },
+    {
+      "path": "scripts/check_gateway_parity_gate.py",
+      "symbol": "validate_artifact",
+      "rule": "PLR0915",
+      "count": 62
+    },
+    {
+      "path": "scripts/check_release_cohort.py",
+      "symbol": "check",
+      "rule": "C901",
+      "count": 17
+    },
+    {
+      "path": "scripts/check_rollout_guardrails.py",
+      "symbol": "validate_guardrails",
+      "rule": "C901",
+      "count": 13
+    },
+    {
+      "path": "scripts/eebus_ha_network_proof_checks.py",
+      "symbol": "_validate_credential_store",
+      "rule": "C901",
+      "count": 12
+    },
+    {
+      "path": "scripts/eebus_ha_network_proof_checks.py",
+      "symbol": "_validate_lab_run",
+      "rule": "C901",
+      "count": 14
+    },
+    {
+      "path": "scripts/eebus_ha_network_proof_checks.py",
+      "symbol": "validate_artifact",
+      "rule": "C901",
+      "count": 26
+    },
+    {
+      "path": "scripts/eebus_ha_network_proof_checks.py",
+      "symbol": "validate_artifact",
+      "rule": "PLR0915",
+      "count": 68
+    },
+    {
+      "path": "scripts/run_post_parity_enablement.py",
+      "symbol": "run_enablement_checks",
+      "rule": "C901",
+      "count": 11
+    },
+    {
+      "path": "scripts/validate_smoke_docs.py",
+      "symbol": "main",
+      "rule": "C901",
+      "count": 20
+    },
+    {
+      "path": "tests/test_candidate_metadata.py",
+      "symbol": "validator_violations",
+      "rule": "C901",
+      "count": 19
+    },
+    {
+      "path": "tests/test_modbus_runtime_guard.py",
+      "symbol": "SchemaInvalid:SchemaInvalid",
+      "rule": "N818",
+      "count": 1
+    },
+    {
+      "path": "tests/test_modbus_runtime_guard.py",
+      "symbol": "sv_leaf",
+      "rule": "C901",
+      "count": 13
+    },
+    {
+      "path": "tests/test_offline_acceptance_index.py",
+      "symbol": "Hang:Hang",
+      "rule": "N818",
+      "count": 1
+    }
+  ]
+}
