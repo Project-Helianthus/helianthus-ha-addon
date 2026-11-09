@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Move the gateway pin to include the independent Growatt PCS/LINK receive-only CAN flags and regenerate the BOM flag inventory; the add-on version and wrapper behavior are unchanged.
 - Add the opt-in receive-only Growatt BMS CAN options `growatt_bms_can_enabled`,
   `growatt_bms_can_interface`, `growatt_bms_can_listen_only_confirmed` and
   `growatt_bms_can_stale_after` (default `10s`). They map to the

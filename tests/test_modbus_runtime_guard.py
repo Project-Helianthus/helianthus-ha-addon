@@ -17,7 +17,7 @@ GUARD_PATH = ROOT / "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard
 RUN_PATH = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 DOCKERFILE_PATH = ROOT / "helianthus/Dockerfile"
 CONFIG_PATH = ROOT / "helianthus/config.json"
-CURRENT_GATEWAY = "94fcf9c21c334b837a63dcff28e33de5f11af0c4"
+CURRENT_GATEWAY = "b223acf12162f8fee470ac337e1207a9382bae0e"
 
 
 def load_guard():

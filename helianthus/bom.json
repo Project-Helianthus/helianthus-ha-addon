@@ -10,8 +10,8 @@
   },
   "gateway": {
     "repository": "https://github.com/Project-Helianthus/helianthus-ebusgateway",
-    "commit": "94fcf9c21c334b837a63dcff28e33de5f11af0c4",
-    "tree": "1dae73dc78e641932a2444cf19e8b262282d0cb0"
+    "commit": "b223acf12162f8fee470ac337e1207a9382bae0e",
+    "tree": "ba6864888a10e4616a8e6052f30033dff384c195"
   },
   "vrc_explorer": {
     "repository": "https://github.com/Project-Helianthus/helianthus-vrc-explorer",
@@ -22,6 +22,16 @@
     "module": "github.com/Project-Helianthus/helianthus-ebusgateway",
     "go_directive": "1.22.0",
     "requires": [
+      {
+        "path": "github.com/Project-Helianthus/helianthus-canbus",
+        "version": "v0.0.0-20260823184549-cb4c25a1a389",
+        "indirect": false
+      },
+      {
+        "path": "github.com/Project-Helianthus/helianthus-canbusreg",
+        "version": "v0.0.0-20261108095356-eab34ceb18f6",
+        "indirect": false
+      },
       {
         "path": "github.com/Project-Helianthus/helianthus-ebusgo",
         "version": "v0.5.1-0.20261027131913-af6c5843b1e3",
@@ -44,17 +54,17 @@
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-modbus",
-        "version": "v0.3.1-0.20261016201245-8407c5250771",
+        "version": "v0.3.1-0.20261024182524-68e216993b83",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-modbusreg",
-        "version": "v0.6.8-0.20261025102717-d4a92a1d2613",
+        "version": "v0.6.8-0.20261105065500-54f710b7f329",
         "indirect": false
       },
       {
         "path": "github.com/Project-Helianthus/helianthus-semreg",
-        "version": "v0.0.0-20261024114030-40eb069a9e59",
+        "version": "v0.0.0-20261107204616-b3e8cdfc4a60",
         "indirect": false
       },
       {
@@ -169,7 +179,7 @@
       },
       {
         "path": "golang.org/x/sys",
-        "version": "v0.25.0",
+        "version": "v0.30.0",
         "indirect": false
       },
       {
@@ -189,9 +199,9 @@
       }
     ],
     "replace": [],
-    "go_mod_sha256": "e1b12beb3baefeb58d60fe494435708e995538d87f15df8e96798ea3ac704ae6",
-    "go_sum_sha256": "24464a64063b3911447fe9a7adf803d126f0769b362b7ebe844b523764b6e0a2",
-    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/94fcf9c21c334b837a63dcff28e33de5f11af0c4/go.mod",
+    "go_mod_sha256": "6d24104185cf52cfec3e567b13b43b1abb9fd01a67e7ffb3dfc4d6f374e0c23d",
+    "go_sum_sha256": "21a4350f0365c9706c0326c518672aeec7d522e773d44bc06bc20c23a636471a",
+    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/b223acf12162f8fee470ac337e1207a9382bae0e/go.mod",
     "build_mode": "GOWORK=off GOFLAGS=-mod=readonly (Dockerfile builder stage)"
   },
   "images": {
@@ -201,7 +211,7 @@
     },
     "builder_python": {
       "ref": "python:3.12-alpine",
-      "observed_digest": "sha256:e6dae589c1c05976188fd3bd019afd091445fc533ed2ea29001beddc7368a9c8"
+      "observed_digest": "sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7"
     },
     "base": {
       "amd64": {
@@ -214,7 +224,7 @@
       }
     },
     "digest_note": "Digests were observed at generation time; the build references tags. INT-16 replaces them with pinned digests when it freezes the BOM.",
-    "observed_at": "2026-11-05T16:58:46Z"
+    "observed_at": "2026-11-09T02:14:36Z"
   },
   "gateway_cli_flags": [
     "adapter-mux-idle-release-grace",
@@ -248,6 +258,28 @@
     "growatt-bms-can-interface",
     "growatt-bms-can-listen-only-confirmed",
     "growatt-bms-can-stale-after",
+    "growatt-bms-link-can-bank",
+    "growatt-bms-link-can-context",
+    "growatt-bms-link-can-enabled",
+    "growatt-bms-link-can-interface",
+    "growatt-bms-link-can-listen-only-confirmed",
+    "growatt-bms-link-can-native-profile",
+    "growatt-bms-link-can-project-code",
+    "growatt-bms-link-can-release",
+    "growatt-bms-link-can-scope",
+    "growatt-bms-link-can-source-selectors",
+    "growatt-bms-link-can-stale-after",
+    "growatt-bms-pcs-can-bank",
+    "growatt-bms-pcs-can-context",
+    "growatt-bms-pcs-can-enabled",
+    "growatt-bms-pcs-can-interface",
+    "growatt-bms-pcs-can-listen-only-confirmed",
+    "growatt-bms-pcs-can-native-contract",
+    "growatt-bms-pcs-can-native-profile",
+    "growatt-bms-pcs-can-project-code",
+    "growatt-bms-pcs-can-release",
+    "growatt-bms-pcs-can-scope",
+    "growatt-bms-pcs-can-stale-after",
     "growatt-bms-rs485-asset-id",
     "growatt-bms-rs485-baud",
     "growatt-bms-rs485-driver-generation",
