@@ -64,6 +64,18 @@
       "count": 12
     },
     {
+      "path": "scripts/check_addon_options.py",
+      "symbol": "validate",
+      "rule": "C901",
+      "count": 46
+    },
+    {
+      "path": "scripts/check_addon_options.py",
+      "symbol": "validate",
+      "rule": "PLR0915",
+      "count": 99
+    },
+    {
       "path": "scripts/check_candidate_metadata.py",
       "symbol": "_Invalid:_Invalid",
       "rule": "N818",
