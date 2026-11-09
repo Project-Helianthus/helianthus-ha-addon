@@ -32,9 +32,10 @@ class RuntimeImportsTests(unittest.TestCase):
     def test_repository_inventory(self):
         guard = GUARD.ImportBoundary(Path(__file__).resolve().parents[1])
         self.assertEqual(guard.check(), [])
-        self.assertTrue({'serial_can_options.py', 'm2m_tls_identity.py',
-                         'check_runtime_state_wrapper.py', 'modbus_runtime_guard.py'}
-                        <= {p.name for p in guard.sources})
+        self.assertLessEqual(
+            {'serial_can_options.py', 'm2m_tls_identity.py',
+             'check_runtime_state_wrapper.py', 'modbus_runtime_guard.py'},
+            {p.name for p in guard.sources})
 
     def test_stdlib_import_and_from_alias(self):
         _, errors = self.check({'entry.py': 'import json as codec\nfrom pathlib import Path as P\n'})
@@ -78,6 +79,43 @@ class RuntimeImportsTests(unittest.TestCase):
         _, errors = self.check({'pkg/__init__.py': '', 'pkg/child.py': 'from .. import scripts'})
         self.assertTrue(any('relative import escapes' in e for e in errors), errors)
 
+    def test_namespace_relative_imports(self):
+        for initializer in ({}, {'ns/pkg/__init__.py': ''}):
+            with self.subTest(initializer=initializer):
+                _, errors = self.check({
+                    'entry.py': 'import ns.pkg.child',
+                    'ns/pkg/child.py': 'from . import helper\nfrom .. import shared\n'
+                                       'import importlib\nimportlib.import_module(".helper", __package__)',
+                    'ns/pkg/helper.py': 'value = 1',
+                    'ns/shared.py': 'import json',
+                    **initializer,
+                })
+                self.assertEqual(errors, [])
+
+    def test_namespace_relative_dependency_is_checked(self):
+        _, errors = self.check({
+            'entry.py': 'import ns.child',
+            'ns/child.py': 'from . import helper',
+            'ns/helper.py': 'import scripts.hidden',
+        })
+        self.assertTrue(any('forbidden import scripts.hidden' in e for e in errors), errors)
+
+    def test_namespace_relative_imports_in_site_packages(self):
+        for directory in ('site-packages', 'dist-packages'):
+            with self.subTest(directory=directory):
+                _, errors = self.check({
+                    f'lib/{directory}/ns/child.py': 'from . import helper',
+                    f'lib/{directory}/ns/helper.py': 'import json',
+                })
+                self.assertEqual(errors, [])
+
+    def test_isolated_namespace_relative_imports(self):
+        _, errors = self.check({
+            'ns/child.py': 'from . import helper',
+            'ns/helper.py': 'import json',
+        })
+        self.assertEqual(errors, [])
+
     def test_shadow_package_does_not_fall_back_to_stdlib(self):
         _, errors = self.check({'entry.py': 'import json.tool', 'json/__init__.py': ''})
         self.assertTrue(any('unresolved shipped import json.tool' in e for e in errors), errors)
@@ -120,6 +158,53 @@ class RuntimeImportsTests(unittest.TestCase):
     def test_dynamic_constant_local_and_stdlib(self):
         _, errors = self.check({'entry.py': 'import importlib\nimportlib.import_module("helper")\n__import__("json")',
                                 'helper.py': ''})
+        self.assertEqual(errors, [])
+
+    def test_wildcard_dynamic_loader_imports(self):
+        for module, call in (
+            ('importlib', 'import_module("scripts.hidden")'),
+            ('runpy', 'run_module("tests.hidden")'),
+            ('runpy', 'run_path(target)'),
+            ('builtins', 'exec(source)'),
+        ):
+            with self.subTest(module=module, call=call):
+                _, errors = self.check({'entry.py': f'from {module} import *\n{call}'})
+                self.assertTrue(any('wildcard import from dynamic-loader module' in e
+                                    for e in errors), errors)
+
+    def test_reexported_dynamic_loaders(self):
+        for helper, call, expected in (
+            ('from importlib import import_module as load', 'load("scripts.hidden")', 'forbidden import'),
+            ('import importlib\nload: object = importlib.import_module', 'load(target)',
+             'dynamic import destination'),
+            ('import importlib as load', 'load.import_module("tests.hidden")', 'forbidden import'),
+            ('from runpy import run_module as load', 'load(target)', 'runpy.run_module'),
+            ('from builtins import exec as load', 'load(source)', 'exec cannot establish'),
+        ):
+            for entry in (f'from helper import load\n{call}',
+                          f'import helper\nhelper.{call}',
+                          f'from bridge import load\n{call}'):
+                with self.subTest(helper=helper, entry=entry):
+                    _, errors = self.check({
+                        'entry.py': entry, 'helper.py': helper,
+                        'bridge.py': 'from helper import load',
+                    })
+                    self.assertTrue(any(expected in e for e in errors), errors)
+
+    def test_reexported_loader_allows_resolved_imports(self):
+        _, errors = self.check({
+            'entry.py': 'from pkg import load\nload("json")\nload("helper")',
+            'pkg/__init__.py': 'from .loader import load',
+            'pkg/loader.py': 'from importlib import import_module as load',
+            'helper.py': 'from json import loads\nloads("{}")',
+        })
+        self.assertEqual(errors, [])
+
+    def test_regular_reexports_and_cycles_are_allowed(self):
+        _, errors = self.check({
+            'entry.py': 'from helper import decode\ndecode("{}")',
+            'helper.py': 'from json import loads as decode\nimport entry',
+        })
         self.assertEqual(errors, [])
 
     def test_dynamic_loader_module_assignment_aliases(self):
