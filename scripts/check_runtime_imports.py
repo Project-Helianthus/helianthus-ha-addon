@@ -148,10 +148,15 @@ class ImportBoundary:
         for _ in range(len(nodes)):
             changed = False
             for node in nodes:
-                if isinstance(node, ast.Assign):
+                if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
                     value = self.symbol(node.value, aliases)
-                    if value in {'importlib', 'builtins', 'importlib.import_module', 'builtins.__import__', '__import__', 'sys.path', 'sys'}:
-                        for target in node.targets:
+                    if value in {'importlib', 'builtins', 'importlib.import_module',
+                                 'builtins.__import__', '__import__', 'sys.path', 'sys',
+                                 'runpy', 'runpy.run_path', 'runpy.run_module',
+                                 'exec', 'eval', 'getattr', 'setattr',
+                                 'builtins.exec', 'builtins.eval', 'builtins.getattr', 'builtins.setattr'}:
+                        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                        for target in targets:
                             if isinstance(target, ast.Name) and aliases.get(target.id) != value:
                                 aliases[target.id] = value
                                 changed = True
@@ -219,6 +224,8 @@ class ImportBoundary:
                             self.dependency(path, node, child, import_roots)
             elif isinstance(node, ast.Call):
                 function = self.symbol(node.func, aliases)
+                if function in {'builtins.exec', 'builtins.eval', 'builtins.getattr', 'builtins.setattr'}:
+                    function = function.removeprefix('builtins.')
                 if function in {'importlib.import_module', 'builtins.__import__', '__import__'}:
                     argument = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == 'name'), None)
                     if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
