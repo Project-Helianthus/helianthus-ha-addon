@@ -1,4 +1,121 @@
 configuration:
+  adapter_direct_enabled:
+    name: "Adapter direct enabled"
+    description: "Enable adapter-direct routing; rejects an external proxy endpoint and overrides transport, network and address."
+  adapter_direct_protocol:
+    name: "Adapter direct protocol"
+    description: "Select ENH or ENS for adapter-direct routing. Omitted values use ENH; an old proxy profile can supply the selector until explicitly persisted."
+  adapter_direct_address:
+    name: "Adapter direct address"
+    description: "Adapter endpoint or serial device path. Trim whitespace and the scheme; a serial protocol prefix must agree with the selector."
+  proxy_listen_addr:
+    name: "Proxy listen addr"
+    description: "Gateway-integrated proxy listener address. Empty disables it; a configured listener requires gateway flag support."
+  transport:
+    name: "Transport"
+    description: "Transport input before adapter-direct or proxy overrides."
+  network:
+    name: "Network"
+    description: "Network input before adapter-direct or proxy overrides."
+  address:
+    name: "Address"
+    description: "Address input before adapter-direct or proxy overrides."
+  proxy_profile:
+    name: "Proxy profile"
+    description: "External proxy profile, disabled, ENH or ENS. Selects effective transport and address; legacy adapter-direct configuration is migrated in memory."
+  proxy_endpoint:
+    name: "Proxy endpoint"
+    description: "External proxy endpoint, required for an active external proxy profile and forbidden with adapter-direct mode."
+  host:
+    name: "Host"
+    description: "Host label used only in logged HTTP URLs. Does not select the listener bind address."
+  port:
+    name: "Port"
+    description: "Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default."
+  path:
+    name: "Path"
+    description: "Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default."
+  http_port:
+    name: "Http port"
+    description: "HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only."
+  graphql_path:
+    name: "Graphql path"
+    description: "GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it."
+  subscription_path:
+    name: "Subscription path"
+    description: "Subscription route. Adds a leading slash; the default route follows a changed GraphQL route."
+  mcp_path:
+    name: "Mcp path"
+    description: "MCP HTTP route; the wrapper adds a leading slash when absent."
+  mdns:
+    name: "Mdns"
+    description: "Enable or disable gateway mDNS advertisement."
+  mdns_instance:
+    name: "Mdns instance"
+    description: "Gateway mDNS instance label."
+  broadcast:
+    name: "Broadcast"
+    description: "Enable or disable gateway broadcast handling."
+  source_addr:
+    name: "Source addr"
+    description: "Auto delegates source selection to the gateway. Explicit values use the ebusd-compatible source flag for that transport, otherwise require validate-only startup override support."
+  scan_request_timeout:
+    name: "Scan request timeout"
+    description: "Gateway scan request timeout; empty values use 400ms."
+  read_timeout:
+    name: "Read timeout"
+    description: "Gateway read timeout."
+  write_timeout:
+    name: "Write timeout"
+    description: "Gateway write timeout."
+  dial_timeout:
+    name: "Dial timeout"
+    description: "Gateway dial timeout."
+  observe_first_enabled:
+    name: "Observe first enabled"
+    description: "Gateway observe-first switch; missing values use true."
+  passive_state_direct_apply:
+    name: "Passive state direct apply"
+    description: "Gateway passive state direct-apply switch; missing values use true."
+  passive_config_direct_apply:
+    name: "Passive config direct apply"
+    description: "Gateway passive configuration direct-apply switch; missing values use false."
+  external_write_policy:
+    name: "External write policy"
+    description: "Gateway external write policy; missing values use record_only."
+  enable_static_seed_table:
+    name: "Enable static seed table"
+    description: "Request the static seed table. Passed only when supported; an unsupported enabled request logs a warning."
+  v8_classifier_mode:
+    name: "V8 classifier mode"
+    description: "Classifier mode, off, shadow or enforce; exported through the gateway environment. Missing values use enforce."
+  eebus_enabled:
+    name: "Eebus enabled"
+    description: "Enable the eeBUS argument bundle after validation and gateway support checks; pairing remains closed."
+  eebus_listen_port:
+    name: "Eebus listen port"
+    description: "eeBUS listener port, validated from 1 through 65535 when enabled."
+  eebus_interface:
+    name: "Eebus interface"
+    description: "One explicit interface; validated and used for the gateway interface argument and stable machine identity derivation."
+  eebus_subnets:
+    name: "Eebus subnets"
+    description: "Nonempty prefix list, trimmed before the enabled eeBUS bundle is emitted."
+  eebus_discovery_enabled:
+    name: "Eebus discovery enabled"
+    description: "Boolean discovery control emitted with the enabled eeBUS bundle."
+  eebus_remote_ski_allowlist:
+    name: "Eebus remote ski allowlist"
+    description: "Optional comma-separated remote SKI allowlist; every entry must be 40 hexadecimal characters."
+  modbus_tcp_enabled:
+    name: "Modbus tcp enabled"
+    description: "Enable validated Modbus TCP configuration. Select the scalar endpoint file or the endpoints document; disabled configuration emits no Modbus arguments."
+  modbus_tcp_endpoint:
+    name: "Modbus tcp endpoint"
+    description: "Scalar Modbus TCP endpoint. Validated and written to a protected endpoint file; the gateway receives the file path only."
+  modbus_tcp_dial_timeout:
+    name: "Modbus tcp dial timeout"
+    description: "Scalar Modbus dial timeout. Validated in the helper; a nonempty endpoint list requires this scalar to retain its default."
   modbus_tcp_endpoints:
     name: Modbus TCP endpoints
     description: >-
@@ -50,3 +167,159 @@ configuration:
       pacing_backoff_ceiling_s:
         name: Reconnect delay limit (s)
         description: Largest reconnect delay, 5 to 3600, not below the start. Default 300.
+  m2m_graphql_enabled:
+    name: "M2m graphql enabled"
+    description: "Enable the dedicated TLS GraphQL listener and validate its fixed TLS files. The optional Portal client bundle enables additional Portal arguments only when complete."
+  m2m_graphql_server_name:
+    name: "M2m graphql server name"
+    description: "TLS server identity, validated before startup; also supplied to the optional Portal client."
+  m2m_graphql_asset_ref:
+    name: "M2m graphql asset ref"
+    description: "Opaque allowed asset reference; also supplied to the optional Portal client."
+  growatt_bms_rs485_enabled:
+    name: "Growatt bms rs485 enabled"
+    description: "Enable this family; disabled families emit no arguments."
+  growatt_bms_rs485_asset_id:
+    name: "Growatt bms rs485 asset id"
+    description: "Required opaque asset identity, distinct from source identity."
+  growatt_bms_rs485_source_id:
+    name: "Growatt bms rs485 source id"
+    description: "Required opaque source identity, distinct from asset identity."
+  growatt_bms_rs485_source_epoch:
+    name: "Growatt bms rs485 source epoch"
+    description: "Required opaque source epoch label when the family is enabled."
+  growatt_bms_rs485_driver_generation:
+    name: "Growatt bms rs485 driver generation"
+    description: "Required positive driver generation."
+  growatt_bms_rs485_unit_id:
+    name: "Growatt bms rs485 unit id"
+    description: "Required routed unit number from 1 through 247."
+  growatt_bms_rs485_serial_path:
+    name: "Growatt bms rs485 serial path"
+    description: "Required serial device path under /dev/, without traversal or whitespace."
+  growatt_bms_rs485_baud:
+    name: "Growatt bms rs485 baud"
+    description: "Serial baud setting validated by the helper."
+  growatt_bms_rs485_parity:
+    name: "Growatt bms rs485 parity"
+    description: "Serial parity: none, even or odd."
+  growatt_bms_rs485_stop_bits:
+    name: "Growatt bms rs485 stop bits"
+    description: "Serial stop bits, 1 or 2."
+  growatt_bms_rs485_response_timeout:
+    name: "Growatt bms rs485 response timeout"
+    description: "Positive response timeout in milliseconds or seconds."
+  growatt_bms_rs485_max_response_delay:
+    name: "Growatt bms rs485 max response delay"
+    description: "Positive maximum response delay in milliseconds or seconds."
+  growatt_bms_rs485_max_quiescence:
+    name: "Growatt bms rs485 max quiescence"
+    description: "Positive quiescence duration, greater than the response delay."
+  growatt_bms_can_enabled:
+    name: "Growatt bms can enabled"
+    description: "Enable this family; disabled families emit no arguments."
+  growatt_bms_can_interface:
+    name: "Growatt bms can interface"
+    description: "One interface name validated by the helper; enabled CAN families require distinct interfaces."
+  growatt_bms_can_listen_only_confirmed:
+    name: "Growatt bms can listen only confirmed"
+    description: "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode."
+  growatt_bms_can_stale_after:
+    name: "Growatt bms can stale after"
+    description: "Positive staleness duration, validated by the helper."
+  growatt_bms_pcs_can_enabled:
+    name: "Growatt bms pcs can enabled"
+    description: "Enable this family; disabled families emit no arguments."
+  growatt_bms_pcs_can_interface:
+    name: "Growatt bms pcs can interface"
+    description: "One interface name validated by the helper; enabled CAN families require distinct interfaces."
+  growatt_bms_pcs_can_listen_only_confirmed:
+    name: "Growatt bms pcs can listen only confirmed"
+    description: "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode."
+  growatt_bms_pcs_can_stale_after:
+    name: "Growatt bms pcs can stale after"
+    description: "Positive staleness duration, validated by the helper."
+  growatt_bms_pcs_can_project_code:
+    name: "Growatt bms pcs can project code"
+    description: "Explicit project selection, syntax-checked without inferring native support."
+  growatt_bms_pcs_can_release:
+    name: "Growatt bms pcs can release"
+    description: "Explicit release selection, syntax-checked without inferring native support."
+  growatt_bms_pcs_can_native_profile:
+    name: "Growatt bms pcs can native profile"
+    description: "Explicit native profile selection, validated by the helper; native admission remains with the gateway."
+  growatt_bms_pcs_can_scope:
+    name: "Growatt bms pcs can scope"
+    description: "Explicit scope, checked against the family selections."
+  growatt_bms_pcs_can_bank:
+    name: "Growatt bms pcs can bank"
+    description: "Explicit bank selection; must agree with the selected profile."
+  growatt_bms_pcs_can_context:
+    name: "Growatt bms pcs can context"
+    description: "Explicit bounded JSON context, validated by the helper and passed unchanged for native admission."
+  growatt_bms_pcs_can_native_contract:
+    name: "Growatt bms pcs can native contract"
+    description: "Optional exact native contract selection; native admission remains with the gateway."
+  growatt_bms_link_can_enabled:
+    name: "Growatt bms link can enabled"
+    description: "Enable this family; disabled families emit no arguments."
+  growatt_bms_link_can_interface:
+    name: "Growatt bms link can interface"
+    description: "One interface name validated by the helper; enabled CAN families require distinct interfaces."
+  growatt_bms_link_can_listen_only_confirmed:
+    name: "Growatt bms link can listen only confirmed"
+    description: "Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode."
+  growatt_bms_link_can_stale_after:
+    name: "Growatt bms link can stale after"
+    description: "Positive staleness duration, validated by the helper."
+  growatt_bms_link_can_project_code:
+    name: "Growatt bms link can project code"
+    description: "Explicit project selection, syntax-checked without inferring native support."
+  growatt_bms_link_can_release:
+    name: "Growatt bms link can release"
+    description: "Explicit release selection, syntax-checked without inferring native support."
+  growatt_bms_link_can_native_profile:
+    name: "Growatt bms link can native profile"
+    description: "Explicit native profile selection, validated by the helper; native admission remains with the gateway."
+  growatt_bms_link_can_scope:
+    name: "Growatt bms link can scope"
+    description: "Explicit scope, checked against the family selections."
+  growatt_bms_link_can_bank:
+    name: "Growatt bms link can bank"
+    description: "Explicit bank selection; must agree with the selected profile."
+  growatt_bms_link_can_context:
+    name: "Growatt bms link can context"
+    description: "Explicit bounded JSON context, validated by the helper and passed unchanged for native admission."
+  growatt_bms_link_can_source_selectors:
+    name: "Growatt bms link can source selectors"
+    description: "Explicit bounded JSON source selections, validated by the helper and passed unchanged for native admission."
+  tesla_gen3_hsc_retained_enabled:
+    name: "Tesla gen3 hsc retained enabled"
+    description: "Enable the retained identity owner; disabled emits no arguments."
+  tesla_gen3_hsc_endpoint_id:
+    name: "Tesla gen3 hsc endpoint id"
+    description: "Required opaque endpoint id label when the family is enabled."
+  tesla_gen3_hsc_asset_id:
+    name: "Tesla gen3 hsc asset id"
+    description: "Required opaque asset identity, distinct from source identity."
+  tesla_gen3_hsc_source_id:
+    name: "Tesla gen3 hsc source id"
+    description: "Required opaque source identity, distinct from asset identity."
+  tesla_gen3_hsc_source_epoch:
+    name: "Tesla gen3 hsc source epoch"
+    description: "Required opaque source epoch label when the family is enabled."
+  tesla_gen3_hsc_clock_epoch:
+    name: "Tesla gen3 hsc clock epoch"
+    description: "Required opaque clock epoch label when the family is enabled."
+  tesla_gen3_hsc_evse_id:
+    name: "Tesla gen3 hsc evse id"
+    description: "Required opaque evse id label when the family is enabled."
+  tesla_gen3_hsc_connector_id:
+    name: "Tesla gen3 hsc connector id"
+    description: "Required opaque connector id label when the family is enabled."
+  tesla_gen3_hsc_driver_generation:
+    name: "Tesla gen3 hsc driver generation"
+    description: "Required positive driver generation."
+  tesla_gen3_hsc_node:
+    name: "Tesla gen3 hsc node"
+    description: "Required node label from 1 through 247."

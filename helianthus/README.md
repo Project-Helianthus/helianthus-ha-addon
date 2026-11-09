@@ -357,3 +357,119 @@ CLI flag set the wrapper was verified against.
   freeze, any pin change requires a new BOM.
 - Pin changes also update the Dockerfile, the build workflow, the parity
   artifact fixture, `config.json` and the changelog in the same pull request.
+
+## Complete option inventory
+
+The schema is authoritative, including optional keys with no add-on default and
+the legacy aliases retained pending their separate removal. This inventory maps
+packaging reads and consumers; it establishes no protocol or hardware qualification.
+Gateway capability probing and native admission remain authoritative. GraphQL
+and MCP routing are preserved. The maintained [option map](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/addon-option-map.json)
+records exact source excerpts; the offline guard rejects inventory and source drift.
+For endpoint fields, `[]` denotes each list entry. Defaults below are add-on
+defaults only; “not set” means the schema has no default.
+
+| Option | Add-on default | Startup consumer and behavior |
+| --- | --- | --- |
+| `adapter_direct_enabled` | true | Enable adapter-direct routing; rejects an external proxy endpoint and overrides transport, network and address. Consumer: `-transport`, `-network`, `-address`. |
+| `adapter_direct_protocol` | not set | Select ENH or ENS for adapter-direct routing. Omitted values use ENH; an old proxy profile can supply the selector until explicitly persisted. Consumer: `-transport`, `-network`, `-address`. |
+| `adapter_direct_address` | "" | Adapter endpoint or serial device path. Trim whitespace and the scheme; a serial protocol prefix must agree with the selector. Consumer: `-transport`, `-network`, `-address`. |
+| `proxy_listen_addr` | "0.0.0.0:19001" | Gateway-integrated proxy listener address. Empty disables it; a configured listener requires gateway flag support. Consumer: `-proxy-listen`. |
+| `transport` | "enh" | Transport input before adapter-direct or proxy overrides. Consumer: `-transport`, `-network`, `-address`. |
+| `network` | "tcp" | Network input before adapter-direct or proxy overrides. Consumer: `-transport`, `-network`, `-address`. |
+| `address` | "HOST:PORT" | Address input before adapter-direct or proxy overrides. Consumer: `-transport`, `-network`, `-address`. |
+| `proxy_profile` | "disabled" | External proxy profile, disabled, ENH or ENS. Selects effective transport and address; legacy adapter-direct configuration is migrated in memory. Consumer: `-transport`, `-network`, `-address`. |
+| `proxy_endpoint` | "" | External proxy endpoint, required for an active external proxy profile and forbidden with adapter-direct mode. Consumer: `-transport`, `-network`, `-address`. |
+| `host` | "127.0.0.1" | Host label used only in logged HTTP URLs. Does not select the listener bind address. Consumer: Wrapper logging only. |
+| `port` | 8080 | Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default. Consumer: `-http-addr`. |
+| `path` | "/graphql" | Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default. Consumer: `-graphql-path`. |
+| `http_port` | 8080 | HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only. Consumer: `-http-addr`. |
+| `graphql_path` | "/graphql" | GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it. Consumer: `-graphql-path`. |
+| `subscription_path` | "/graphql/subscriptions" | Subscription route. Adds a leading slash; the default route follows a changed GraphQL route. Consumer: `-subscription-path`. |
+| `mcp_path` | "/mcp" | MCP HTTP route; the wrapper adds a leading slash when absent. Consumer: `-mcp-path`. |
+| `mdns` | true | Enable or disable gateway mDNS advertisement. Consumer: `-mdns`. |
+| `mdns_instance` | "helianthus" | Gateway mDNS instance label. Consumer: `-mdns-instance`. |
+| `broadcast` | true | Enable or disable gateway broadcast handling. Consumer: `-broadcast`. |
+| `source_addr` | "auto" | Auto delegates source selection to the gateway. Explicit values use the ebusd-compatible source flag for that transport, otherwise require validate-only startup override support. Consumer: `-source-addr`, `-startup-source-override`, `-startup-source-override-validate`. |
+| `scan_request_timeout` | "400ms" | Gateway scan request timeout; empty values use 400ms. Consumer: `-scan-request-timeout`. |
+| `read_timeout` | "5s" | Gateway read timeout. Consumer: `-read-timeout`. |
+| `write_timeout` | "5s" | Gateway write timeout. Consumer: `-write-timeout`. |
+| `dial_timeout` | "5s" | Gateway dial timeout. Consumer: `-dial-timeout`. |
+| `observe_first_enabled` | true | Gateway observe-first switch; missing values use true. Consumer: `-observe-first-enabled`. |
+| `passive_state_direct_apply` | true | Gateway passive state direct-apply switch; missing values use true. Consumer: `-passive-state-direct-apply`. |
+| `passive_config_direct_apply` | false | Gateway passive configuration direct-apply switch; missing values use false. Consumer: `-passive-config-direct-apply`. |
+| `external_write_policy` | "record_only" | Gateway external write policy; missing values use record_only. Consumer: `-external-write-policy`. |
+| `enable_static_seed_table` | false | Request the static seed table. Passed only when supported; an unsupported enabled request logs a warning. Consumer: `-enable-static-seed-table`. |
+| `v8_classifier_mode` | "enforce" | Classifier mode, off, shadow or enforce; exported through the gateway environment. Missing values use enforce. Consumer: `HELIANTHUS_V8_CLASSIFIER_MODE`. |
+| `eebus_enabled` | false | Enable the eeBUS argument bundle after validation and gateway support checks; pairing remains closed. Consumer: `-eebus-enabled`, `-eebus-listen-port`, `-eebus-interfaces`, `-eebus-subnets`, `-eebus-state-root`, `-eebus-discovery-enabled`, `-eebus-remote-ski-allowlist`, `-eebus-pairing-window-mode`. |
+| `eebus_listen_port` | 4712 | eeBUS listener port, validated from 1 through 65535 when enabled. Consumer: `-eebus-listen-port`. |
+| `eebus_interface` | "" | One explicit interface; validated and used for the gateway interface argument and stable machine identity derivation. Consumer: `-eebus-interfaces`. |
+| `eebus_subnets` | "" | Nonempty prefix list, trimmed before the enabled eeBUS bundle is emitted. Consumer: `-eebus-subnets`. |
+| `eebus_discovery_enabled` | true | Boolean discovery control emitted with the enabled eeBUS bundle. Consumer: `-eebus-discovery-enabled`. |
+| `eebus_remote_ski_allowlist` | "" | Optional comma-separated remote SKI allowlist; every entry must be 40 hexadecimal characters. Consumer: `-eebus-remote-ski-allowlist`. |
+| `modbus_tcp_enabled` | false | Enable validated Modbus TCP configuration. Select the scalar endpoint file or the endpoints document; disabled configuration emits no Modbus arguments. Consumer: `-modbus-tcp-enabled`, `-modbus-tcp-endpoint-file`, `-modbus-tcp-dial-timeout`, `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoint` | "" | Scalar Modbus TCP endpoint. Validated and written to a protected endpoint file; the gateway receives the file path only. Consumer: `-modbus-tcp-endpoint-file`. |
+| `modbus_tcp_dial_timeout` | "5s" | Scalar Modbus dial timeout. Validated in the helper; a nonempty endpoint list requires this scalar to retain its default. Consumer: `-modbus-tcp-dial-timeout`. |
+| `modbus_tcp_endpoints` | [] | Optional endpoint list. The helper validates and materializes one protected document; the gateway receives only its path. Consumer: `-modbus-tcp-endpoints-file`. |
+| `m2m_graphql_enabled` | false | Enable the dedicated TLS GraphQL listener and validate its fixed TLS files. The optional Portal client bundle enables additional Portal arguments only when complete. Consumer: `-m2m-graphql-listen`, `-m2m-graphql-server-name`, `-m2m-graphql-server-cert`, `-m2m-graphql-server-key`, `-m2m-graphql-allowed-assets`, `-portal-pv-semantic-enabled`, `-portal-pv-m2m-url`, `-portal-pv-m2m-server-name`, `-portal-pv-m2m-ca`, `-portal-pv-m2m-client-cert`, `-portal-pv-m2m-client-key`, `-portal-pv-asset-ref`. |
+| `m2m_graphql_server_name` | "" | TLS server identity, validated before startup; also supplied to the optional Portal client. Consumer: `-m2m-graphql-server-name`, `-portal-pv-m2m-server-name`. |
+| `m2m_graphql_asset_ref` | "" | Opaque allowed asset reference; also supplied to the optional Portal client. Consumer: `-m2m-graphql-allowed-assets`, `-portal-pv-asset-ref`. |
+| `growatt_bms_rs485_enabled` | false | Enable this family; disabled families emit no arguments. Consumer: `-growatt-bms-rs485-enabled`. |
+| `growatt_bms_rs485_asset_id` | "" | Required opaque asset identity, distinct from source identity. Consumer: `-growatt-bms-rs485-asset-id`. |
+| `growatt_bms_rs485_source_id` | "" | Required opaque source identity, distinct from asset identity. Consumer: `-growatt-bms-rs485-source-id`. |
+| `growatt_bms_rs485_source_epoch` | "" | Required opaque source epoch label when the family is enabled. Consumer: `-growatt-bms-rs485-source-epoch`. |
+| `growatt_bms_rs485_driver_generation` | not set | Required positive driver generation. Consumer: `-growatt-bms-rs485-driver-generation`. |
+| `growatt_bms_rs485_unit_id` | not set | Required routed unit number from 1 through 247. Consumer: `-growatt-bms-rs485-unit-id`. |
+| `growatt_bms_rs485_serial_path` | "" | Required serial device path under /dev/, without traversal or whitespace. Consumer: `-growatt-bms-rs485-serial-path`. |
+| `growatt_bms_rs485_baud` | 9600 | Serial baud setting validated by the helper. Consumer: `-growatt-bms-rs485-baud`. |
+| `growatt_bms_rs485_parity` | "none" | Serial parity: none, even or odd. Consumer: `-growatt-bms-rs485-parity`. |
+| `growatt_bms_rs485_stop_bits` | 1 | Serial stop bits, 1 or 2. Consumer: `-growatt-bms-rs485-stop-bits`. |
+| `growatt_bms_rs485_response_timeout` | "500ms" | Positive response timeout in milliseconds or seconds. Consumer: `-growatt-bms-rs485-response-timeout`. |
+| `growatt_bms_rs485_max_response_delay` | "250ms" | Positive maximum response delay in milliseconds or seconds. Consumer: `-growatt-bms-rs485-max-response-delay`. |
+| `growatt_bms_rs485_max_quiescence` | "2s" | Positive quiescence duration, greater than the response delay. Consumer: `-growatt-bms-rs485-max-quiescence`. |
+| `growatt_bms_can_enabled` | false | Enable this family; disabled families emit no arguments. Consumer: `-growatt-bms-can-enabled`. |
+| `growatt_bms_can_interface` | "" | One interface name validated by the helper; enabled CAN families require distinct interfaces. Consumer: `-growatt-bms-can-interface`. |
+| `growatt_bms_can_listen_only_confirmed` | false | Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode. Consumer: `-growatt-bms-can-listen-only-confirmed`. |
+| `growatt_bms_can_stale_after` | "10s" | Positive staleness duration, validated by the helper. Consumer: `-growatt-bms-can-stale-after`. |
+| `growatt_bms_pcs_can_enabled` | false | Enable this family; disabled families emit no arguments. Consumer: `-growatt-bms-pcs-can-enabled`. |
+| `growatt_bms_pcs_can_interface` | "" | One interface name validated by the helper; enabled CAN families require distinct interfaces. Consumer: `-growatt-bms-pcs-can-interface`. |
+| `growatt_bms_pcs_can_listen_only_confirmed` | false | Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode. Consumer: `-growatt-bms-pcs-can-listen-only-confirmed`. |
+| `growatt_bms_pcs_can_stale_after` | "" | Positive staleness duration, validated by the helper. Consumer: `-growatt-bms-pcs-can-stale-after`. |
+| `growatt_bms_pcs_can_project_code` | "" | Explicit project selection, syntax-checked without inferring native support. Consumer: `-growatt-bms-pcs-can-project-code`. |
+| `growatt_bms_pcs_can_release` | "" | Explicit release selection, syntax-checked without inferring native support. Consumer: `-growatt-bms-pcs-can-release`. |
+| `growatt_bms_pcs_can_native_profile` | "" | Explicit native profile selection, validated by the helper; native admission remains with the gateway. Consumer: `-growatt-bms-pcs-can-native-profile`. |
+| `growatt_bms_pcs_can_scope` | "" | Explicit scope, checked against the family selections. Consumer: `-growatt-bms-pcs-can-scope`. |
+| `growatt_bms_pcs_can_bank` | "" | Explicit bank selection; must agree with the selected profile. Consumer: `-growatt-bms-pcs-can-bank`. |
+| `growatt_bms_pcs_can_context` | "" | Explicit bounded JSON context, validated by the helper and passed unchanged for native admission. Consumer: `-growatt-bms-pcs-can-context`. |
+| `growatt_bms_pcs_can_native_contract` | "" | Optional exact native contract selection; native admission remains with the gateway. Consumer: `-growatt-bms-pcs-can-native-contract`. |
+| `growatt_bms_link_can_enabled` | false | Enable this family; disabled families emit no arguments. Consumer: `-growatt-bms-link-can-enabled`. |
+| `growatt_bms_link_can_interface` | "" | One interface name validated by the helper; enabled CAN families require distinct interfaces. Consumer: `-growatt-bms-link-can-interface`. |
+| `growatt_bms_link_can_listen_only_confirmed` | false | Record the external listen-only precondition; must be true when enabled. The helper does not configure or verify controller mode. Consumer: `-growatt-bms-link-can-listen-only-confirmed`. |
+| `growatt_bms_link_can_stale_after` | "" | Positive staleness duration, validated by the helper. Consumer: `-growatt-bms-link-can-stale-after`. |
+| `growatt_bms_link_can_project_code` | "" | Explicit project selection, syntax-checked without inferring native support. Consumer: `-growatt-bms-link-can-project-code`. |
+| `growatt_bms_link_can_release` | "" | Explicit release selection, syntax-checked without inferring native support. Consumer: `-growatt-bms-link-can-release`. |
+| `growatt_bms_link_can_native_profile` | "" | Explicit native profile selection, validated by the helper; native admission remains with the gateway. Consumer: `-growatt-bms-link-can-native-profile`. |
+| `growatt_bms_link_can_scope` | "" | Explicit scope, checked against the family selections. Consumer: `-growatt-bms-link-can-scope`. |
+| `growatt_bms_link_can_bank` | "" | Explicit bank selection; must agree with the selected profile. Consumer: `-growatt-bms-link-can-bank`. |
+| `growatt_bms_link_can_context` | "" | Explicit bounded JSON context, validated by the helper and passed unchanged for native admission. Consumer: `-growatt-bms-link-can-context`. |
+| `growatt_bms_link_can_source_selectors` | "" | Explicit bounded JSON source selections, validated by the helper and passed unchanged for native admission. Consumer: `-growatt-bms-link-can-source-selectors`. |
+| `tesla_gen3_hsc_retained_enabled` | false | Enable the retained identity owner; disabled emits no arguments. Consumer: `-tesla-gen3-hsc-retained-enabled`. |
+| `tesla_gen3_hsc_endpoint_id` | "" | Required opaque endpoint id label when the family is enabled. Consumer: `-tesla-gen3-hsc-endpoint-id`. |
+| `tesla_gen3_hsc_asset_id` | "" | Required opaque asset identity, distinct from source identity. Consumer: `-tesla-gen3-hsc-asset-id`. |
+| `tesla_gen3_hsc_source_id` | "" | Required opaque source identity, distinct from asset identity. Consumer: `-tesla-gen3-hsc-source-id`. |
+| `tesla_gen3_hsc_source_epoch` | "" | Required opaque source epoch label when the family is enabled. Consumer: `-tesla-gen3-hsc-source-epoch`. |
+| `tesla_gen3_hsc_clock_epoch` | "" | Required opaque clock epoch label when the family is enabled. Consumer: `-tesla-gen3-hsc-clock-epoch`. |
+| `tesla_gen3_hsc_evse_id` | "" | Required opaque evse id label when the family is enabled. Consumer: `-tesla-gen3-hsc-evse-id`. |
+| `tesla_gen3_hsc_connector_id` | "" | Required opaque connector id label when the family is enabled. Consumer: `-tesla-gen3-hsc-connector-id`. |
+| `tesla_gen3_hsc_driver_generation` | not set | Required positive driver generation. Consumer: `-tesla-gen3-hsc-driver-generation`. |
+| `tesla_gen3_hsc_node` | not set | Required node label from 1 through 247. Consumer: `-tesla-gen3-hsc-node`. |
+| `modbus_tcp_endpoints[].label` | not set | Public identifier, unique in the list; validated before becoming the driver identity. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].family` | not set | Exact declared family; no other family is tried. Configuration acceptance does not establish qualification. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].endpoint` | not set | Validated endpoint, kept in the protected document and excluded from process arguments. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].dial_timeout` | not set | Optional validated timeout; retained in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].units` | not set | Optional distinct routed-unit allowlist; narrows family routing. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].pacing_gap_ms` | not set | Optional validated pacing gap ms value, written under pacing in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].pacing_settle_ms` | not set | Optional validated pacing settle ms value, written under pacing in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].pacing_cycle_s` | not set | Optional validated pacing cycle s value, written under pacing in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].pacing_backoff_floor_s` | not set | Optional validated pacing backoff floor s value, written under pacing in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |
+| `modbus_tcp_endpoints[].pacing_backoff_ceiling_s` | not set | Optional validated pacing backoff ceiling s value, written under pacing in the endpoints document. Consumer: `-modbus-tcp-endpoints-file`. |

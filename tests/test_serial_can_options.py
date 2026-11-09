@@ -558,3 +558,28 @@ def test_wrapper_passes_no_can_argument_by_default(tmp_path: Path) -> None:
     run = harness._wrapper_run(tmp_path, {})
     assert not any("growatt-bms-can" in arg for arg in harness._argv(run))
     assert "Serial acquisition options: disabled" in run["log"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "        argv.extend(growatt_argv)\n",
+        "        argv.extend(tesla_argv)\n",
+        "        argv.extend(can_argv[3:])\n",
+    ],
+)
+def test_deleting_any_family_argv_handoff_changes_the_emitted_argv(line: str) -> None:
+    """Each family's final handoff into the gateway argv is independently load-bearing."""
+    source = HELPER.read_text(encoding="utf-8")
+    assert source.count(line) == 1
+    namespace: dict = {"__name__": "serial_can_options_mutant"}
+    sys.modules["serial_can_options_mutant"] = types_module = __import__("types").ModuleType(
+        "serial_can_options_mutant"
+    )
+    types_module.__dict__.update(namespace)
+    exec(compile(source.replace(line, ""), str(HELPER), "exec"), types_module.__dict__)
+    options = options_with_defaults({**GROWATT_IDENTITY, **TESLA_IDENTITY, **CAN_IDENTITY})
+    try:
+        assert types_module.build_args(options) != serial_can_options.build_args(options)
+    finally:
+        del sys.modules["serial_can_options_mutant"]
