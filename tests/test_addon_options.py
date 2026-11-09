@@ -265,6 +265,15 @@ def test_standard_family_handoff_removed(tree, fragment):
     reject(tree)
 
 
+def test_project_family_helper_invocation_removed(tree):
+    path = tree / guard.SERIAL
+    text = path.read_text()
+    call = 'project_argv = _project_family(payload, family)'
+    assert call in text
+    path.write_text(text.replace(call, 'project_argv = []', 1))
+    reject(tree)
+
+
 def test_trailing_section_table_ignored(tree):
     path = tree / 'helianthus/README.md'
     path.write_text(path.read_text() + '\n## Later\n\n| `extra` | a | b |\n')
