@@ -149,6 +149,63 @@ class RuntimeImportsTests(unittest.TestCase):
                                 'entry.py': 'from importlib import import_module\nimport_module(".helper", "pkg")'})
         self.assertEqual(errors, [])
 
+    def test_annotated_dynamic_import_aliases(self):
+        for binding in (
+            'loader: object = importlib.import_module',
+            'module: object = importlib\nloader: object = module.import_module',
+        ):
+            for destination, expected in (
+                ('"scripts.hidden"', 'forbidden import scripts.hidden'),
+                ('"tests.hidden"', 'forbidden import tests.hidden'),
+                ('target', 'dynamic import destination cannot be resolved safely'),
+            ):
+                with self.subTest(binding=binding, destination=destination):
+                    _, errors = self.check({'entry.py':
+                        f'import importlib\n{binding}\nloader({destination})'})
+                    self.assertTrue(any(expected in e for e in errors), errors)
+            with self.subTest(binding=binding, destination='allowed'):
+                _, errors = self.check({'entry.py':
+                    f'import importlib\n{binding}\nloader("json")\nloader("helper")',
+                    'helper.py': ''})
+                self.assertEqual(errors, [])
+
+    def test_runpy_loader_aliases(self):
+        for loader in ('run_path', 'run_module'):
+            for binding, function in (
+                ('', f'runpy.{loader}'),
+                ('module = runpy', f'module.{loader}'),
+                (f'runner = runpy.{loader}', 'runner'),
+                (f'runner: object = runpy.{loader}', 'runner'),
+                (f'module: object = runpy\nrunner = module.{loader}\nnext_runner = runner',
+                 'next_runner'),
+            ):
+                with self.subTest(loader=loader, binding=binding):
+                    _, errors = self.check({'entry.py':
+                        f'import runpy\n{binding}\n{function}(target)'})
+                    self.assertTrue(any(f'runpy.{loader} cannot establish a static import boundary'
+                                        in e for e in errors), errors)
+
+    def test_qualified_builtin_dynamic_calls(self):
+        for function, arguments in (
+            ('exec', 'source'), ('eval', 'source'),
+            ('getattr', 'loader, method'), ('setattr', 'loader, method, value'),
+        ):
+            for binding, call in (
+                ('import builtins', f'builtins.{function}'),
+                ('import builtins as b', f'b.{function}'),
+                (f'from builtins import {function} as action', 'action'),
+                ('', f'__builtins__.{function}'),
+                ('', f'__builtins__["{function}"]'),
+                (f'import builtins\naction = builtins.{function}', 'action'),
+                (f'import builtins\naction: object = builtins.{function}', 'action'),
+                (f'import builtins\nmodule: object = builtins\naction = module.{function}',
+                 'action'),
+            ):
+                with self.subTest(function=function, binding=binding, call=call):
+                    _, errors = self.check({'entry.py': f'{binding}\n{call}({arguments})'})
+                    self.assertTrue(any(f'{function} cannot establish a static import boundary'
+                                        in e for e in errors), errors)
+
     def test_dynamic_relative_package_context(self):
         _, errors = self.check({'pkg/__init__.py': '', 'pkg/helper.py': '',
                                 'pkg/child.py': 'import importlib\nimportlib.import_module(".helper", __package__)'})
