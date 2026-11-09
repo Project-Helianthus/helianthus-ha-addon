@@ -22,7 +22,7 @@ class EvidenceTests(unittest.TestCase):
         self.after = Path(self.tmp.name) / 'after'
         flags = '-buildid= -X main.buildVersion=normalized -X main.buildID=normalized'
         self.settings = {'-trimpath': 'true', '-buildmode': 'exe', '-compiler': 'gc',
-                         '-ldflags': flags, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
+                         'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
         self.inspection = {'toolchain': 'go1.synthetic', 'settings': self.settings,
                            'dependencies': [['path', 'example.invalid/gateway'],
                                             ['mod', 'example.invalid/gateway', '(devel)']]}
@@ -131,15 +131,31 @@ class EvidenceTests(unittest.TestCase):
                              ('CGO_ENABLED', '1'), ('-ldflags', '-buildid=other')):
             with self.subTest(field=field):
                 recipe = copy.deepcopy(self.recipe)
-                recipe['settings'][field] = value
+                if field == '-ldflags':
+                    recipe['command'][recipe['command'].index('-ldflags') + 1] = value
+                else:
+                    recipe['settings'][field] = value
                 self.write(self.before, recipe=recipe)
                 self.write(self.after, recipe=recipe)
                 inspection = {k: recipe[k] for k in ('toolchain', 'settings', 'dependencies')}
                 self.assertEqual(self.compare(lambda _: inspection), 'UNVERIFIED')
 
+    def test_trimpath_metadata_omits_ldflags(self):
+        # Realistic inspected metadata never carries -ldflags under -trimpath.
+        self.assertNotIn('-ldflags', self.inspection['settings'])
+        self.assertEqual(self.compare(), 'COMPARISONS_VERIFIED')
+
+    def test_ldflags_in_metadata_is_not_accepted_setting_mismatch(self):
+        recipe = copy.deepcopy(self.recipe)
+        recipe['settings']['-ldflags'] = '-buildid='
+        inspection = {k: recipe[k] for k in ('toolchain', 'settings', 'dependencies')}
+        for root in (self.before, self.after):
+            self.write(root, recipe=recipe)
+        self.assertEqual(self.compare(lambda _: inspection), 'UNVERIFIED')
+
     def test_flags_differ(self):
         recipe = copy.deepcopy(self.recipe)
-        recipe['settings']['-ldflags'] += ' -s'
+        recipe['command'][recipe['command'].index('-ldflags') + 1] += ' -s'
         self.write(self.after, recipe=recipe)
         self.assertEqual(self.compare(), 'UNVERIFIED')
 

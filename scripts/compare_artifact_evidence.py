@@ -89,10 +89,16 @@ def validate_recipe(recipe, inspection):
     require(settings.get('CGO_ENABLED') == '0')
     require(settings.get('GOOS') in {'linux'})
     require(settings.get('GOARCH') in {'amd64', 'arm64', 'arm', '386'})
-    allowed = {'-trimpath', '-buildmode', '-compiler', '-ldflags', '-tags',
+    # -trimpath builds omit -ldflags from inspected metadata, so the linker
+    # flags are recorded only in the build command and checked from there.
+    allowed = {'-trimpath', '-buildmode', '-compiler', '-tags',
                'CGO_ENABLED', 'GOOS', 'GOARCH', 'GOAMD64', 'GOARM', 'GOARM64', 'GO386'}
     require(set(settings) <= allowed)
-    flags = settings.get('-ldflags', '')
+    command_args = recipe['command']
+    require(isinstance(command_args, list) and command_args.count('-ldflags') == 1
+            and command_args.index('-ldflags') + 1 < len(command_args))
+    flags = command_args[command_args.index('-ldflags') + 1]
+    require(isinstance(flags, str))
     # One empty build ID and exactly two normalized build stamp assignments.
     import shlex
     parts = shlex.split(flags)
