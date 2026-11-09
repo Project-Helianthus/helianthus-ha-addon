@@ -59,7 +59,8 @@ def literals(source: str) -> dict:
             try:
                 values[node.targets[0].id] = ast.literal_eval(node.value)
             except (ValueError, TypeError):
-                pass
+                # Non-literal assignments are not binding tables; skip them.
+                continue
     return values
 
 
@@ -107,6 +108,22 @@ def expected_flags(key: str, serial: dict) -> list[str]:
     return WRAPPER_FLAGS.get(key, [key.replace('_', '-')])
 
 
+def expected_kind(key: str) -> str:
+    if '[].' in key:
+        return 'document-member'
+    if key.startswith(('growatt_', 'tesla_')):
+        return 'helper-derived'
+    if key == 'host':
+        return 'wrapper-only'
+    if key == 'v8_classifier_mode':
+        return 'environment'
+    if key in ('modbus_tcp_endpoint', 'modbus_tcp_endpoints'):
+        return 'protected-file'
+    if key in ('proxy_listen_addr', 'source_addr') or key.startswith(('eebus_', 'modbus_tcp_', 'm2m_')):
+        return 'derived'
+    return 'gateway'
+
+
 # These are the final handoff edges, independent of the per-option map. A
 # helper table alone is insufficient if the wrapper stops invoking its helper.
 HANDOFFS = {
@@ -123,7 +140,8 @@ HANDOFFS = {
         '/usr/share/helianthus/modbus_runtime_guard.py',
     ),
     SERIAL: ('build_args(load_options(args.options))',
-             '"SERIAL_CAN_ARGS=("', 'argv.extend(project_argv)'),
+             '"SERIAL_CAN_ARGS=("', 'argv.extend(project_argv)', 'argv.extend(growatt_argv)',
+             'argv.extend(tesla_argv)', 'argv.extend(can_argv[3:])'),
     MODBUS: ('materialize(config, args.document)',
              'body = endpoints_document(config.endpoints)'),
 }
@@ -143,6 +161,7 @@ def validate(root: Path = ROOT) -> int:
     # Restrict row extraction to the maintained table, so a prose mention cannot
     # satisfy coverage and earlier explanatory tables may remain useful.
     table = read('helianthus/README.md').split('## Complete option inventory\n', 1)[1]
+    table = re.split(r'(?m)^## ', table, maxsplit=1)[0]
     rows = re.findall(r'^\| `([^`]+)` \| (.+) \| (.+) \|$', table, re.M)
     rowkeys = [row[0] for row in rows]
     for label, keys in [('translations', translated), ('README', set(rowkeys)), ('map', set(mapped))]:
@@ -180,6 +199,8 @@ def validate(root: Path = ROOT) -> int:
         if entry['kind'] not in {'gateway', 'derived', 'wrapper-only', 'environment',
                                   'protected-file', 'helper-derived', 'document-member'}:
             raise ValueError('Unknown consumer kind: ' + key)
+        if entry['kind'] != expected_kind(key):
+            raise ValueError('Incorrect consumer kind: ' + key)
         if entry['flags'] != expected_flags(key, serial):
             raise ValueError('Incorrect option/flag binding: ' + key)
         for flag in entry['flags']:

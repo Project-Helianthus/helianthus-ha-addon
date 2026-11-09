@@ -245,3 +245,27 @@ def test_removed_run_handoff_or_materialization_step_fails(tree, step):
     assert step in text
     source.write_text(text.replace(step, '', 1))
     reject(tree)
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_swapped_valid_kind_rejected(tree, key):
+    value = read_map(tree)
+    kinds = {'gateway', 'derived', 'wrapper-only', 'environment',
+             'protected-file', 'helper-derived', 'document-member'}
+    value['options'][key]['kind'] = sorted(kinds - {value['options'][key]['kind']})[0]
+    write_map(tree, value)
+    reject(tree)
+
+
+@pytest.mark.parametrize('fragment', ['argv.extend(growatt_argv)', 'argv.extend(tesla_argv)',
+                                      'argv.extend(can_argv[3:])'])
+def test_standard_family_handoff_removed(tree, fragment):
+    path = tree / guard.SERIAL
+    path.write_text(path.read_text().replace(fragment, 'pass', 1))
+    reject(tree)
+
+
+def test_trailing_section_table_ignored(tree):
+    path = tree / 'helianthus/README.md'
+    path.write_text(path.read_text() + '\n## Later\n\n| `extra` | a | b |\n')
+    assert guard.validate(tree) == len(KEYS)
