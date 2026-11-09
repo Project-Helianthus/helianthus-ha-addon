@@ -934,7 +934,9 @@
       "kind": "gateway",
       "description": "Request the static seed table. Passed only when supported; an unsupported enabled request logs a warning.",
       "read": "run_112",
-      "transforms": [],
+      "transforms": [
+        "run_141"
+      ],
       "consumer": "run_113",
       "flags": [
         "enable-static-seed-table"
@@ -1017,7 +1019,9 @@
       "read": "run_123",
       "transforms": [
         "run_117",
-        "run_118"
+        "run_118",
+        "run_142",
+        "run_143"
       ],
       "consumer": "run_119",
       "flags": [
@@ -2734,6 +2738,18 @@
     "run_endpoint_rename": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
       "text": "mv -f -- \"${modbus_endpoint_staging}\" \"${modbus_endpoint_file}\""
+    },
+    "run_141": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ \"${#static_seed_args[@]}\" -ne 0 ]; then gateway_args+=(\"${static_seed_args[@]}\"); fi"
+    },
+    "run_142": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    eebus_discovery_value=true"
+    },
+    "run_143": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "    eebus_discovery_value=false"
     }
   }
 }
