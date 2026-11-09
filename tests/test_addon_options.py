@@ -218,3 +218,27 @@ def test_each_transformation_evidence_field(tree, reference, field):
     value['evidence'][reference][field] = 'synthetic_missing_transformation'
     write_map(tree, value)
     reject(tree)
+
+
+# Gateway argument handoffs and endpoint materialization steps, listed here
+# independently of the map so deleting any one of them must be rejected.
+RUN_STEPS = [
+    'if [ "${#m2m_args[@]}" -ne 0 ]; then gateway_args+=("${m2m_args[@]}"); fi',
+    'if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi',
+    'gateway_args=("${gateway_common_args[@]}")',
+    'if [ "${#eebus_args[@]}" -ne 0 ]; then gateway_common_args+=("${eebus_args[@]}"); fi',
+    '  "${source_addr_args[@]}"\n',
+    '  gateway_args+=("${modbus_args[@]}")',
+    'modbus_endpoint_staging="${modbus_endpoint_file}.tmp.$$"',
+    'chmod 0600 "${modbus_endpoint_staging}"',
+    'mv -f -- "${modbus_endpoint_staging}" "${modbus_endpoint_file}"',
+]
+
+
+@pytest.mark.parametrize('step', RUN_STEPS)
+def test_removed_run_handoff_or_materialization_step_fails(tree, step):
+    source = tree / guard.RUN
+    text = source.read_text()
+    assert step in text
+    source.write_text(text.replace(step, '', 1))
+    reject(tree)

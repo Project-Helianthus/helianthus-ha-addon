@@ -79,7 +79,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -166,7 +167,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -253,7 +255,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -266,7 +269,9 @@
       "kind": "derived",
       "description": "Gateway-integrated proxy listener address. Empty disables it; a configured listener requires gateway flag support.",
       "read": "run_68",
-      "transforms": [],
+      "transforms": [
+        "run_handoff_proxy"
+      ],
       "consumer": "run_69",
       "flags": [
         "proxy-listen"
@@ -350,7 +355,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -437,7 +443,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -524,7 +531,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -611,7 +619,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -698,7 +707,8 @@
         "run_55",
         "run_63",
         "run_64",
-        "run_9"
+        "run_9",
+        "run_handoff_common"
       ],
       "consumer": "run_65",
       "flags": [
@@ -722,7 +732,8 @@
       "description": "Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default.",
       "read": "run_78",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_79",
       "flags": [
@@ -734,7 +745,8 @@
       "description": "Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default.",
       "read": "run_80",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_81",
       "flags": [
@@ -746,7 +758,8 @@
       "description": "HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only.",
       "read": "run_82",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_79",
       "flags": [
@@ -758,7 +771,8 @@
       "description": "GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it.",
       "read": "run_83",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_81",
       "flags": [
@@ -770,7 +784,8 @@
       "description": "Subscription route. Adds a leading slash; the default route follows a changed GraphQL route.",
       "read": "run_84",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_85",
       "flags": [
@@ -782,7 +797,8 @@
       "description": "MCP HTTP route; the wrapper adds a leading slash when absent.",
       "read": "run_86",
       "transforms": [
-        "run_76"
+        "run_76",
+        "run_handoff_common"
       ],
       "consumer": "run_87",
       "flags": [
@@ -823,7 +839,10 @@
       "kind": "derived",
       "description": "Auto delegates source selection to the gateway. Explicit values use the ebusd-compatible source flag for that transport, otherwise require validate-only startup override support.",
       "read": "run_94",
-      "transforms": [],
+      "transforms": [
+        "run_handoff_common",
+        "run_handoff_common_source"
+      ],
       "consumer": "run_95",
       "flags": [
         "source-addr",
@@ -935,7 +954,9 @@
       "read": "run_116",
       "transforms": [
         "run_117",
-        "run_118"
+        "run_118",
+        "run_handoff_common_eebus",
+        "run_handoff_common"
       ],
       "consumer": "run_119",
       "flags": [
@@ -968,7 +989,9 @@
       "read": "run_121",
       "transforms": [
         "run_117",
-        "run_118"
+        "run_118",
+        "run_handoff_common_eebus",
+        "run_handoff_common"
       ],
       "consumer": "run_119",
       "flags": [
@@ -1023,7 +1046,8 @@
         "run_127",
         "run_128",
         "run_129",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "run_130",
       "flags": [
@@ -1043,7 +1067,11 @@
         "run_128",
         "run_129",
         "modbus_shell_values",
-        "run_130"
+        "run_130",
+        "run_handoff_modbus",
+        "run_endpoint_staging_path",
+        "run_endpoint_staging_mode",
+        "run_endpoint_rename"
       ],
       "consumer": "run_127",
       "flags": [
@@ -1059,7 +1087,8 @@
         "run_128",
         "run_129",
         "modbus_shell_values",
-        "run_130"
+        "run_130",
+        "run_handoff_modbus"
       ],
       "consumer": "run_127",
       "flags": [
@@ -1078,7 +1107,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "run_130",
       "flags": [
@@ -1091,7 +1121,8 @@
       "read": "run_135",
       "transforms": [
         "run_136",
-        "run_137"
+        "run_137",
+        "run_handoff_m2m"
       ],
       "consumer": "run_138",
       "flags": [
@@ -1115,7 +1146,8 @@
       "read": "run_139",
       "transforms": [
         "run_136",
-        "run_137"
+        "run_137",
+        "run_handoff_m2m"
       ],
       "consumer": "run_138",
       "flags": [
@@ -1129,7 +1161,8 @@
       "read": "run_140",
       "transforms": [
         "run_136",
-        "run_137"
+        "run_137",
+        "run_handoff_m2m"
       ],
       "consumer": "run_138",
       "flags": [
@@ -1734,7 +1767,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_177",
       "flags": [
@@ -1750,7 +1784,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_177",
       "flags": [
@@ -1766,7 +1801,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_177",
       "flags": [
@@ -1782,7 +1818,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_177",
       "flags": [
@@ -1798,7 +1835,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_177",
       "flags": [
@@ -1815,7 +1853,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_183",
       "flags": [
@@ -1832,7 +1871,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_183",
       "flags": [
@@ -1849,7 +1889,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_183",
       "flags": [
@@ -1866,7 +1907,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_183",
       "flags": [
@@ -1883,7 +1925,8 @@
         "modbus_document_serialization",
         "modbus_list_validation",
         "modbus_materialization",
-        "modbus_shell_values"
+        "modbus_shell_values",
+        "run_handoff_modbus"
       ],
       "consumer": "modbus_runtime_guard_183",
       "flags": [
@@ -2655,6 +2698,42 @@
     "modbus_shell_values": {
       "file": "helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py",
       "text": "def _validate_command(args: argparse.Namespace) -> int:\n    config = load_config(args.options)\n    print(_shell_assignment(\"MODBUS_TCP_ENABLED\", str(config.enabled).lower()))\n    print(_shell_assignment(\"MODBUS_TCP_ENDPOINT\", config.endpoint))\n    print(_shell_assignment(\"MODBUS_TCP_DIAL_TIMEOUT\", config.dial_timeout))\n    if config.endpoints:\n        print(_shell_assignment(\"MODBUS_TCP_CONFIG\", \"v2\"))\n    return 0"
+    },
+    "run_handoff_m2m": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ \"${#m2m_args[@]}\" -ne 0 ]; then gateway_args+=(\"${m2m_args[@]}\"); fi"
+    },
+    "run_handoff_proxy": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ \"${#proxy_listen_args[@]}\" -ne 0 ]; then gateway_args+=(\"${proxy_listen_args[@]}\"); fi"
+    },
+    "run_handoff_common": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "gateway_args=(\"${gateway_common_args[@]}\")"
+    },
+    "run_handoff_common_eebus": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if [ \"${#eebus_args[@]}\" -ne 0 ]; then gateway_common_args+=(\"${eebus_args[@]}\"); fi"
+    },
+    "run_handoff_common_source": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  \"${source_addr_args[@]}\"\n"
+    },
+    "run_handoff_modbus": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "  gateway_args+=(\"${modbus_args[@]}\")"
+    },
+    "run_endpoint_staging_path": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "modbus_endpoint_staging=\"${modbus_endpoint_file}.tmp.$$\""
+    },
+    "run_endpoint_staging_mode": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "chmod 0600 \"${modbus_endpoint_staging}\""
+    },
+    "run_endpoint_rename": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "mv -f -- \"${modbus_endpoint_staging}\" \"${modbus_endpoint_file}\""
     }
   }
 }
