@@ -364,7 +364,7 @@ The schema is authoritative, including optional keys with no add-on default and
 the legacy aliases retained pending their separate removal. This inventory maps
 packaging reads and consumers; it establishes no protocol or hardware qualification.
 Gateway capability probing and native admission remain authoritative. GraphQL
-and MCP routing are preserved. The maintained [option map](../scripts/addon-option-map.json)
+and MCP routing are preserved. The maintained [option map](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/addon-option-map.json)
 records exact source excerpts; the offline guard rejects inventory and source drift.
 For endpoint fields, `[]` denotes each list entry. Defaults below are add-on
 defaults only; “not set” means the schema has no default.
