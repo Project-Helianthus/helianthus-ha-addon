@@ -958,7 +958,7 @@ def test_the_option_translations_describe_exactly_the_schema_members() -> None:
     assert set(option["fields"]) == set(ENTRY_SCHEMA)
     for member in option["fields"].values():
         assert set(member) == {"name", "description"} and all(isinstance(text, str) and text for text in member.values())
-    assert set(translated["configuration"]) == {"modbus_tcp_endpoints"}
+    assert set(translated["configuration"]) == set(json.loads(CONFIG_PATH.read_text(encoding="utf-8"))["schema"])
 
 
 def test_the_option_documentation_names_every_member_category_and_limit() -> None:
