@@ -1,0 +1,24 @@
+name: runtime-imports
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-imports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check shipped Python import boundary
+        run: python3 scripts/check_runtime_imports.py
+      - name: Test import boundary guard
+        run: python3 -m unittest discover -s tests -p test_runtime_imports.py -v
