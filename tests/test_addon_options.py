@@ -89,7 +89,9 @@ def test_extra_orphan_entry(tree, surface):
         p.write_text(yaml.safe_dump(value))
     elif surface == 'readme':
         p = tree / 'helianthus/README.md'
-        p.write_text(p.read_text() + '| `synthetic_orphan` | not set | Synthetic option |\n')
+        before, table = p.read_text().split('## Complete option inventory\n', 1)
+        p.write_text(before + '## Complete option inventory\n'
+                     + '| `synthetic_orphan` | not set | Synthetic option |\n' + table)
     else:
         value = read_map(tree)
         value['options']['synthetic_orphan'] = value['options']['broadcast']
@@ -278,3 +280,17 @@ def test_trailing_section_table_ignored(tree):
     path = tree / 'helianthus/README.md'
     path.write_text(path.read_text() + '\n## Later\n\n| `extra` | a | b |\n')
     assert guard.validate(tree) == len(KEYS)
+
+
+HELPER_ROUTES = sorted({entry['transforms'][0] for key, entry in MAP['options'].items()
+                        if key.startswith(('growatt_', 'tesla_'))})
+
+
+@pytest.mark.parametrize('key', [k for k in KEYS if k.startswith(('growatt_', 'tesla_'))])
+def test_transform_from_another_route_rejected(tree, key):
+    value = read_map(tree)
+    current = value['options'][key]['transforms'][0]
+    other = next(ref for ref in HELPER_ROUTES if ref != current)
+    value['options'][key]['transforms'] = [other]
+    write_map(tree, value)
+    reject(tree)

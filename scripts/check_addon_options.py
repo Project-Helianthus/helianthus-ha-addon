@@ -124,6 +124,24 @@ def expected_kind(key: str) -> str:
     return 'gateway'
 
 
+# Each helper-derived option is transformed by exactly one helper invocation or
+# binding table; a proof borrowed from another route must be rejected.
+HELPER_TRANSFORMS = (
+    ('growatt_bms_rs485_', 'growatt = _family(payload, GROWATT_ENABLED, GROWATT_FIELDS)'),
+    ('growatt_bms_can_', 'can = _family(payload, GROWATT_CAN_ENABLED, CAN_FIELDS)'),
+    ('growatt_bms_pcs_can_', 'PROJECT_SUFFIXES = ('),
+    ('growatt_bms_link_can_', 'PROJECT_SUFFIXES = ('),
+    ('tesla_', 'tesla = _family(payload, TESLA_ENABLED, TESLA_FIELDS)'),
+)
+
+
+def expected_helper_transform(key: str) -> str | None:
+    for prefix, text in HELPER_TRANSFORMS:
+        if key.startswith(prefix):
+            return text
+    return None
+
+
 # These are the final handoff edges, independent of the per-option map. A
 # helper table alone is insufficient if the wrapper stops invoking its helper.
 HANDOFFS = {
@@ -220,6 +238,11 @@ def validate(root: Path = ROOT) -> int:
             raise ValueError('Classifier uses environment')
         if key in ('modbus_tcp_endpoint', 'modbus_tcp_endpoints') and entry['kind'] != 'protected-file':
             raise ValueError('Endpoint uses a protected file')
+        helper_text = expected_helper_transform(key)
+        if helper_text is not None:
+            transform_texts = [item['text'] for item in entry['transforms']]
+            if len(transform_texts) != 1 or not transform_texts[0].lstrip().startswith(helper_text):
+                raise ValueError('Transformation proof from another route: ' + key)
         excerpts = [entry['read'], *entry['transforms'], entry['consumer']]
         for excerpt in excerpts:
             if set(excerpt) != {'file', 'text'} or excerpt['file'] not in sources:
