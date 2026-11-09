@@ -152,7 +152,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pytest tests/test_serial_can_options.py -q
+          python3 -m pytest tests/test_serial_can_options.py tests/test_growatt_project_can_options.py -q
 
       - name: Validate serial adapter-direct address handling
         shell: bash

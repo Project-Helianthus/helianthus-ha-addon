@@ -79,7 +79,7 @@ python3 -m pytest \
   -q
 
 echo "==> serial acquisition options (Growatt BMS RS-485, Tesla Gen3 HSC)"
-python3 -m pytest tests/test_serial_can_options.py -q
+python3 -m pytest tests/test_serial_can_options.py tests/test_growatt_project_can_options.py -q
 
 echo "==> serial adapter-direct address handling (device path, scheme prefix versus protocol)"
 python3 -m pytest tests/test_adapter_direct_serial_address.py -q

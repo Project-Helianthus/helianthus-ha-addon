@@ -107,6 +107,114 @@ Leave `modbus_tcp_endpoints` empty to use the single-endpoint options above, or 
 
 `source_addr=auto` delegates source selection to the gateway default policy and does not reuse `/data/source_addr.last`. The add-on no longer exposes `source_addr_state_file`; a leftover `/data/source_addr.last` is retained only as a rollback marker for older add-on versions and is never read as active source authority or rewritten during startup. For source-selection-capable direct transports, exact `source_addr` values are sent only as explicit validate-only gateway startup override input. If a gateway binary does not advertise that startup validation interface, startup fails closed instead of falling back to legacy active source configuration. For `transport=ebusd-tcp`, exact `source_addr` values are passed through the ebusd-compatible `-source-addr` gateway argument because startup source-selection admission is not used on that transport.
 
+### Independent Growatt PCS and LINK receive-only options
+
+PCS and LINK are independently disabled by default. V1.04 retains its existing
+four CAN options/defaults; RS-485 and Tesla options remain independent. Each
+enabled CAN family needs a different explicit interface: enabling all three
+requires three distinct interfaces. Missing required input, malformed selectors,
+interface conflicts or unsupported gateway flags refuse startup. Disabled PCS
+and LINK families emit no arguments, including stored stale-age defaults.
+
+The native interpretation owners are
+[PCS — Profile selection; Data validity and consumer obligations](https://github.com/Project-Helianthus/helianthus-docs-canbus/blob/main/protocols/growatt/growatt-low-voltage-bms-can-pcs-protocol-v1.md)
+and
+[LINK — Identify the peer before interpreting version-dependent fields; Transport, addressing and data validity](https://github.com/Project-Helianthus/helianthus-docs-canbus/blob/main/protocols/growatt/growatt-low-voltage-bms-can-link-protocol-v1.md).
+The add-on validates option syntax and explicit completeness; the gateway admits
+supported native project/release/profile/contract combinations before opening an
+interface. Exact case is preserved. Matching IDs, wire identity or plausible
+values cannot supply project, release, profile or physical association. No
+revision, topology or controller mode is inferred. Proven and Hypothesis are
+candidate protocol grades, distinct from physical qualification; Unknown
+meanings remain raw. Nothing is stable before 1.0.
+
+Configure the controller externally in listen-only mode before enabling either
+family, then explicitly set its confirmation. This receive-only precondition
+neither sets nor verifies controller mode, bitrate, interface state or physical
+acknowledgement suppression. These options never transmit, acknowledge, probe or
+configure a bus. Offline tests use synthetic options and mocked help/argv only:
+`physical_qualified=false`. eBUS MCP compatibility and GraphQL parity are
+unaffected; this packaging adds no decoding or publication semantics.
+
+Every option below defaults to an empty string except the two booleans per
+family, which default to false. Staleness must be a positive Go duration, for
+example `2s`. Profiles, scope and bank have no implicit default. LINK uses the
+peer PCS profile, requires local scope, and requires ordinary bank for
+standard/extended19 or parallel bank for parallel, as does PCS.
+
+| Option | Gateway flag | Enabled requirement |
+| --- | --- | --- |
+| `growatt_bms_pcs_can_enabled` | `-growatt-bms-pcs-can-enabled` | true |
+| `growatt_bms_pcs_can_interface` | `-growatt-bms-pcs-can-interface` | Explicit distinct interface |
+| `growatt_bms_pcs_can_listen_only_confirmed` | `-growatt-bms-pcs-can-listen-only-confirmed` | true; external precondition |
+| `growatt_bms_pcs_can_stale_after` | `-growatt-bms-pcs-can-stale-after` | Positive Go duration |
+| `growatt_bms_pcs_can_project_code` | `-growatt-bms-pcs-can-project-code` | Explicit exact-case project |
+| `growatt_bms_pcs_can_release` | `-growatt-bms-pcs-can-release` | Explicit four-digit release |
+| `growatt_bms_pcs_can_native_profile` | `-growatt-bms-pcs-can-native-profile` | standard, extended19 or parallel |
+| `growatt_bms_pcs_can_scope` | `-growatt-bms-pcs-can-scope` | local or aggregate |
+| `growatt_bms_pcs_can_bank` | `-growatt-bms-pcs-can-bank` | ordinary or parallel matching profile |
+| `growatt_bms_pcs_can_context` | `-growatt-bms-pcs-can-context` | Strict explicit association JSON |
+| `growatt_bms_pcs_can_native_contract` | `-growatt-bms-pcs-can-native-contract` | legacy19 or release11 when native selection needs disambiguation |
+| `growatt_bms_link_can_enabled` | `-growatt-bms-link-can-enabled` | true |
+| `growatt_bms_link_can_interface` | `-growatt-bms-link-can-interface` | Explicit distinct interface |
+| `growatt_bms_link_can_listen_only_confirmed` | `-growatt-bms-link-can-listen-only-confirmed` | true; external precondition |
+| `growatt_bms_link_can_stale_after` | `-growatt-bms-link-can-stale-after` | Positive Go duration |
+| `growatt_bms_link_can_project_code` | `-growatt-bms-link-can-project-code` | Default only for use_default entries |
+| `growatt_bms_link_can_release` | `-growatt-bms-link-can-release` | Default only for use_default entries |
+| `growatt_bms_link_can_native_profile` | `-growatt-bms-link-can-native-profile` | standard, extended19 or parallel |
+| `growatt_bms_link_can_scope` | `-growatt-bms-link-can-scope` | local |
+| `growatt_bms_link_can_bank` | `-growatt-bms-link-can-bank` | ordinary or parallel matching profile |
+| `growatt_bms_link_can_context` | `-growatt-bms-link-can-context` | Strict explicit association JSON |
+| `growatt_bms_link_can_source_selectors` | `-growatt-bms-link-can-source-selectors` | Strict ordered JSON array; see below |
+
+LINK source selectors are one JSON string containing an ordered array of 1..32
+entries, bounded to 16 KiB. Each entry is exactly one of these forms:
+
+```json
+[{"source":1,"project_code":"QAAA","release":"0011","contract":"release11"}]
+```
+
+```json
+[{"source":1,"use_default":true,"contract":"release11"}]
+```
+
+Only an explicit `use_default:true` entry opts into the family project/release;
+those defaults are required for such entries. Explicit entries may be
+heterogeneous and need no family default. An omitted source never inherits
+anything. Contracts are exactly `legacy19` or `release11`. Source is a unique
+integer from 1 through 254 except 244 and 245; 255 is unidentified and excluded.
+These are conservative software admission bounds, not hardware-address claims.
+Duplicate keys/sources, mixed default/explicit keys, unknown keys, noninteger
+sources, nulls, malformed/trailing JSON and control characters in selections
+are refused. JSON order and escaping reach the gateway unchanged through safely
+quoted argv; JSON is never shell code.
+
+Both context options contain one strict JSON array bounded to 128 KiB. PCS
+requires one entry; LINK requires one per selector in the same order and with
+matching source. Each entry requires all these case-sensitive keys:
+
+- `source`, `destination`, `serial_slot`, `native_slot`, `native_group`: integer bytes.
+- `interface_index`: positive explicit OS identity assertion; no lookup is performed.
+- `endpoint`, `group`, `slot`: nonempty, nonsecret association labels without whitespace/control characters.
+- `epoch`: positive integer.
+- `serial_slot_valid`, `slot_valid`, `group_valid`, `publisher_resolved`,
+  `measurement_valid`, `temperature_valid`, `topology_associated`: explicit booleans.
+- `field_age`: nonnegative Go duration.
+- `cells` and `sensors`: objects containing `count`, `count_valid` and `gates`.
+  Count bounds are 0..16 and 0..8 respectively; a valid count is positive.
+  Each gates array has four objects containing explicit booleans `configured`
+  and `valid`, nonnegative duration `age`, and `status` equal to the empty
+  string, `absent`, `invalid`, `unsupported`, `stale` or `conflict`.
+
+LINK destination is 244 or 245. All LINK contexts share interface index,
+destination, endpoint/group/slot and epoch. Required false validity and zero
+unknown counts remain distinct from missing fields. The add-on forwards these
+assertions without interpreting frames or filling evidence. Native caches own
+raw payload, interface, IDE, DLC/raw DLC, endpoint/group/slot, epoch, sequence,
+monotonic time, field age, grade and partial last-known-good state. Zero, absent,
+invalid, unsupported, stale and conflict remain distinct; a rejected field
+cannot erase an independent valid sibling.
+
 ### 4) Adapter-direct configuration with embedded proxy listener
 
 ```yaml
