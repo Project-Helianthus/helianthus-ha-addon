@@ -150,7 +150,7 @@ class ImportBoundary:
             for node in nodes:
                 if isinstance(node, ast.Assign):
                     value = self.symbol(node.value, aliases)
-                    if value in {'importlib.import_module', 'builtins.__import__', '__import__', 'sys.path', 'sys'}:
+                    if value in {'importlib', 'builtins', 'importlib.import_module', 'builtins.__import__', '__import__', 'sys.path', 'sys'}:
                         for target in node.targets:
                             if isinstance(target, ast.Name) and aliases.get(target.id) != value:
                                 aliases[target.id] = value

@@ -122,6 +122,28 @@ class RuntimeImportsTests(unittest.TestCase):
                                 'helper.py': ''})
         self.assertEqual(errors, [])
 
+    def test_dynamic_loader_module_assignment_aliases(self):
+        for bindings, function in (
+            ('import importlib\nloader = importlib', 'loader.import_module'),
+            ('import importlib as module\nloader = module\nnext_loader = loader',
+             'next_loader.import_module'),
+            ('import builtins\nloader = builtins', 'loader.__import__'),
+        ):
+            for destination, expected in (
+                ('target', 'dynamic import destination cannot be resolved safely'),
+                ('"scripts.hidden"', 'forbidden import scripts.hidden'),
+                ('"tests.hidden"', 'forbidden import tests.hidden'),
+            ):
+                with self.subTest(bindings=bindings, destination=destination):
+                    _, errors = self.check({'entry.py': f'{bindings}\n{function}({destination})'})
+                    self.assertTrue(any(expected in e for e in errors), errors)
+            with self.subTest(bindings=bindings, destination='allowed'):
+                _, errors = self.check({
+                    'entry.py': f'{bindings}\n{function}("json")\n{function}("helper")',
+                    'helper.py': '',
+                })
+                self.assertEqual(errors, [])
+
     def test_dynamic_relative(self):
         _, errors = self.check({'pkg/__init__.py': '', 'pkg/helper.py': '',
                                 'entry.py': 'from importlib import import_module\nimport_module(".helper", "pkg")'})
