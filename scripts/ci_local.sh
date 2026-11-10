@@ -17,6 +17,10 @@ venv=".venv-ci"
 ./scripts/ci_bootstrap.sh "${venv}" requirements-ci.txt
 export PATH="${repo_root}/${venv}/bin:${PATH}"
 
+echo "==> shipped Python import boundary"
+python3 scripts/check_runtime_imports.py
+python3 -m pytest tests/test_runtime_imports.py -q
+
 echo "==> offline release cohort guard"
 python3 scripts/check_release_cohort.py
 python3 -m pytest -q tests/test_release_cohort.py
