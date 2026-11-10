@@ -17,6 +17,11 @@ VERSION = re.compile(
     r'(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?'
 )
 TAG = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}')
+REPOSITORY_COMPONENT = r'[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*'
+REGISTRY = r'[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*(?::[0-9]+)?'
+REPOSITORY = re.compile(
+    rf'(?:{REGISTRY}/)?{REPOSITORY_COMPONENT}(?:/{REPOSITORY_COMPONENT})*'
+)
 
 
 def fields(value, keys):
@@ -56,8 +61,8 @@ def validate_identity(record, config, declared):
     fields(record, ('architectures', 'candidate', 'cohort', 'target', 'sources', 'tests', 'aggregate', 'index'))
     fields(config, config.keys())
     image = config.get('image')
-    if not isinstance(image, str) or not image:
-        raise ValueError('invalid packaging declaration')
+    if not isinstance(image, str) or not REPOSITORY.fullmatch(image):
+        raise ValueError('invalid packaging image repository')
     arches = record['architectures']
     if not isinstance(arches, list) or any(not isinstance(x, str) for x in arches) or len(arches) != len(set(arches)) or set(arches) != set(declared):
         raise ValueError('architectures differ from build workflow')

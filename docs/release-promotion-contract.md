@@ -6,7 +6,11 @@ configuration and an evidence declaration. Python dependencies are listed in
 configuration; the required architecture set always comes from the local
 `.github/workflows/build.yml` build matrix, including architectures absent from
 the Supervisor configuration. It emits a deterministic JSON plan or fails closed.
-It does not execute the plan. The declaration must contain exactly these fields:
+It does not execute the plan. The configured `image` must be an unqualified
+repository name, without a tag, digest, or URL scheme. A numeric registry port
+before the repository path is allowed. Repository path components use lowercase
+letters and digits, with periods, underscores or hyphens as separators.
+The declaration must contain exactly these fields:
 
 - `architectures`: all architectures published by the build workflow.
 - `candidate`: one nonempty candidate identifier shared by all records.

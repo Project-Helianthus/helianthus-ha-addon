@@ -10,8 +10,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
-def fixture():
-    image = 'example.org/project/image'
+def fixture(image='example.org/project/image'):
     def digest(text):
         return image + '@sha256:' + hashlib.sha256(text.encode()).hexdigest()
 
@@ -167,6 +166,35 @@ def test_patch_relabel_rejected(field):
         record['target'] = config['image'] + ':0.6.999'
     with pytest.raises(ValueError, match='release version differs from packaging'):
         module.validate(record, config)
+
+
+@pytest.mark.parametrize('image', [
+    'example.org/team/app:old',
+    'registry.example:5000/team/app:old',
+    'app:old',
+    'example.org/team/app@sha256:' + 'a' * 64,
+    'registry.example:5000/team/app@sha256:' + 'a' * 64,
+    '', None, 123, 'https://example.org/team/app',
+    'example.org/team//app', 'example.org/team/app/',
+    'example.org/team/App', 'example.org/team/app name',
+    'registry.example:port/team/app',
+])
+def test_invalid_configured_image_rejected(image):
+    # Build matching references too: prefix agreement alone must not suffice.
+    config, record = fixture(image if isinstance(image, str) else 'app')
+    config['image'] = image
+    with pytest.raises(ValueError, match='invalid packaging image repository'):
+        module.validate(record, config)
+
+
+@pytest.mark.parametrize('image', [
+    'app', 'team/app', 'example.org/team/app',
+    'registry.example:5000/team/app', 'localhost:5000/app',
+    'example.org/team/app_name.part--suffix',
+])
+def test_unqualified_configured_image_accepted(image):
+    config, record = fixture(image)
+    assert module.validate(record, config)['target'] == image + ':0.7.1'
 
 
 def test_registry_port_in_subjects():
