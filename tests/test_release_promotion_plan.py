@@ -46,6 +46,32 @@ def test_valid_container_tags_accepted(tag):
     assert module.validate(record, config)['target'] == record['target']
 
 
+@pytest.mark.parametrize('version', [
+    '0.7.1-', '0.7.1-rc.', '0.7.1-.rc', '0.7.1-rc..1', '0.7.1-01',
+    '0.7.1+', '0.7.1+build.', '0.7.1+.build', '0.7.1+build..1',
+    '0.7.1-rc.1+', '0.7.1-rc..1+build', '0.7.1-rc.1+build..1',
+])
+@pytest.mark.parametrize('field', ['target', 'cohort', 'config'])
+def test_invalid_release_versions_rejected(version, field):
+    config, record = fixture()
+    if field == 'target':
+        record['target'] = config['image'] + ':' + version
+    elif field == 'cohort':
+        record['cohort'] = version
+    else:
+        config['version'] = version
+    with pytest.raises(ValueError, match='invalid (release version|target tag)'):
+        module.validate(record, config)
+
+
+@pytest.mark.parametrize('version', [
+    '0.7.1', 'v0.7.1-rc.1', '0.7.1-0', '0.7.1-0a',
+    '0.7.1+build.01', '0.7.1-rc.1+build.01',
+])
+def test_valid_release_versions_accepted(version):
+    assert module.cohort(version) == ('0', '7')
+
+
 @pytest.mark.parametrize('section,key,value', [
     ('sources', 'architecture', 'other'), ('sources', 'subject', 'example.org/project/image:latest'),
     ('sources', 'candidate', 'other'), ('sources', 'cohort', '0.8.0'),

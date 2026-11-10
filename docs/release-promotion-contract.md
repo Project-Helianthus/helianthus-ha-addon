@@ -8,6 +8,9 @@ execute the plan. The declaration must contain exactly these fields:
 - `architectures`: all architectures declared by the add-on.
 - `candidate`: one nonempty candidate identifier shared by all records.
 - `cohort`: a release version in the packaging version's major/minor cohort.
+  Release versions allow an optional `v` prefix and dot-separated prerelease
+  and build identifiers containing ASCII letters, digits or hyphens. Identifiers
+  must be nonempty; numeric prerelease identifiers cannot have leading zeros.
 - `target`: the declared image name followed by a release version tag in that cohort.
   The tag must also satisfy container tag syntax: 1–128 ASCII letters, digits,
   underscores, periods or hyphens, starting with a letter, digit or underscore.
