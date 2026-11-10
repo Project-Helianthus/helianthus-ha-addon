@@ -31,6 +31,21 @@ def test_order_and_environment(monkeypatch):
     assert module.validate(record, config) == expected
 
 
+@pytest.mark.parametrize('tag', ['0.7.1+build', '0.7.1-' + 'a' * 123, '0.7.1-' + 'a' * 130])
+def test_invalid_container_tags_rejected(tag):
+    config, record = fixture()
+    record['target'] = config['image'] + ':' + tag
+    with pytest.raises(ValueError, match='invalid target tag'):
+        module.validate(record, config)
+
+
+@pytest.mark.parametrize('tag', ['0.7.1', 'v0.7.1-rc.1', '0.7.1-' + 'a' * 122])
+def test_valid_container_tags_accepted(tag):
+    config, record = fixture()
+    record['target'] = config['image'] + ':' + tag
+    assert module.validate(record, config)['target'] == record['target']
+
+
 @pytest.mark.parametrize('section,key,value', [
     ('sources', 'architecture', 'other'), ('sources', 'subject', 'example.org/project/image:latest'),
     ('sources', 'candidate', 'other'), ('sources', 'cohort', '0.8.0'),

@@ -24,6 +24,7 @@ python3 -m pytest tests/test_runtime_imports.py -q
 echo "==> offline release cohort guard"
 python3 scripts/check_release_cohort.py
 python3 -m pytest -q tests/test_release_cohort.py
+python3 -m pytest -q tests/test_release_promotion_plan.py
 
 echo "==> offline candidate metadata validator (synthetic fixtures; no fetch or build)"
 python3 -m pytest -q tests/test_candidate_metadata.py

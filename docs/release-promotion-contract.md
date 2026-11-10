@@ -9,6 +9,9 @@ execute the plan. The declaration must contain exactly these fields:
 - `candidate`: one nonempty candidate identifier shared by all records.
 - `cohort`: a release version in the packaging version's major/minor cohort.
 - `target`: the declared image name followed by a release version tag in that cohort.
+  The tag must also satisfy container tag syntax: 1–128 ASCII letters, digits,
+  underscores, periods or hyphens, starting with a letter, digit or underscore.
+  Release build metadata containing `+` is rejected.
 - `sources`: one record per architecture with `architecture`, `subject`,
   `candidate`, and `cohort`.
 - `tests`: one record per architecture with the same fields and `verdict` set

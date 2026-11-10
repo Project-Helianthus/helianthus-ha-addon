@@ -9,6 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 DIGEST = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}")
 VERSION = re.compile(r"v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:[-+][0-9A-Za-z.-]+)?")
+TAG = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}')
 
 
 def fields(value, keys):
@@ -46,8 +47,13 @@ def validate(record, config):
     if cohort(release) != cohort(config.get('version')):
         raise ValueError('release cohort differs from packaging')
     target = record['target']
-    if not isinstance(target, str) or not target.startswith(image + ':') or cohort(target[len(image) + 1:]) != cohort(release):
-        raise ValueError('invalid target or release cohort')
+    if not isinstance(target, str) or not target.startswith(image + ':'):
+        raise ValueError('invalid target image')
+    tag = target[len(image) + 1:]
+    if not TAG.fullmatch(tag):
+        raise ValueError('invalid target tag')
+    if cohort(tag) != cohort(release):
+        raise ValueError('target release cohort differs')
     collections = []
     for key, keys in [('sources', ('architecture', 'subject', 'candidate', 'cohort')), ('tests', ('architecture', 'subject', 'candidate', 'cohort', 'verdict'))]:
         entries = record[key]

@@ -132,6 +132,12 @@ jobs:
           python3 scripts/check_release_cohort.py
           python3 -m pytest -q tests/test_release_cohort.py
 
+      - name: Validate offline release promotion plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q tests/test_release_promotion_plan.py
+
       - name: Validate gateway parity gate artifact
         shell: bash
         run: |
