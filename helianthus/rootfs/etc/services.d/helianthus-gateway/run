@@ -38,7 +38,7 @@ if [ -f "${addon_options_path}" ] && command -v jq >/dev/null 2>&1 && \
     "${addon_options_path}" >/dev/null 2>&1; then
   adapter_direct_protocol_persisted=true
 fi
-# F-1 defensive fallback (EBUSD-VERIFICATION-2026-05-10.md): HA Supervisor's
+# Defensive fallback: HA Supervisor's
 # /addons/self/options/config endpoint has been observed silently returning
 # empty for proxy_listen_addr despite the value being correctly stored in
 # /data/options.json AND surfaced by /addons/local_helianthus/info. The
@@ -48,7 +48,7 @@ fi
 if [ -z "${proxy_listen_addr}" ] && [ -f "${addon_options_path}" ] && command -v jq >/dev/null 2>&1; then
   proxy_listen_addr_fallback=$(jq -r '.proxy_listen_addr // empty' "${addon_options_path}" 2>/dev/null || true)
   if [ -n "${proxy_listen_addr_fallback}" ] && [ "${proxy_listen_addr_fallback}" != "null" ]; then
-    bashio::log.warning "bashio::config 'proxy_listen_addr' returned empty; falling back to /data/options.json (value=${proxy_listen_addr_fallback}). Supervisor cache-invalidation bug — see EBUSD-VERIFICATION-2026-05-10.md F-1."
+    bashio::log.warning "bashio::config 'proxy_listen_addr' returned empty; falling back to /data/options.json (value=${proxy_listen_addr_fallback}). Supervisor cache-invalidation bug"
     proxy_listen_addr="${proxy_listen_addr_fallback}"
   fi
 fi
@@ -365,10 +365,7 @@ if [ -z "${enable_static_seed_table}" ] || [ "${enable_static_seed_table}" = "nu
   enable_static_seed_table=false
 fi
 # v8 classifier mode default: "enforce" as of addon 0.6.23
-# (2026-05-21). Per the shadow→enforce promotion gate procedure in
-# helianthus-docs-ebus/deployment/prometheus-alerts.md, the live HA
-# host validation (_work_adaptermux_audit/v8-shadow-validation-*) at
-# iter-7 confirmed 100% true-positive AA-injection signal under
+# Validation confirmed 100% true-positive AA-injection signal under
 # shadow mode (every flagged byte was canonical raw-wire 0xAA mid-
 # telegram, with WasEscaped=false — the textbook AA-injection
 # pattern). Zero false-positives observed across multiple sustained
