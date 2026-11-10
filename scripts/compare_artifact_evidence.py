@@ -11,13 +11,13 @@ import stat
 import subprocess
 
 
-class Unverified(ValueError):
+class UnverifiedError(ValueError):
     """Required evidence is absent, ambiguous or inconsistent."""
 
 
 def require(condition):
     if not condition:
-        raise Unverified('evidence rejected')
+        raise UnverifiedError('evidence rejected')
 
 
 def fingerprint(data):
@@ -49,7 +49,7 @@ def inspect_go(path):
         elif fields[0] in {'dep', 'mod', 'path', '=>'}:
             deps.append(fields)
         else:
-            raise Unverified('unknown build metadata')
+            raise UnverifiedError('unknown build metadata')
     return {'toolchain': toolchain, 'settings': settings, 'dependencies': deps}
 
 
