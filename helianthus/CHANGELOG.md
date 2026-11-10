@@ -581,10 +581,9 @@ cross-proxy session byte streams.
 
 **Why this is safe** (live-bus validation evidence):
 
-  iter-7 captured the per-event distribution behind the aggregate
-  `helianthus_v8_shadow_would_have_dropped_total` counter using the
-  new `GET /debug/v8/admin-events?peek=true` endpoint added in
-  addon 0.6.22.
+- Per-event validation checked the distribution behind the aggregate
+  `helianthus_v8_shadow_would_have_dropped_total` counter against
+  each event's byte value, escape status, and classifier state.
 - 100% of `aa_injection_drop` events showed the canonical pattern:
   `byte=0xAA, was_escaped=false, fsm_state=PASSIVE_TRACKING`. Zero
   false-positives across multiple sustained observation windows.
