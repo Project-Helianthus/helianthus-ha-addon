@@ -350,8 +350,61 @@ class RuntimeImportsTests(unittest.TestCase):
         self.assertTrue(any('sys.path' in e for e in errors), errors)
 
     def test_conflicting_aliases_fail_closed(self):
-        _, errors = self.check({'entry.py': 'from importlib import import_module as load\ndef other():\n from json import loads as load\nload(target)'})
+        _, errors = self.check({'entry.py': 'from importlib import import_module as load\nfrom json import loads as load\nload(target)'})
         self.assertTrue(any('ambiguous import alias load' in e for e in errors), errors)
+
+    def test_independent_function_local_aliases(self):
+        _, errors = self.check({'entry.py':
+            'def first():\n from json import loads\n return loads("{}")\n'
+            'async def second():\n from ast import literal_eval as loads\n return loads("{}")'})
+        self.assertEqual(errors, [])
+
+    def test_nested_scope_aliases_do_not_replace_module_loader(self):
+        _, errors = self.check({'entry.py':
+            'from importlib import import_module as load\n'
+            'def other():\n from json import loads as load\n return load("{}")\n'
+            'load("scripts.hidden")'})
+        self.assertTrue(any('forbidden import scripts.hidden' in e for e in errors), errors)
+        self.assertFalse(any('ambiguous import alias' in e for e in errors), errors)
+
+    def test_class_scope_and_method_aliases_are_independent(self):
+        _, errors = self.check({'entry.py':
+            'from importlib import import_module as load\n'
+            'class First:\n from json import loads as load\n value = load("{}")\n'
+            ' def method(self):\n  load("scripts.hidden")\n'
+            'class Second:\n from ast import literal_eval as load\n value = load("{}")'})
+        self.assertTrue(any('forbidden import scripts.hidden' in e for e in errors), errors)
+        self.assertFalse(any('ambiguous import alias' in e for e in errors), errors)
+
+    def test_function_scope_loader_aliases_are_checked(self):
+        _, errors = self.check({'entry.py':
+            'def first():\n from json import loads as load\n return load("{}")\n'
+            'def second():\n from importlib import import_module as load\n'
+            ' def nested():\n  load("tests.hidden")'})
+        self.assertTrue(any('forbidden import tests.hidden' in e for e in errors), errors)
+        self.assertFalse(any('ambiguous import alias' in e for e in errors), errors)
+
+    def test_named_expression_dynamic_loader_aliases(self):
+        for binding, call, expected in (
+            ('import importlib', '(load := importlib.import_module)("scripts.hidden")',
+             'forbidden import scripts.hidden'),
+            ('import importlib', '(module := importlib).import_module("tests.hidden")',
+             'forbidden import tests.hidden'),
+            ('import importlib', 'if load := importlib.import_module:\n load(target)',
+             'dynamic import destination cannot be resolved safely'),
+            ('import runpy', '(run := runpy.run_module)("scripts.hidden")',
+             'runpy.run_module cannot establish'),
+            ('import builtins', '(action := builtins.exec)(source)', 'exec cannot establish'),
+        ):
+            with self.subTest(call=call):
+                _, errors = self.check({'entry.py': f'{binding}\n{call}'})
+                self.assertTrue(any(expected in e for e in errors), errors)
+
+    def test_named_expression_allows_resolved_imports(self):
+        _, errors = self.check({'entry.py':
+            'import importlib\n(load := importlib.import_module)("json")\nload("helper")',
+            'helper.py': 'import json'})
+        self.assertEqual(errors, [])
 
     def test_imports_are_parsed_even_in_unreachable_code(self):
         _, errors = self.check({'entry.py': 'if False:\n import scripts.hidden'})

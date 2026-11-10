@@ -46,6 +46,8 @@ class ImportBoundary:
     def symbol(node: ast.AST, aliases: dict[str, str]) -> str:
         if isinstance(node, ast.Name):
             return aliases.get(node.id, 'builtins' if node.id == '__builtins__' else node.id)
+        if isinstance(node, ast.NamedExpr):
+            return ImportBoundary.symbol(node.value, aliases)
         if isinstance(node, ast.Attribute):
             return ImportBoundary.symbol(node.value, aliases) + '.' + node.attr
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
@@ -132,40 +134,70 @@ class ImportBoundary:
                 return value
             try:
                 with tokenize.open(source) as stream:
-                    nodes = list(ast.walk(ast.parse(stream.read())))
+                    tree = ast.parse(stream.read())
             except (OSError, SyntaxError, UnicodeError, LookupError):
                 return value  # The ordinary dependency traversal reports this.
-            aliases = {}
-            package, _ = self.package_context(source, roots)
-            for node in nodes:
-                if isinstance(node, ast.Import):
-                    for item in node.names:
-                        aliases[item.asname or item.name.split('.')[0]] = (
-                            item.name if item.asname else item.name.split('.')[0])
-                elif isinstance(node, ast.ImportFrom):
-                    if node.level > len(package):
-                        continue
-                    prefix = package[:len(package) - node.level + 1] if node.level else []
-                    module = '.'.join(prefix + ([node.module] if node.module else []))
-                    for item in node.names:
-                        aliases[item.asname or item.name] = module + '.' + item.name
-            for _ in range(len(nodes)):
-                changed = False
-                for node in nodes:
-                    if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
-                        binding = self.symbol(node.value, aliases)
-                        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                        for target in targets:
-                            if binding and isinstance(target, ast.Name) and aliases.get(target.id) != binding:
-                                aliases[target.id] = binding
-                                changed = True
-                if not changed:
-                    break
+            aliases = self.reexport_aliases(source, tree, roots)
             binding = aliases.get(parts[split])
             if binding:
                 return self.loader_alias('.'.join([binding] + parts[split + 1:]), roots, seen | {key})
             return value
         return value
+
+    @staticmethod
+    def assignment(node: ast.AST) -> tuple[list[ast.AST], ast.AST | None]:
+        if isinstance(node, ast.Assign):
+            return node.targets, node.value
+        if isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+            return [node.target], node.value
+        return [], None
+
+    def import_bindings(self, node: ast.AST, package: list[str]):
+        if isinstance(node, ast.Import):
+            return [(item.asname or item.name.split('.')[0],
+                     item.name if item.asname else item.name.split('.')[0])
+                    for item in node.names]
+        if not isinstance(node, ast.ImportFrom) or node.level > len(package):
+            return []
+        prefix = package[:len(package) - node.level + 1] if node.level else []
+        module = '.'.join(prefix + ([node.module] if node.module else []))
+        return [(item.asname or item.name, module + '.' + item.name)
+                for item in node.names]
+
+    def reexport_aliases(self, source: Path, tree: ast.AST, roots: list[Path]):
+        aliases = {}
+        package, _ = self.package_context(source, roots)
+        # Only module-scope bindings can be imported by another shipped source.
+        nodes, _ = self.scope_nodes(tree)
+        for node in nodes:
+            aliases.update(self.import_bindings(node, package))
+        for _ in range(len(nodes)):
+            changed = False
+            for node in nodes:
+                targets, expression = self.assignment(node)
+                if expression is None:
+                    continue
+                binding = self.symbol(expression, aliases)
+                for target in targets:
+                    if binding and isinstance(target, ast.Name) and aliases.get(target.id) != binding:
+                        aliases[target.id] = binding
+                        changed = True
+            if not changed:
+                break
+        return aliases
+
+    @staticmethod
+    def scope_nodes(scope: ast.AST) -> tuple[list[ast.AST], list[ast.AST]]:
+        nodes, children = [], []
+        pending = list(ast.iter_child_nodes(scope))
+        while pending:
+            node = pending.pop(0)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                children.append(node)
+            else:
+                nodes.append(node)
+                pending.extend(ast.iter_child_nodes(node))
+        return nodes, children
 
     def dependency(self, path: Path, node: ast.AST, name: str, roots: list[Path]) -> bool:
         if not name or any(not part.isidentifier() for part in name.split('.')):
@@ -208,45 +240,41 @@ class ImportBoundary:
         except (OSError, SyntaxError, UnicodeError, LookupError) as exc:
             self.error(path, ast.Module(), f'source parse failure ({type(exc).__name__})')
             return
-        nodes = list(ast.walk(tree))
-        package, parent = self.package_context(path, roots)
-        aliases: dict[str, str] = {}
-        def bind(name: str, value: str, node: ast.AST) -> None:
-            if name in aliases and aliases[name] != value:
-                self.error(path, node, f'ambiguous import alias {name}')
-            aliases[name] = value
+        self.visit_scope(path, tree, roots, {}, {})
 
+    def bind_imports(self, path, nodes, roots, aliases, package):
+        local = {}
         for node in nodes:
-            if isinstance(node, ast.Import):
-                for item in node.names:
-                    bind(item.asname or item.name.split('.')[0], item.name if item.asname else item.name.split('.')[0], node)
-            elif isinstance(node, ast.ImportFrom):
-                if node.level > len(package):
-                    continue
-                prefix = package[:len(package) - node.level + 1] if node.level else []
-                module = '.'.join(prefix + ([node.module] if node.module else []))
-                for item in node.names:
-                    if item.name == '*' and module in {'importlib', 'runpy', 'builtins'}:
-                        self.error(path, node, f'wildcard import from dynamic-loader module {module}')
-                    bind(item.asname or item.name, self.loader_alias(f'{module}.{item.name}', roots), node)
+            for name, binding in self.import_bindings(node, package):
+                if binding in {'importlib.*', 'runpy.*', 'builtins.*'}:
+                    self.error(path, node, f'wildcard import from dynamic-loader module {binding[:-2]}')
+                value = self.loader_alias(binding, roots)
+                if name in local and local[name] != value:
+                    self.error(path, node, f'ambiguous import alias {name}')
+                local[name] = value
+        aliases.update(local)
+
+    def propagate_aliases(self, nodes, roots, aliases):
         # Propagate aliases conservatively, including aliases of dynamic loaders.
         for _ in range(len(nodes)):
             changed = False
             for node in nodes:
-                if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
-                    value = self.loader_alias(self.symbol(node.value, aliases), roots)
+                targets, expression = self.assignment(node)
+                if expression is not None:
+                    value = self.loader_alias(self.symbol(expression, aliases), roots)
                     if value in {'importlib', 'builtins', 'importlib.import_module',
                                  'builtins.__import__', '__import__', 'sys.path', 'sys',
                                  'runpy', 'runpy.run_path', 'runpy.run_module',
                                  'exec', 'eval', 'getattr', 'setattr',
                                  'builtins.exec', 'builtins.eval', 'builtins.getattr', 'builtins.setattr'}:
-                        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                         for target in targets:
                             if isinstance(target, ast.Name) and aliases.get(target.id) != value:
                                 aliases[target.id] = value
                                 changed = True
             if not changed:
                 break
+
+    def safe_search_paths(self, nodes, roots, aliases):
         parents = {child: node for node in nodes for child in ast.iter_child_nodes(node)}
         safe_paths: set[int] = set()
         for node in nodes:
@@ -277,85 +305,119 @@ class ImportBoundary:
             else:
                 roots.extend(directories)
                 safe_paths.add(id(node))
-        roots = list(dict.fromkeys(roots))
-        package, parent = self.package_context(path, roots)
+        return list(dict.fromkeys(roots)), safe_paths
+
+    def visit_scope(self, path, scope, roots, inherited, enclosing):
+        nodes, children = self.scope_nodes(scope)
+        aliases = dict(inherited)
+        package, _ = self.package_context(path, roots)
+        self.bind_imports(path, nodes, roots, aliases, package)
+        self.propagate_aliases(nodes, roots, aliases)
+        roots, safe_paths = self.safe_search_paths(nodes, list(roots), aliases)
         for node in nodes:
             symbol = self.symbol(node, aliases)
             if symbol == 'sys.path' and id(node) not in safe_paths:
                 # Runtime-computed search paths cannot establish packaged provenance.
                 self.error(path, node, 'sys.path access cannot establish a safe shipped import path')
-            if isinstance(node, ast.Import):
+            self.check_import(path, node, roots)
+            if isinstance(node, ast.Call):
+                self.check_call(path, node, roots, aliases)
+        # Class namespaces are visible in the class body, but are not enclosing
+        # lexical scopes for methods or nested classes.
+        lexical = enclosing if isinstance(scope, ast.ClassDef) else aliases
+        for child in children:
+            inherited = aliases if not isinstance(scope, ast.ClassDef) else enclosing
+            self.visit_scope(path, child, roots, inherited, lexical)
+
+    def check_import(self, path, node, roots):
+        package, parent = self.package_context(path, roots)
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                self.dependency(path, node, item.name, roots)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                if node.level > len(package):
+                    self.error(path, node, 'relative import escapes its shipped package')
+                    return
+                prefix = package[:len(package) - node.level + 1]
+                name = '.'.join(prefix + ([node.module] if node.module else []))
+                import_roots = [parent]
+            else:
+                name, import_roots = node.module or '', roots
+            if self.dependency(path, node, name, import_roots):
                 for item in node.names:
-                    self.dependency(path, node, item.name, roots)
-            elif isinstance(node, ast.ImportFrom):
-                if node.level:
-                    if node.level > len(package):
-                        self.error(path, node, 'relative import escapes its shipped package')
-                        continue
-                    prefix = package[:len(package) - node.level + 1]
-                    name = '.'.join(prefix + ([node.module] if node.module else []))
-                    import_roots = [parent]
-                else:
-                    name, import_roots = node.module or '', roots
-                if self.dependency(path, node, name, import_roots):
-                    for item in node.names:
-                        child = name + '.' + item.name
-                        local = self.resolve(child, import_roots)
-                        if local:
-                            self.dependency(path, node, child, import_roots)
-            elif isinstance(node, ast.Call):
-                function = self.loader_alias(self.symbol(node.func, aliases), roots)
-                if function in {'builtins.exec', 'builtins.eval', 'builtins.getattr', 'builtins.setattr'}:
-                    function = function.removeprefix('builtins.')
-                if function in {'importlib.import_module', 'builtins.__import__', '__import__'}:
-                    argument = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == 'name'), None)
-                    if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
-                        self.error(path, node, 'dynamic import destination cannot be resolved safely')
-                        continue
-                    name = argument.value
-                    if name.startswith('.'):
-                        anchor = node.args[1] if len(node.args) > 1 else next((k.value for k in node.keywords if k.arg == 'package'), None)
-                        if isinstance(anchor, ast.Name) and anchor.id == '__package__' and package:
-                            anchor = ast.Constant(value='.'.join(package))
-                        if function != 'importlib.import_module' or not isinstance(anchor, ast.Constant) or not isinstance(anchor.value, str):
-                            self.error(path, node, f'unresolved relative dynamic import {name}')
-                            continue
-                        level = len(name) - len(name.lstrip('.'))
-                        parts = anchor.value.split('.')
-                        if level > len(parts):
-                            self.error(path, node, f'relative dynamic import escapes package: {name}')
-                            continue
-                        name = '.'.join(parts[:len(parts) - level + 1] + ([name[level:]] if name[level:] else []))
-                    if function in {'__import__', 'builtins.__import__'}:
-                        # Non-default fromlist/level can add imports beyond the literal name.
-                        if len(node.args) > 5 or any(k.arg not in {'name', 'globals', 'locals', 'fromlist', 'level'} for k in node.keywords):
-                            self.error(path, node, '__import__ context/fromlist/level cannot be resolved safely')
-                            continue
-                        options = {key: node.args[index] for index, key in enumerate(('name', 'globals', 'locals', 'fromlist', 'level')) if index < len(node.args)}
-                        options.update({k.arg: k.value for k in node.keywords})
-                        context = [options[key] for key in ('globals', 'locals') if key in options]
-                        level = options.get('level', ast.Constant(value=0))
-                        fromlist = options.get('fromlist', ast.Tuple(elts=[]))
-                        if (any(not isinstance(value, ast.Constant) or value.value is not None for value in context)
-                                or not isinstance(level, ast.Constant) or level.value != 0
-                                or not isinstance(fromlist, (ast.List, ast.Tuple))
-                                or any(not isinstance(item, ast.Constant) or not isinstance(item.value, str) or item.value == '*' for item in fromlist.elts)):
-                            self.error(path, node, '__import__ context/fromlist/level cannot be resolved safely')
-                            continue
-                        for item in fromlist.elts:
-                            child = name + '.' + item.value
-                            if self.resolve(child, roots):
-                                self.dependency(path, node, child, roots)
-                    self.dependency(path, node, name, roots)
-                elif function.startswith('importlib.') and function != 'importlib.invalidate_caches':
-                    self.error(path, node, f'unsupported dynamic loader {function}')
-                elif function in {'eval', 'exec', 'runpy.run_path', 'runpy.run_module'}:
-                    self.error(path, node, f'{function} cannot establish a static import boundary')
-                elif function in {'getattr', 'setattr'}:
-                    attribute = node.args[1] if len(node.args) > 1 else None
-                    if (not isinstance(attribute, ast.Constant)
-                            or attribute.value in {'__import__', 'import_module', 'path', 'load_module', 'exec_module'}):
-                        self.error(path, node, f'{function} cannot establish a static import boundary')
+                    child = name + '.' + item.name
+                    local = self.resolve(child, import_roots)
+                    if local:
+                        self.dependency(path, node, child, import_roots)
+
+    def check_call(self, path, node, roots, aliases):
+        function = self.loader_alias(self.symbol(node.func, aliases), roots)
+        if function in {'builtins.exec', 'builtins.eval', 'builtins.getattr', 'builtins.setattr'}:
+            function = function.removeprefix('builtins.')
+        if function in {'importlib.import_module', 'builtins.__import__', '__import__'}:
+            self.check_dynamic_import(path, node, function, roots)
+        elif function.startswith('importlib.') and function != 'importlib.invalidate_caches':
+            self.error(path, node, f'unsupported dynamic loader {function}')
+        elif function in {'eval', 'exec', 'runpy.run_path', 'runpy.run_module'}:
+            self.error(path, node, f'{function} cannot establish a static import boundary')
+        elif function in {'getattr', 'setattr'}:
+            attribute = node.args[1] if len(node.args) > 1 else None
+            if (not isinstance(attribute, ast.Constant)
+                    or attribute.value in {'__import__', 'import_module', 'path', 'load_module', 'exec_module'}):
+                self.error(path, node, f'{function} cannot establish a static import boundary')
+
+    def check_dynamic_import(self, path, node, function, roots):
+        argument = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == 'name'), None)
+        if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
+            self.error(path, node, 'dynamic import destination cannot be resolved safely')
+            return
+        name = argument.value
+        if name.startswith('.'):
+            name = self.relative_dynamic_name(path, node, function, name, roots)
+            if name is None:
+                return
+        if function in {'__import__', 'builtins.__import__'}:
+            if not self.check_fromlist(path, node, name, roots):
+                return
+        self.dependency(path, node, name, roots)
+
+    def relative_dynamic_name(self, path, node, function, name, roots):
+        package, _ = self.package_context(path, roots)
+        anchor = node.args[1] if len(node.args) > 1 else next((k.value for k in node.keywords if k.arg == 'package'), None)
+        if isinstance(anchor, ast.Name) and anchor.id == '__package__' and package:
+            anchor = ast.Constant(value='.'.join(package))
+        if function != 'importlib.import_module' or not isinstance(anchor, ast.Constant) or not isinstance(anchor.value, str):
+            self.error(path, node, f'unresolved relative dynamic import {name}')
+            return None
+        level = len(name) - len(name.lstrip('.'))
+        parts = anchor.value.split('.')
+        if level > len(parts):
+            self.error(path, node, f'relative dynamic import escapes package: {name}')
+            return None
+        return '.'.join(parts[:len(parts) - level + 1] + ([name[level:]] if name[level:] else []))
+
+    def check_fromlist(self, path, node, name, roots):
+        # Non-default fromlist/level can add imports beyond the literal name.
+        if len(node.args) > 5 or any(k.arg not in {'name', 'globals', 'locals', 'fromlist', 'level'} for k in node.keywords):
+            self.error(path, node, '__import__ context/fromlist/level cannot be resolved safely')
+            return False
+        options = {key: node.args[index] for index, key in enumerate(('name', 'globals', 'locals', 'fromlist', 'level')) if index < len(node.args)}
+        options.update({k.arg: k.value for k in node.keywords})
+        context = [options[key] for key in ('globals', 'locals') if key in options]
+        level = options.get('level', ast.Constant(value=0))
+        fromlist = options.get('fromlist', ast.Tuple(elts=[]))
+        if (any(not isinstance(value, ast.Constant) or value.value is not None for value in context)
+                or not isinstance(level, ast.Constant) or level.value != 0
+                or not isinstance(fromlist, (ast.List, ast.Tuple))
+                or any(not isinstance(item, ast.Constant) or not isinstance(item.value, str) or item.value == '*' for item in fromlist.elts)):
+            self.error(path, node, '__import__ context/fromlist/level cannot be resolved safely')
+            return False
+        for item in fromlist.elts:
+            child = name + '.' + item.value
+            if self.resolve(child, roots):
+                self.dependency(path, node, child, roots)
+        return True
 
     def check(self) -> list[str]:
         self.discover()
