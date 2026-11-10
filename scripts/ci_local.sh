@@ -103,6 +103,10 @@ python3 scripts/check_rollout_guardrails.py --guardrail helianthus/rollout_guard
 echo "==> post-parity enablement tasks"
 python3 scripts/run_post_parity_enablement.py --guardrail helianthus/rollout_guardrails.json --artifact scripts/fixtures/gateway_parity_artifact_pass.json --source-ref "$gateway_version" --addon-config helianthus/config.json --smoke-runbook SMOKE_RUNBOOK.md
 
+echo "==> add-on option inventory"
+python3 scripts/check_addon_options.py
+python3 -m pytest -q tests/test_addon_options.py
+
 echo "==> BOM manifest contract"
 python3 scripts/bom_manifest.py check
 python3 -m pytest tests/test_bom_manifest.py -q
