@@ -6,8 +6,10 @@ from pathlib import Path
 import re
 import sys
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
-DIGEST = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}")
+DIGEST = re.compile(r'[0-9a-f]{64}')
 PRERELEASE_IDENTIFIER = r'(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
 VERSION = re.compile(
     r'v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
@@ -31,34 +33,55 @@ def cohort(version):
 
 
 def subject(value, image):
-    if not isinstance(value, str) or not DIGEST.fullmatch(value) or not value.startswith(image + '@'):
+    if not isinstance(value, str) or not value.startswith(image + '@sha256:') or not DIGEST.fullmatch(value[len(image) + len('@sha256:'):]):
         raise ValueError('source must be an immutable digest for the declared image')
     return value
 
 
-def validate(record, config):
+def published_architectures(workflow):
+    try:
+        build = yaml.safe_load(workflow.read_text())
+        matrix = build['jobs']['build']['strategy']['matrix']
+        if set(matrix) != {'include'}:
+            raise ValueError('unsupported build matrix')
+        declared = [entry['arch'] for entry in matrix['include']]
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        raise ValueError('invalid build architecture declaration') from exc
+    if not declared or any(not isinstance(x, str) or not x for x in declared) or len(set(declared)) != len(declared):
+        raise ValueError('invalid build architecture declaration')
+    return declared
+
+
+def validate_identity(record, config, declared):
     fields(record, ('architectures', 'candidate', 'cohort', 'target', 'sources', 'tests', 'aggregate', 'index'))
     fields(config, config.keys())
-    image, declared = config.get('image'), config.get('arch')
-    if not isinstance(image, str) or not isinstance(declared, list) or not declared or any(not isinstance(x, str) or not x for x in declared) or len(set(declared)) != len(declared):
+    image = config.get('image')
+    if not isinstance(image, str) or not image:
         raise ValueError('invalid packaging declaration')
     arches = record['architectures']
     if not isinstance(arches, list) or any(not isinstance(x, str) for x in arches) or len(arches) != len(set(arches)) or set(arches) != set(declared):
-        raise ValueError('architectures differ from packaging')
+        raise ValueError('architectures differ from build workflow')
     candidate = record['candidate']
     if not isinstance(candidate, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', candidate):
         raise ValueError('invalid candidate identity')
     release = record['cohort']
-    if cohort(release) != cohort(config.get('version')):
-        raise ValueError('release cohort differs from packaging')
+    cohort(release)
+    cohort(config.get('version'))
+    if release != config['version']:
+        raise ValueError('release version differs from packaging')
     target = record['target']
     if not isinstance(target, str) or not target.startswith(image + ':'):
         raise ValueError('invalid target image')
     tag = target[len(image) + 1:]
     if not TAG.fullmatch(tag):
         raise ValueError('invalid target tag')
-    if cohort(tag) != cohort(release):
-        raise ValueError('target release cohort differs')
+    cohort(tag)
+    if tag != config['version']:
+        raise ValueError('target release version differs from packaging')
+    return image, candidate, release, target
+
+
+def validate_subjects(record, image, declared, candidate, release):
     collections = []
     for key, keys in [('sources', ('architecture', 'subject', 'candidate', 'cohort')), ('tests', ('architecture', 'subject', 'candidate', 'cohort', 'verdict'))]:
         entries = record[key]
@@ -79,11 +102,15 @@ def validate(record, config):
         collections.append(by_arch)
     if collections[0] != collections[1] or len(set(collections[0].values())) != len(declared):
         raise ValueError('tested subjects differ or are ambiguous')
+    return collections[0]
+
+
+def validate_index(record, image, candidate, release, sources):
     aggregate = fields(record['aggregate'], ('candidate', 'cohort', 'verdict', 'subjects', 'index_subject'))
     if aggregate['candidate'] != candidate or aggregate['cohort'] != release or aggregate['verdict'] != 'pass':
         raise ValueError('aggregate identity or verdict mismatch')
     subjects = aggregate['subjects']
-    if not isinstance(subjects, list) or any(not isinstance(x, str) for x in subjects) or len(subjects) != len(set(subjects)) or set(subjects) != set(collections[0].values()):
+    if not isinstance(subjects, list) or any(not isinstance(x, str) for x in subjects) or len(subjects) != len(set(subjects)) or set(subjects) != set(sources.values()):
         raise ValueError('aggregate subjects mismatch')
     index = record['index']
     if index is not None:
@@ -93,7 +120,15 @@ def validate(record, config):
             raise ValueError('index evidence mismatch')
     elif aggregate['index_subject'] is not None:
         raise ValueError('missing index evidence')
-    return {'target': target, 'sources': [{'architecture': a, 'subject': collections[0][a]} for a in sorted(declared)], 'index_subject': index['subject'] if index else None}
+    return index['subject'] if index else None
+
+
+def validate(record, config, workflow=ROOT / '.github/workflows/build.yml'):
+    declared = published_architectures(workflow)
+    image, candidate, release, target = validate_identity(record, config, declared)
+    sources = validate_subjects(record, image, declared, candidate, release)
+    index = validate_index(record, image, candidate, release, sources)
+    return {'target': target, 'sources': [{'architecture': a, 'subject': sources[a]} for a in sorted(declared)], 'index_subject': index}
 
 
 def unique_object(pairs):

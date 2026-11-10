@@ -12,13 +12,15 @@ spec.loader.exec_module(module)
 
 def fixture():
     image = 'example.org/project/image'
-    digest = lambda text: image + '@sha256:' + hashlib.sha256(text.encode()).hexdigest()
-    config = {'image': image, 'arch': ['arm', 'amd'], 'version': '0.7.1'}
-    sources = [{'architecture': a, 'subject': digest(a), 'candidate': 'candidate-1', 'cohort': '0.7.1'} for a in config['arch']]
+    def digest(text):
+        return image + '@sha256:' + hashlib.sha256(text.encode()).hexdigest()
+
+    config = {'image': image, 'arch': ['aarch64', 'amd64'], 'version': '0.7.1'}
+    sources = [{'architecture': a, 'subject': digest(a), 'candidate': 'candidate-1', 'cohort': '0.7.1'} for a in module.published_architectures(module.ROOT / '.github/workflows/build.yml')]
     tests = [dict(x, verdict='pass') for x in sources]
     index = {'subject': digest('index'), 'candidate': 'candidate-1', 'cohort': '0.7.1', 'verdict': 'pass'}
     aggregate = {'candidate': 'candidate-1', 'cohort': '0.7.1', 'verdict': 'pass', 'subjects': [x['subject'] for x in sources], 'index_subject': index['subject']}
-    return config, {'architectures': config['arch'][:], 'candidate': 'candidate-1', 'cohort': '0.7.1', 'target': image + ':0.7.1', 'sources': sources, 'tests': tests, 'aggregate': aggregate, 'index': index}
+    return config, {'architectures': [x['architecture'] for x in sources], 'candidate': 'candidate-1', 'cohort': '0.7.1', 'target': image + ':0.7.1', 'sources': sources, 'tests': tests, 'aggregate': aggregate, 'index': index}
 
 
 def test_order_and_environment(monkeypatch):
@@ -34,6 +36,9 @@ def test_order_and_environment(monkeypatch):
 @pytest.mark.parametrize('tag', ['0.7.1+build', '0.7.1-' + 'a' * 123, '0.7.1-' + 'a' * 130])
 def test_invalid_container_tags_rejected(tag):
     config, record = fixture()
+    config['version'] = record['cohort'] = tag
+    for entry in record['sources'] + record['tests'] + [record['aggregate'], record['index']]:
+        entry['cohort'] = tag
     record['target'] = config['image'] + ':' + tag
     with pytest.raises(ValueError, match='invalid target tag'):
         module.validate(record, config)
@@ -42,6 +47,9 @@ def test_invalid_container_tags_rejected(tag):
 @pytest.mark.parametrize('tag', ['0.7.1', 'v0.7.1-rc.1', '0.7.1-' + 'a' * 122])
 def test_valid_container_tags_accepted(tag):
     config, record = fixture()
+    config['version'] = record['cohort'] = tag
+    for entry in record['sources'] + record['tests'] + [record['aggregate'], record['index']]:
+        entry['cohort'] = tag
     record['target'] = config['image'] + ':' + tag
     assert module.validate(record, config)['target'] == record['target']
 
@@ -103,11 +111,16 @@ def test_missing_duplicate_and_stale():
     for section in ('sources', 'tests'):
         for change in ('missing', 'duplicate', 'stale', 'field'):
             record = copy.deepcopy(original)
-            if change == 'missing': record[section].pop()
-            if change == 'duplicate': record[section].append(copy.deepcopy(record[section][0]))
-            if change == 'stale': record[section][0]['subject'] = record[section][1]['subject']
-            if change == 'field': del record[section][0]['candidate']
-            with pytest.raises(ValueError): module.validate(record, config)
+            if change == 'missing':
+                record[section].pop()
+            if change == 'duplicate':
+                record[section].append(copy.deepcopy(record[section][0]))
+            if change == 'stale':
+                record[section][0]['subject'] = record[section][1]['subject']
+            if change == 'field':
+                del record[section][0]['candidate']
+            with pytest.raises(ValueError):
+                module.validate(record, config)
 
 
 def test_index_optional_only_with_explicit_null():
@@ -115,4 +128,80 @@ def test_index_optional_only_with_explicit_null():
     record['index'] = record['aggregate']['index_subject'] = None
     assert module.validate(record, config)['index_subject'] is None
     del record['aggregate']['index_subject']
-    with pytest.raises(ValueError): module.validate(record, config)
+    with pytest.raises(ValueError):
+        module.validate(record, config)
+
+
+def test_supervisor_subset_cannot_omit_published_architectures():
+    config, record = fixture()
+    assert set(record['architectures']) == {'amd64', 'aarch64', 'armv7', 'armhf', 'i386'}
+    record['architectures'] = config['arch'][:]
+    for key in ('sources', 'tests'):
+        record[key] = [entry for entry in record[key] if entry['architecture'] in config['arch']]
+    record['aggregate']['subjects'] = [entry['subject'] for entry in record['sources']]
+    with pytest.raises(ValueError, match='architectures differ from build workflow'):
+        module.validate(record, config)
+
+
+def test_architectures_are_read_from_workflow(tmp_path):
+    config, record = fixture()
+    workflow = tmp_path / 'build.yml'
+    workflow.write_text('jobs: {build: {strategy: {matrix: {include: [{arch: extra}]}}}}')
+    with pytest.raises(ValueError, match='architectures differ from build workflow'):
+        module.validate(record, config, workflow)
+
+
+@pytest.mark.parametrize('field', ['cohort', 'target'])
+def test_patch_relabel_rejected(field):
+    config, record = fixture()
+    config['version'] = '0.6.58'
+    record['cohort'] = '0.6.58'
+    for entry in record['sources'] + record['tests'] + [record['aggregate'], record['index']]:
+        entry['cohort'] = '0.6.58'
+    record['target'] = config['image'] + ':0.6.58'
+    if field == 'cohort':
+        record['cohort'] = '0.6.1'
+        for entry in record['sources'] + record['tests'] + [record['aggregate'], record['index']]:
+            entry['cohort'] = '0.6.1'
+    else:
+        record['target'] = config['image'] + ':0.6.999'
+    with pytest.raises(ValueError, match='release version differs from packaging'):
+        module.validate(record, config)
+
+
+def test_registry_port_in_subjects():
+    config, record = fixture()
+    old_image = config['image']
+    config['image'] = 'registry.example:5000/team/image'
+    record['target'] = config['image'] + ':0.7.1'
+    for entry in record['sources'] + record['tests'] + [record['index']]:
+        entry['subject'] = entry['subject'].replace(old_image, config['image'])
+    record['aggregate']['subjects'] = [entry['subject'] for entry in record['sources']]
+    record['aggregate']['index_subject'] = record['index']['subject']
+    assert module.validate(record, config)['target'] == record['target']
+
+
+@pytest.mark.parametrize('suffix', ['@sha256:' + 'a' * 63, '@sha256:' + 'a' * 65,
+                                     '@sha256:' + 'A' * 64, '@sha512:' + 'a' * 64,
+                                     '/other@sha256:' + 'a' * 64, ':tag@sha256:' + 'a' * 64])
+def test_subject_requires_exact_prefix_and_digest(suffix):
+    config, record = fixture()
+    record['sources'][0]['subject'] = config['image'] + suffix
+    with pytest.raises(ValueError, match='immutable digest'):
+        module.validate(record, config)
+
+
+@pytest.mark.parametrize('declaration', [
+    'jobs: {}',
+    'jobs: {build: {strategy: {matrix: {include: []}}}}',
+    'jobs: {build: {strategy: {matrix: {include: [{arch: amd64}, {arch: amd64}]}}}}',
+    'jobs: {build: {strategy: {matrix: {include: [{arch: 1}]}}}}',
+    'jobs: {build: {strategy: {matrix: {include: [{arch: amd64}], exclude: []}}}}',
+    'jobs: [',
+])
+def test_invalid_workflow_fails_closed(tmp_path, declaration):
+    config, record = fixture()
+    workflow = tmp_path / 'build.yml'
+    workflow.write_text(declaration)
+    with pytest.raises(ValueError):
+        module.validate(record, config, workflow)
