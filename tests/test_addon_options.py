@@ -309,3 +309,18 @@ def test_consumer_from_another_route_rejected(tree, key):
         value['options'][key]['consumer'] = other
         write_map(tree, value)
         reject(tree)
+
+
+def test_retired_endpoint_keys_are_absent():
+    config = json.loads((ROOT / "helianthus/config.json").read_text())
+    translations = yaml.safe_load((ROOT / "helianthus/translations/en.yaml").read_text())
+    run = (ROOT / guard.RUN).read_text()
+    readme = (ROOT / "helianthus/README.md").read_text()
+    for key in ("port", "path"):
+        assert key not in config["options"]
+        assert key not in config["schema"]
+        assert key not in translations["configuration"]
+        assert key not in MAP["options"]
+        assert f"bashio::config '{key}'" not in run
+        assert f"${{{key}}}" not in run
+        assert f"`{key}`" not in readme

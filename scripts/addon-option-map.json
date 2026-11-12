@@ -727,35 +727,9 @@
       "consumer": "run_77",
       "flags": []
     },
-    "port": {
-      "kind": "gateway",
-      "description": "Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default.",
-      "read": "run_78",
-      "transforms": [
-        "run_76",
-        "run_handoff_common"
-      ],
-      "consumer": "run_79",
-      "flags": [
-        "http-addr"
-      ]
-    },
-    "path": {
-      "kind": "gateway",
-      "description": "Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default.",
-      "read": "run_80",
-      "transforms": [
-        "run_76",
-        "run_handoff_common"
-      ],
-      "consumer": "run_81",
-      "flags": [
-        "graphql-path"
-      ]
-    },
     "http_port": {
       "kind": "gateway",
-      "description": "HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only.",
+      "description": "HTTP listener port. Ingress is available on the declared Ingress port only.",
       "read": "run_82",
       "transforms": [
         "run_76",
@@ -768,7 +742,7 @@
     },
     "graphql_path": {
       "kind": "gateway",
-      "description": "GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it.",
+      "description": "GraphQL route. Adds a leading slash and derives the default subscription route from it.",
       "read": "run_83",
       "transforms": [
         "run_76",
@@ -2241,23 +2215,15 @@
     },
     "run_76": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "if [ -z \"${http_port}\" ]; then\n  http_port=8080\nfi\n\nif [ -n \"${port}\" ] && { [ \"${http_port}\" = \"8080\" ] || [ \"${port}\" != \"8080\" ]; }; then\n  http_port=\"${port}\"\nfi\n\nif [ -z \"${path}\" ]; then\n  path=\"${graphql_path}\"\nfi\n\nif [ -n \"${path}\" ] && { [ \"${graphql_path}\" = \"/graphql\" ] || [ \"${path}\" != \"/graphql\" ]; }; then\n  graphql_path=\"${path}\"\nfi\n\nif [ -z \"${host}\" ]; then\n  host=\"127.0.0.1\"\nfi\n\nif [ \"${graphql_path#/}\" = \"${graphql_path}\" ]; then\n  graphql_path=\"/${graphql_path}\"\nfi\n\nif [ \"${subscription_path#/}\" = \"${subscription_path}\" ]; then\n  subscription_path=\"/${subscription_path}\"\nfi\n\nif [ \"${mcp_path#/}\" = \"${mcp_path}\" ]; then\n  mcp_path=\"/${mcp_path}\"\nfi\n\nif [ \"${subscription_path}\" = \"/graphql/subscriptions\" ] && [ \"${graphql_path}\" != \"/graphql\" ]; then\n  subscription_path=\"${graphql_path%/}/subscriptions\"\nfi\n\nhttp_addr=\"0.0.0.0:${http_port}\""
+      "text": "if [ -z \"${http_port}\" ]; then\n  http_port=8080\nfi\n\nif [ -z \"${host}\" ]; then\n  host=\"127.0.0.1\"\nfi\n\nif [ \"${graphql_path#/}\" = \"${graphql_path}\" ]; then\n  graphql_path=\"/${graphql_path}\"\nfi\n\nif [ \"${subscription_path#/}\" = \"${subscription_path}\" ]; then\n  subscription_path=\"/${subscription_path}\"\nfi\n\nif [ \"${mcp_path#/}\" = \"${mcp_path}\" ]; then\n  mcp_path=\"/${mcp_path}\"\nfi\n\nif [ \"${subscription_path}\" = \"/graphql/subscriptions\" ] && [ \"${graphql_path}\" != \"/graphql\" ]; then\n  subscription_path=\"${graphql_path%/}/subscriptions\"\nfi\n\nhttp_addr=\"0.0.0.0:${http_port}\""
     },
     "run_77": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
       "text": "bashio::log.info \"GraphQL endpoint: http://${host}:${http_port}${graphql_path}\""
     },
-    "run_78": {
-      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "port=$(bashio::config 'port')"
-    },
     "run_79": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
       "text": "  -http-addr \"${http_addr}\""
-    },
-    "run_80": {
-      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "path=$(bashio::config 'path')"
     },
     "run_81": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",

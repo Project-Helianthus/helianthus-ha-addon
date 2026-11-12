@@ -13,8 +13,6 @@ address=$(bashio::config 'address')
 proxy_profile=$(bashio::config 'proxy_profile')
 proxy_endpoint=$(bashio::config 'proxy_endpoint')
 host=$(bashio::config 'host')
-port=$(bashio::config 'port')
-path=$(bashio::config 'path')
 http_port=$(bashio::config 'http_port')
 graphql_path=$(bashio::config 'graphql_path')
 subscription_path=$(bashio::config 'subscription_path')
@@ -584,18 +582,6 @@ fi
 
 if [ -z "${http_port}" ]; then
   http_port=8080
-fi
-
-if [ -n "${port}" ] && { [ "${http_port}" = "8080" ] || [ "${port}" != "8080" ]; }; then
-  http_port="${port}"
-fi
-
-if [ -z "${path}" ]; then
-  path="${graphql_path}"
-fi
-
-if [ -n "${path}" ] && { [ "${graphql_path}" = "/graphql" ] || [ "${path}" != "/graphql" ]; }; then
-  graphql_path="${path}"
 fi
 
 if [ -z "${host}" ]; then
