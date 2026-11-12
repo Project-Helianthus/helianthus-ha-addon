@@ -27,7 +27,7 @@ mount with `-portal-path /portal`, starts no second listener or process, and
 keeps the adapter proxy, eeBUS and M2M listeners off Ingress.
 
 - Ingress reaches the Portal only while the HTTP listener stays on port 8080.
-  With another `http_port` (or `port`) the panel is unavailable, the startup log
+  With another `http_port` the panel is unavailable, the startup log
   says so, and the direct Portal endpoint keeps working.
 - The packaged gateway accepts no trusted external path prefix yet. The Portal
   shell, its assets, relative API routes and the live stream use relative URLs
@@ -54,8 +54,6 @@ Key options are exposed in `config.json`:
 - `proxy_profile`: `disabled`, `enh`, or `ens` (transition mode profile marker)
 - `proxy_endpoint`: proxy endpoint (`host:port` or URI) used when `proxy_profile` is enabled
 - `host`: hostname used in startup endpoint logs
-- `port`: simple GraphQL/MCP endpoint port alias
-- `path`: simple GraphQL endpoint path alias
 - `http_port`: HTTP listen port
 - `graphql_path`: GraphQL endpoint path
 - `subscription_path`: GraphQL subscriptions endpoint path
@@ -358,10 +356,13 @@ CLI flag set the wrapper was verified against.
 - Pin changes also update the Dockerfile, the build workflow, the parity
   artifact fixture, `config.json` and the changelog in the same pull request.
 
+Only `http_port` and `graphql_path` configure these endpoints. Retired option
+values are ignored without migration; defaults apply until the canonical options
+are configured.
+
 ## Complete option inventory
 
-The schema is authoritative, including optional keys with no add-on default and
-the legacy aliases retained pending their separate removal. This inventory maps
+The schema is authoritative, including optional keys with no add-on default. This inventory maps
 packaging reads and consumers; it establishes no protocol or hardware qualification.
 Gateway capability probing and native admission remain authoritative. GraphQL
 and MCP routing are preserved. The maintained [option map](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/addon-option-map.json)
@@ -381,10 +382,8 @@ defaults only; “not set” means the schema has no default.
 | `proxy_profile` | "disabled" | External proxy profile, disabled, ENH or ENS. Selects effective transport and address; legacy adapter-direct configuration is migrated in memory. Consumer: `-transport`, `-network`, `-address`. |
 | `proxy_endpoint` | "" | External proxy endpoint, required for an active external proxy profile and forbidden with adapter-direct mode. Consumer: `-transport`, `-network`, `-address`. |
 | `host` | "127.0.0.1" | Host label used only in logged HTTP URLs. Does not select the listener bind address. Consumer: Wrapper logging only. |
-| `port` | 8080 | Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default. Consumer: `-http-addr`. |
-| `path` | "/graphql" | Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default. Consumer: `-graphql-path`. |
-| `http_port` | 8080 | HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only. Consumer: `-http-addr`. |
-| `graphql_path` | "/graphql" | GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it. Consumer: `-graphql-path`. |
+| `http_port` | 8080 | HTTP listener port. Ingress is available on the declared Ingress port only. Consumer: `-http-addr`. |
+| `graphql_path` | "/graphql" | GraphQL route. Adds a leading slash and derives the default subscription route from it. Consumer: `-graphql-path`. |
 | `subscription_path` | "/graphql/subscriptions" | Subscription route. Adds a leading slash; the default route follows a changed GraphQL route. Consumer: `-subscription-path`. |
 | `mcp_path` | "/mcp" | MCP HTTP route; the wrapper adds a leading slash when absent. Consumer: `-mcp-path`. |
 | `mdns` | true | Enable or disable gateway mDNS advertisement. Consumer: `-mdns`. |

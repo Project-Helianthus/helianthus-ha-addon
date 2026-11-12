@@ -165,7 +165,7 @@ def test_config_declares_admin_ingress_on_the_existing_http_listener() -> None:
     options = config["options"]
 
     assert config["ingress"] is True
-    assert config["ingress_port"] == options["http_port"] == options["port"] == 8080
+    assert config["ingress_port"] == options["http_port"] == 8080
     assert config["ports"]["8080/tcp"] == 8080
     # Relative entry with a trailing slash: the panel opens the Portal
     # directory itself, never the bare mount whose redirect is root-absolute.
@@ -263,11 +263,10 @@ def test_shipped_defaults_without_an_adapter_endpoint_stop_before_launch(tmp_pat
     assert run["record_intact"]
 
 
-@pytest.mark.parametrize("option", ("http_port", "port"))
 def test_moved_http_listener_keeps_the_direct_portal_and_reports_ingress_unavailable(
-    tmp_path: Path, option: str,
+    tmp_path: Path,
 ) -> None:
-    run = _run(tmp_path, {"adapter_direct_address": ADAPTER, option: 8181})
+    run = _run(tmp_path, {"adapter_direct_address": ADAPTER, "http_port": 8181})
 
     assert run["result"].returncode == 0, run["result"].stderr
     assert run["runtime"] == [_expected_argv(
@@ -307,4 +306,17 @@ def test_configured_paths_keep_argument_boundaries_and_graphql_prefix(tmp_path: 
         run["data"], ("adapter-direct", "tcp", f"adapter-direct://{ADAPTER}"),
         graphql="/custom/gql", subscription="/custom/gql/subscriptions",
         mcp="/agents/mcp", mdns_instance="Helianthus Home",
+    )]
+
+
+@pytest.mark.parametrize("canonical", ({}, {"http_port": 8282, "graphql_path": "custom/api"}))
+@pytest.mark.parametrize("retired", ({"port": 9191}, {"path": "/retired"}, {"port": 9292, "path": "/other"}))
+def test_retired_options_cannot_override_canonical_endpoints(tmp_path: Path, canonical: dict, retired: dict) -> None:
+    run = _run(tmp_path, {"adapter_direct_address": ADAPTER, **canonical, **retired})
+    assert run["result"].returncode == 0, run["result"].stderr
+    graphql = "/" + canonical.get("graphql_path", "/graphql").lstrip("/")
+    assert run["runtime"] == [_expected_argv(
+        run["data"], ("adapter-direct", "tcp", f"adapter-direct://{ADAPTER}"),
+        http_port=canonical.get("http_port", 8080), graphql=graphql,
+        subscription=graphql + "/subscriptions",
     )]

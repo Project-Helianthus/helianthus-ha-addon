@@ -29,18 +29,12 @@ configuration:
   host:
     name: "Host"
     description: "Host label used only in logged HTTP URLs. Does not select the listener bind address."
-  port:
-    name: "Port"
-    description: "Legacy HTTP port alias. Overrides http_port when http_port is the default or this alias differs from its default."
-  path:
-    name: "Path"
-    description: "Legacy GraphQL path alias. Overrides graphql_path when graphql_path is the default or this alias differs from its default."
   http_port:
     name: "Http port"
-    description: "HTTP listener port, subject to the legacy port alias. Ingress is available on the declared Ingress port only."
+    description: "HTTP listener port. Ingress is available on the declared Ingress port only."
   graphql_path:
     name: "Graphql path"
-    description: "GraphQL route, subject to the legacy path alias. Adds a leading slash and derives the default subscription route from it."
+    description: "GraphQL route. Adds a leading slash and derives the default subscription route from it."
   subscription_path:
     name: "Subscription path"
     description: "Subscription route. Adds a leading slash; the default route follows a changed GraphQL route."
