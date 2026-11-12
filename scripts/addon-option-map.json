@@ -2749,7 +2749,7 @@
     },
     "run_144": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "adapter_mux_idle_release_grace=$(bashio::config 'adapter_mux_idle_release_grace')"
+      "text": "adapter_mux_idle_release_grace=$(bashio::config 'adapter_mux_idle_release_grace' 2>/dev/null || true)"
     },
     "run_145": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
@@ -2757,7 +2757,7 @@
     },
     "run_146": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "adapter_mux_max_ownership_duration=$(bashio::config 'adapter_mux_max_ownership_duration')"
+      "text": "adapter_mux_max_ownership_duration=$(bashio::config 'adapter_mux_max_ownership_duration' 2>/dev/null || true)"
     },
     "run_147": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
@@ -2765,7 +2765,7 @@
     },
     "run_148": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
-      "text": "adapter_mux_read_timeout=$(bashio::config 'adapter_mux_read_timeout')"
+      "text": "adapter_mux_read_timeout=$(bashio::config 'adapter_mux_read_timeout' 2>/dev/null || true)"
     },
     "run_149": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",

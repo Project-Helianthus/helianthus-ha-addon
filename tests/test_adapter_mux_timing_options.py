@@ -159,7 +159,7 @@ def test_read_timeout_is_not_reused_aliased_or_derived(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("option", sorted(OPTIONS))
-@pytest.mark.parametrize("value", ("0ms", "0s", "-1s", "", "1.5s", "50us"))
+@pytest.mark.parametrize("value", ("0ms", "0s", "-1s", "1.5s", "50us"))
 def test_wrapper_refuses_a_non_positive_value_before_launch(tmp_path: Path, option: str, value: str) -> None:
     # Bypasses the Supervisor schema to prove the wrapper also fails closed.
     run = _launch(tmp_path, {option: value})
@@ -167,6 +167,25 @@ def test_wrapper_refuses_a_non_positive_value_before_launch(tmp_path: Path, opti
     assert run["result"].returncode != 0
     assert run["runtime"] == []
     assert f"NOK: {option} must be a positive duration in whole ms or s" in run["result"].stderr
+
+
+def test_options_absent_from_an_older_supervisor_schema_take_the_defaults(tmp_path: Path) -> None:
+    # The stub reads options.json; drop the keys to mimic a schema that predates them.
+    original = HARNESS._config
+
+    def without_new_keys() -> dict:
+        config = original()
+        config["options"] = {k: v for k, v in config["options"].items() if k not in OPTIONS}
+        return config
+
+    HARNESS._config = without_new_keys
+    try:
+        run = _launch(tmp_path, {})
+    finally:
+        HARNESS._config = original
+
+    assert run["result"].returncode == 0, run["result"].stderr
+    assert _pairs(run["runtime"][0]) == {flag: [default] for flag, default in OPTIONS.values()}
 
 
 @pytest.mark.parametrize("option", sorted(OPTIONS))
@@ -177,7 +196,8 @@ def test_gateway_without_the_flag_starts_only_at_the_default(tmp_path: Path, opt
 
     assert kept["result"].returncode == 0, kept["result"].stderr
     pairs = _pairs(kept["runtime"][0])
-    assert pairs.pop(flag) == []
+    assert pairs[flag] == []
+    del pairs[flag]
     assert pairs == {other: [value] for other, value in OPTIONS.values() if other != flag}
     assert f"does not support -{flag}; {option} keeps its default {default}" in kept["log"]
 
