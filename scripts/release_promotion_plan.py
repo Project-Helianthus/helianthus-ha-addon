@@ -183,7 +183,9 @@ def publish(record, config, release_tag, candidate, run=subprocess.run):
     if existing.returncode == 0:
         raise ValueError('version tag already exists')
     # Only an explicit registry absence permits a publication attempt.
-    if 'manifest unknown' not in existing.stderr.lower():
+    error = existing.stderr.lower()
+    if ('manifest unknown' not in error
+            and f'{target}: not found'.lower() not in error):
         raise ValueError('cannot establish version tag absence')
     for tag in (version, 'latest'):
         result = docker('create', '--prefer-index=false', '-t', image + ':' + tag, source)

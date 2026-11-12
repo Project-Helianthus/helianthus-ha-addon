@@ -261,7 +261,10 @@ def test_publication_selection_identity(tag, candidate):
         module.promotion_identity(record, config, tag, candidate)
 
 
-@pytest.mark.parametrize('state', ['absent', 'exists', 'unauthorized', 'unavailable'])
+@pytest.mark.parametrize('state', [
+    'absent', 'absent_not_found', 'exists', 'unauthorized', 'unavailable',
+    'unrelated_not_found',
+])
 def test_mock_registry_preserves_digest_and_refuses_overwrite(state):
     import json
     from types import SimpleNamespace
@@ -273,12 +276,14 @@ def test_mock_registry_preserves_digest_and_refuses_overwrite(state):
         op = argv[3]
         if op == 'inspect' and '--format' not in argv:
             code, error = {'absent': (1, 'manifest unknown'), 'exists': (0, ''),
+                           'absent_not_found': (1, f"ERROR: {config['image']}:{config['version']}: not found"),
+                           'unrelated_not_found': (1, 'credential helper not found'),
                            'unauthorized': (1, 'unauthorized'),
                            'unavailable': (1, 'connection refused')}[state]
             return SimpleNamespace(returncode=code, stdout='', stderr=error)
         return SimpleNamespace(returncode=0, stdout=json.dumps({'digest': record['digest']}), stderr='')
 
-    if state == 'absent':
+    if state in ('absent', 'absent_not_found'):
         result = module.publish(record, config, 'v0.7.1', record['candidate'], registry)
         assert result['digest'] == record['digest']
         creates = [c for c in calls if c[3] == 'create']
