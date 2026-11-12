@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 import re
 import sys
+import subprocess
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DIGEST = re.compile(r'[0-9a-f]{64}')
@@ -44,6 +44,7 @@ def subject(value, image):
 
 
 def published_architectures(workflow):
+    import yaml
     try:
         build = yaml.safe_load(workflow.read_text())
         matrix = build['jobs']['build']['strategy']['matrix']
@@ -145,15 +146,75 @@ def unique_object(pairs):
     return result
 
 
+def promotion_identity(record, config, release_tag, candidate):
+    fields(record, ('version', 'image', 'candidate', 'digest'))
+    version = config['version']
+    image = config['image']
+    if (not isinstance(image, str) or not REPOSITORY.fullmatch(image)
+            or not TAG.fullmatch(version) or not VERSION.fullmatch(version)
+            or release_tag != 'v' + version or record['version'] != version
+            or record['image'] != image or record['candidate'] != candidate
+            or not re.fullmatch(r'candidate-[0-9]+-[0-9]+', candidate)):
+        raise ValueError('candidate packaging or release identity mismatch')
+    digest = record['digest']
+    if not isinstance(digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+        raise ValueError('invalid candidate digest')
+    return image, version, digest
+
+
+def publish(record, config, release_tag, candidate, run=subprocess.run):
+    image, version, digest = promotion_identity(record, config, release_tag, candidate)
+
+    def docker(*args):
+        return run(['docker', 'buildx', 'imagetools', *args],
+                   capture_output=True, text=True, timeout=120)
+
+    def inspect(reference):
+        result = docker('inspect', reference, '--format', '{{json .Manifest}}')
+        if result.returncode:
+            raise ValueError('cannot inspect immutable candidate')
+        return json.loads(result.stdout)['digest']
+
+    source = image + '@' + digest
+    if inspect(source) != digest:
+        raise ValueError('candidate digest mismatch')
+    target = image + ':' + version
+    existing = docker('inspect', target)
+    if existing.returncode == 0:
+        raise ValueError('version tag already exists')
+    # Only an explicit registry absence permits a publication attempt.
+    error = existing.stderr.lower()
+    if ('manifest unknown' not in error
+            and f'{target}: not found'.lower() not in error):
+        raise ValueError('cannot establish version tag absence')
+    for tag in (version, 'latest'):
+        result = docker('create', '--prefer-index=false', '-t', image + ':' + tag, source)
+        if result.returncode:
+            raise ValueError('promotion failed')
+        if inspect(image + ':' + tag) != digest:
+            raise ValueError('promoted digest mismatch')
+    return {'version': version, 'digest': digest, 'source': source}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('record', type=Path, help='local JSON evidence declaration')
+    parser.add_argument('--publish', action='store_true')
+    parser.add_argument('--release-tag')
+    parser.add_argument('--candidate')
     parser.add_argument('--config', type=Path, default=ROOT / 'helianthus/config.json')
     args = parser.parse_args()
     try:
         record = json.loads(args.record.read_text(), object_pairs_hook=unique_object)
         config = json.loads(args.config.read_text(), object_pairs_hook=unique_object)
-        print(json.dumps(validate(record, config), indent=2, sort_keys=True))
+        if args.publish:
+            result = publish(record, config, args.release_tag, args.candidate)
+            import os
+            with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                summary.write(f"Promoted {result['version']} and latest from {result['source']}\n")
+        else:
+            result = validate(record, config)
+        print(json.dumps(result, indent=2, sort_keys=True))
     except (OSError, ValueError, TypeError) as exc:
         print(f'invalid promotion plan: {exc}', file=sys.stderr)
         return 1

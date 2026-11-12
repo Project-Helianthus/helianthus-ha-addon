@@ -233,3 +233,151 @@ def test_invalid_workflow_fails_closed(tmp_path, declaration):
     workflow.write_text(declaration)
     with pytest.raises(ValueError):
         module.validate(record, config, workflow)
+
+
+def publication_fixture():
+    config = {'image': 'example.org/project/image', 'version': '0.7.1'}
+    record = dict(config, candidate='candidate-123-1',
+                  digest='sha256:' + hashlib.sha256(b'public synthetic index').hexdigest())
+    return config, record
+
+
+@pytest.mark.parametrize('field,value', [
+    ('image', 'example.org/project/other'), ('version', '0.7.2'),
+    ('candidate', 'candidate-124-1'), ('digest', 'sha256:invalid'),
+])
+def test_publication_identity_fields(field, value):
+    config, record = publication_fixture()
+    record[field] = value
+    with pytest.raises(ValueError):
+        module.promotion_identity(record, config, 'v0.7.1', 'candidate-123-1')
+
+
+@pytest.mark.parametrize('tag,candidate', [('v0.7.2', 'candidate-123-1'),
+                                          ('v0.7.1', 'candidate-123-2')])
+def test_publication_selection_identity(tag, candidate):
+    config, record = publication_fixture()
+    with pytest.raises(ValueError):
+        module.promotion_identity(record, config, tag, candidate)
+
+
+@pytest.mark.parametrize('state', [
+    'absent', 'absent_not_found', 'exists', 'unauthorized', 'unavailable',
+    'unrelated_not_found',
+])
+def test_mock_registry_preserves_digest_and_refuses_overwrite(state):
+    import json
+    from types import SimpleNamespace
+    config, record = publication_fixture()
+    calls = []
+
+    def registry(argv, **kwargs):
+        calls.append(argv)
+        op = argv[3]
+        if op == 'inspect' and '--format' not in argv:
+            code, error = {'absent': (1, 'manifest unknown'), 'exists': (0, ''),
+                           'absent_not_found': (1, f"ERROR: {config['image']}:{config['version']}: not found"),
+                           'unrelated_not_found': (1, 'credential helper not found'),
+                           'unauthorized': (1, 'unauthorized'),
+                           'unavailable': (1, 'connection refused')}[state]
+            return SimpleNamespace(returncode=code, stdout='', stderr=error)
+        return SimpleNamespace(returncode=0, stdout=json.dumps({'digest': record['digest']}), stderr='')
+
+    if state in ('absent', 'absent_not_found'):
+        result = module.publish(record, config, 'v0.7.1', record['candidate'], registry)
+        assert result['digest'] == record['digest']
+        creates = [c for c in calls if c[3] == 'create']
+        assert [c[-2] for c in creates] == [config['image'] + ':0.7.1', config['image'] + ':latest']
+        assert all(c[-1] == config['image'] + '@' + record['digest'] for c in creates)
+        assert all('--prefer-index=false' in c for c in creates)
+    else:
+        with pytest.raises(ValueError):
+            module.publish(record, config, 'v0.7.1', record['candidate'], registry)
+        assert not any(c[3] == 'create' for c in calls)
+
+
+def test_workflow_event_publication_boundaries():
+    import yaml
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    jobs = workflow['jobs']
+    assert jobs['build']['if'] == "github.event_name == 'pull_request' || github.ref == 'refs/heads/main'"
+    build = next(s for s in jobs['build']['steps'] if 'with' in s and 'push' in s['with'])
+    assert build['with']['push'] == "${{ github.event_name != 'pull_request' }}"
+    assert build['with']['tags'] == '${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}'
+    assert jobs['manifest']['if'] == "github.ref == 'refs/heads/main' && github.event_name != 'pull_request'"
+    assert jobs['release']['if'] == "startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'"
+    release = str(jobs['release'])
+    assert 'build-push-action' not in release
+    assert 'status=success' in release and 'head_sha=${commit}' in release
+    assert '--publish candidate/candidate.json' in release
+    assert jobs['release']['concurrency']['cancel-in-progress'] is False
+
+
+def test_release_artifact_download_permissions_and_selection(tmp_path):
+    import json
+    import os
+    import subprocess
+    import yaml
+
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    release = workflow['jobs']['release']
+    assert release['permissions'] == {'contents': 'read', 'packages': 'write', 'actions': 'read'}
+    step = next(s for s in release['steps'] if s.get('name', '').startswith('Select successful'))
+    assert step['env']['GH_TOKEN'] == '${{ github.token }}'
+    # Exercise the actual selection/download shell with a paginated-API-shaped response.
+    commit = 'synthetic-release-commit'
+    (tmp_path / 'runs-fixture.json').write_text(json.dumps({'workflow_runs': [
+        {'id': 123, 'head_sha': commit, 'run_attempt': 2}]}))
+    for name, body in {
+        'git': 'echo synthetic-release-commit',
+        'gh': '''if [ "$1" = api ]; then
+  cat runs-fixture.json
+else
+  test "$*" = 'run download 123 --name release-candidate-2 --dir candidate' || exit 1
+  mkdir candidate
+  echo '{}' > candidate/candidate.json
+fi''',
+        'python3': '''test -f candidate/candidate.json
+test "$*" = 'scripts/release_promotion_plan.py --publish candidate/candidate.json --release-tag v0.7.1 --candidate candidate-123-2' ''',
+    }.items():
+        path = tmp_path / name
+        path.write_text('#!/bin/bash\nset -eu\n' + body + '\n')
+        path.chmod(0o755)
+    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path,
+                            env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
+                                     GITHUB_REPOSITORY='example/addon', GITHUB_REF_NAME='v0.7.1'),
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'candidate/candidate.json').is_file()
+
+
+@pytest.mark.parametrize('missing', [None, 'amd64', 'i386'])
+def test_candidate_attempt_preflight(tmp_path, missing):
+    import os
+    import subprocess
+    import yaml
+
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    step = next(s for s in workflow['jobs']['manifest']['steps']
+                if s.get('name') == 'Create immutable candidate index')
+    preflight = step['run'].split('docker buildx imagetools create', 1)[0]
+    docker = tmp_path / 'docker'
+    docker.write_text('''#!/bin/bash
+set -eu
+echo "$*" >> calls
+[ "$1 $2 $3" = 'buildx imagetools inspect' ]
+[ "$4" != "example/image:candidate-123-2-${MISSING}" ]
+''')
+    docker.chmod(0o755)
+    result = subprocess.run(['bash', '-c', preflight], cwd=tmp_path,
+                            env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
+                                     IMAGE_NAME='example/image', CANDIDATE='candidate-123-2',
+                                     MISSING=missing or ''), capture_output=True, text=True)
+    calls = (tmp_path / 'calls').read_text().splitlines()
+    if missing:
+        assert result.returncode != 0
+        assert 'use Re-run all jobs' in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert len(calls) == 5
+    assert all('candidate-123-2-' in call for call in calls)

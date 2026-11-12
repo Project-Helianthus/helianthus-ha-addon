@@ -1191,10 +1191,10 @@ def test_help_documents_usage_and_limits():
 SHAPE = "NOT_READY: unrecognised packaging shape: build workflow does not match the canonical "
 ECHO = "          echo \"version=$(jq -r '.version' helianthus/config.json)\" >> \"$GITHUB_OUTPUT\"\n"
 PUSH = "          push: ${{ github.event_name != 'pull_request' }}\n"
-VERSION_TAG = "            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}\n"
+VERSION_TAG = "          tags: ${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}\n"
 BUILD_VERSION_ARG = "            BUILD_VERSION=${{ steps.addon.outputs.version }}\n"
-VERSION_TARGET = '-t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}"'
-VERSION_MEMBER = '            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-%s"'
+VERSION_TARGET = '-t "${IMAGE_NAME}:${CANDIDATE}"'
+VERSION_MEMBER = '            "${IMAGE_NAME}:${CANDIDATE}-%s"'
 
 
 def replace_nth(text: str, old: str, new: str, nth: int = 1) -> str:
@@ -1245,7 +1245,7 @@ def comment_version_manifest_command(text: str) -> str:
 
 def echo_member_before_command(text: str) -> str:
     return replace_nth(drop_i386_member(text), "          docker buildx imagetools create \\\n",
-                       f"          echo {I386_MEMBER} && docker buildx imagetools create \\\n", 2)
+                       f"          echo {I386_MEMBER} && docker buildx imagetools create \\\n", 1)
 
 
 def echo_member_after_command(text: str) -> str:
@@ -1265,10 +1265,10 @@ SHAPE_CASES = {
     "build step before the version-output step": (move_build_step_before_version_step, "build job version-output step"),
     "version-output step after the build step": (move_version_step_after_build, "build job version-output step"),
     # Fix round 3 / review: inline shell comments and commented constructs.
-    "inline comment hides the last manifest member": (inline_comment_last_member, "version manifest member list"),
+    "inline comment hides the last manifest member": (inline_comment_last_member, "candidate manifest member list"),
     "commented version manifest member": (
-        lambda t: t.replace(VERSION_MEMBER % "i386", "          # " + I386_MEMBER), "version manifest member list"),
-    "commented version manifest command": (comment_version_manifest_command, "version manifest member list"),
+        lambda t: t.replace(VERSION_MEMBER % "i386", "          # " + I386_MEMBER), "candidate manifest member list"),
+    "commented version manifest command": (comment_version_manifest_command, "candidate manifest member list"),
     "commented producer with an extra unquoted writer": (
         lambda t: replace_nth(t, ECHO, "          # " + ECHO.strip() + "\n          echo version=0.7.9 >> \"$GITHUB_OUTPUT\"\n"),
         "build job version-output step"),
@@ -1292,23 +1292,24 @@ SHAPE_CASES = {
     "producer assignment after exit 0": (
         lambda t: replace_nth(t, ECHO, "          exit 0\n" + ECHO), "build job version-output step"),
     # Earlier rounds: manifest members, destinations and commands.
-    "matrix and version manifest members differ": (drop_i386_member, "version manifest member list"),
+    "matrix and version manifest members differ": (drop_i386_member, "candidate manifest member list"),
     "matrix entry dropped": (drop_i386_matrix_entry, "build job architecture matrix"),
     "version manifest with another destination": (
-        lambda t: t.replace(VERSION_TARGET, '-t "${IMAGE_NAME}:other"'), "version manifest member list"),
-    "adjacent command tag before the manifest": (echo_member_before_command, "version manifest member list"),
-    "adjacent command after the manifest": (echo_member_after_command, "version manifest member list"),
+        lambda t: t.replace(VERSION_TARGET, '-t "${IMAGE_NAME}:other"'), "candidate manifest member list"),
+    "adjacent command tag before the manifest": (echo_member_before_command, "candidate manifest member list"),
+    "adjacent command after the manifest": (echo_member_after_command, "candidate manifest member list"),
     "version manifest created twice": (
         lambda t: t.replace(LAST_MEMBERS + "\n", LAST_MEMBERS + "\n          docker buildx imagetools create "
                             + VERSION_TARGET + " " + (VERSION_MEMBER % "amd64").strip() + "\n"),
-        "version manifest member list"),
+        "candidate manifest member list"),
     # Earlier rounds: version-architecture tags.
     "build step without tags": (
-        lambda t: t.replace(block(t, "          tags: |", "          labels: |"), ""), "build step version-architecture tags"),
-    "build step with latest tag only": (lambda t: t.replace(VERSION_TAG, ""), "build step version-architecture tags"),
+        lambda t: t.replace(block(t, "          tags:", "          labels: |"), ""), "build step candidate-architecture tags"),
+    "build step with latest tag only": (lambda t: t.replace(VERSION_TAG, "          tags: ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}\n"),
+        "build step candidate-architecture tags"),
     "build step with an unrelated tag": (
-        lambda t: t.replace(VERSION_TAG, "            ${{ env.IMAGE_NAME }}:unrelated\n"),
-        "build step version-architecture tags"),
+        lambda t: t.replace(VERSION_TAG, "          tags: ${{ env.IMAGE_NAME }}:unrelated\n"),
+        "build step candidate-architecture tags"),
     # Earlier rounds: build arguments.
     "BUILD_VERSION literal": (
         lambda t: t.replace(BUILD_VERSION_ARG, "            BUILD_VERSION=0.7.9\n"), "build step build-args"),
@@ -1345,7 +1346,7 @@ SHAPE_CASES = {
         "build job Explorer release-tag verification step"),
     "extra job after the manifest job": (
         lambda t: t + "\n  extra:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n",
-        "end of the workflow after the GHCR visibility check step"),
+        "end of the workflow after the release promotion job"),
     "CRLF line endings": (lambda t: t.replace("\n", "\r\n"), "workflow triggers, permissions and image environment"),
 }
 
@@ -1389,7 +1390,7 @@ def test_canonical_architectures_are_the_matrix_and_version_manifest_members():
     matrix = [entry["arch"] for entry in workflow["jobs"]["build"]["strategy"]["matrix"]["include"]]
     manifest_run = next(step["run"] for step in workflow["jobs"]["manifest"]["steps"]
                         if VERSION_TARGET in step.get("run", ""))
-    members = re.findall(r"steps\.addon\.outputs\.version \}\}-([a-z0-9]+)\"", manifest_run)
+    members = re.findall(r"\$\{CANDIDATE\}-([a-z0-9]+)\"", manifest_run)
     assert matrix == members == list(ccm.CANONICAL_ARCHITECTURES)
     assert set(ccm.CANONICAL_ARCHITECTURES) == set(ccm.ARCHITECTURES)
 
