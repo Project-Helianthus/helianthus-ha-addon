@@ -84,7 +84,7 @@ IPV4 = re.compile(r"(?<!\d)(?<!\d\.)\d{1,3}(?:\.\d{1,3}){3}(?!\.?\d)")
 # The only variable values are two literal slots: the Explorer release (the
 # same literal in the release-tag verification step and the VRCEXPLORER_VERSION
 # override) and the EBUSGATEWAY_VERSION override. Every other byte is fixed, so
-# the shape publishes CANONICAL_ARCHITECTURES under the config.json version and
+# the shape builds CANONICAL_ARCHITECTURES as candidates for digest promotion and
 # derives BUILD_VERSION from it; no workflow or shell construct is interpreted.
 # A change to the build workflow on main must update this form in the same change.
 EXPLORER_SLOT = "<explorer-release>"
@@ -125,6 +125,7 @@ env:
 jobs:
 """),
     ("build job header", r"""  build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -192,9 +193,7 @@ jobs:
 """),
     ("build step platforms input", r"""          platforms: ${{ matrix.platform }}
 """),
-    ("build step version-architecture tags", r"""          tags: |
-            ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
-            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+    ("build step candidate-architecture tags", r"""          tags: ${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
 """),
     ("build step labels", r"""          labels: |
             org.opencontainers.image.source=${{ env.OCI_SOURCE }}
@@ -212,7 +211,7 @@ jobs:
 
 """),
     ("manifest job header", r"""  manifest:
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -230,30 +229,33 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
 """),
-    ("latest manifest command", r"""      - name: Create multi-arch manifests
+    ("candidate index environment", r"""      - name: Create immutable candidate index
+        env:
+          CANDIDATE: candidate-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
-          docker buildx imagetools create \
-            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
-            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
-            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
-            -t "${IMAGE_NAME}:latest" \
-            "${IMAGE_NAME}:latest-amd64" \
-            "${IMAGE_NAME}:latest-aarch64" \
-            "${IMAGE_NAME}:latest-armv7" \
-            "${IMAGE_NAME}:latest-armhf" \
-            "${IMAGE_NAME}:latest-i386"
 """),
-    ("version manifest member list", r"""          docker buildx imagetools create \
+    ("candidate manifest member list", r"""          docker buildx imagetools create \
             --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
             --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
             --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
-            -t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-aarch64" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armv7" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armhf" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"
+            -t "${IMAGE_NAME}:${CANDIDATE}" \
+            "${IMAGE_NAME}:${CANDIDATE}-amd64" \
+            "${IMAGE_NAME}:${CANDIDATE}-aarch64" \
+            "${IMAGE_NAME}:${CANDIDATE}-armv7" \
+            "${IMAGE_NAME}:${CANDIDATE}-armhf" \
+            "${IMAGE_NAME}:${CANDIDATE}-i386"
+          docker buildx imagetools inspect "${IMAGE_NAME}:${CANDIDATE}" --format '{{json .Manifest}}' > descriptor.json
+          jq --arg version '${{ steps.addon.outputs.version }}' \
+            --arg image "$IMAGE_NAME" --arg candidate "$CANDIDATE" \
+            '{version: $version, image: $image, candidate: $candidate, digest: .digest}' descriptor.json > candidate.json
+          echo "Candidate ${CANDIDATE}: $(jq -r .digest candidate.json)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record candidate digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ github.run_attempt }}
+          path: candidate.json
 
 """),
     ("GHCR visibility check step", r"""      - name: Verify GHCR package is public
@@ -268,9 +270,36 @@ jobs:
             exit 1
           fi
 """),
+    ("release promotion job", r"""
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: addon-release-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select successful main candidate for release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?branch=main&event=push&status=success&head_sha=${commit}&per_page=100" > runs.json
+          run="$(jq -er --arg commit "$commit" '[.workflow_runs[] | select(.head_sha == $commit)] | first | .id // error("no successful main candidate")' runs.json)"
+          attempt="$(jq -er --argjson run "$run" '.workflow_runs[] | select(.id == $run) | .run_attempt' runs.json)"
+          gh run download "$run" --name "release-candidate-${attempt}" --dir candidate
+          python3 scripts/release_promotion_plan.py --publish candidate/candidate.json --release-tag "$GITHUB_REF_NAME" --candidate "candidate-${run}-${attempt}"
+"""),
 )
-# Nothing may follow the final newline of the GHCR visibility check step.
-END_OF_WORKFLOW = "end of the workflow after the GHCR visibility check step"
+# Nothing may follow the final newline of the release promotion job.
+END_OF_WORKFLOW = "end of the workflow after the release promotion job"
 
 
 def _canonical_lines() -> list[tuple[str, re.Pattern[str]]]:

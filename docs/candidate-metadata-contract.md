@@ -173,7 +173,7 @@ accepted. No acceptance entry is optional or silently not applicable.
 
 Per the [owner decision on issue #270](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/270),
 M45 recognises exactly one canonical packaging shape: this repository's
-`.github/workflows/build.yml`, including its manifest job, as it stands on
+`.github/workflows/build.yml`, including its manifest and release jobs, as it stands on
 main. M45 matches the provisioned file line for line, element by element,
 against that form and never interprets workflow or shell constructs:
 
@@ -189,11 +189,17 @@ against that form and never interprets workflow or shell constructs:
   login steps;
 - the build step after them, with its explicit
   `push: ${{ github.event_name != 'pull_request' }}` input, platform,
-  version-architecture tags, labels, build-args (`BUILD_VERSION` from the
+  run-and-attempt candidate-architecture tags, labels, build-args (`BUILD_VERSION` from the
   version output, `BUILD_FROM` from the matrix) and secrets;
-- the manifest job header, its registry login step, the `latest` manifest
-  command, the version manifest member list and the GHCR visibility check,
-  with nothing after it.
+- the manifest job header, its registry login step, the candidate index
+  environment, architecture member list, digest artifact and GHCR visibility check;
+- the release job, which selects the successful main candidate for the release
+  commit and invokes digest promotion, with nothing after it.
+
+Main builds publish candidate tags. Release tags promote the recorded candidate
+index digest to the configured version and `latest` without rebuilding. Matching
+this workflow is structural verification; it does not establish that publication
+or the candidate run succeeded.
 
 The only variable values are two plain literals: the Explorer release,
 identical in the release-tag verification step and the `VRCEXPLORER_VERSION`

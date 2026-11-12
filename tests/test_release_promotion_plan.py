@@ -233,3 +233,76 @@ def test_invalid_workflow_fails_closed(tmp_path, declaration):
     workflow.write_text(declaration)
     with pytest.raises(ValueError):
         module.validate(record, config, workflow)
+
+
+def publication_fixture():
+    config = {'image': 'example.org/project/image', 'version': '0.7.1'}
+    record = dict(config, candidate='candidate-123-1',
+                  digest='sha256:' + hashlib.sha256(b'public synthetic index').hexdigest())
+    return config, record
+
+
+@pytest.mark.parametrize('field,value', [
+    ('image', 'example.org/project/other'), ('version', '0.7.2'),
+    ('candidate', 'candidate-124-1'), ('digest', 'sha256:invalid'),
+])
+def test_publication_identity_fields(field, value):
+    config, record = publication_fixture()
+    record[field] = value
+    with pytest.raises(ValueError):
+        module.promotion_identity(record, config, 'v0.7.1', 'candidate-123-1')
+
+
+@pytest.mark.parametrize('tag,candidate', [('v0.7.2', 'candidate-123-1'),
+                                          ('v0.7.1', 'candidate-123-2')])
+def test_publication_selection_identity(tag, candidate):
+    config, record = publication_fixture()
+    with pytest.raises(ValueError):
+        module.promotion_identity(record, config, tag, candidate)
+
+
+@pytest.mark.parametrize('state', ['absent', 'exists', 'unauthorized', 'unavailable'])
+def test_mock_registry_preserves_digest_and_refuses_overwrite(state):
+    import json
+    from types import SimpleNamespace
+    config, record = publication_fixture()
+    calls = []
+
+    def registry(argv, **kwargs):
+        calls.append(argv)
+        op = argv[3]
+        if op == 'inspect' and '--format' not in argv:
+            code, error = {'absent': (1, 'manifest unknown'), 'exists': (0, ''),
+                           'unauthorized': (1, 'unauthorized'),
+                           'unavailable': (1, 'connection refused')}[state]
+            return SimpleNamespace(returncode=code, stdout='', stderr=error)
+        return SimpleNamespace(returncode=0, stdout=json.dumps({'digest': record['digest']}), stderr='')
+
+    if state == 'absent':
+        result = module.publish(record, config, 'v0.7.1', record['candidate'], registry)
+        assert result['digest'] == record['digest']
+        creates = [c for c in calls if c[3] == 'create']
+        assert [c[-2] for c in creates] == [config['image'] + ':0.7.1', config['image'] + ':latest']
+        assert all(c[-1] == config['image'] + '@' + record['digest'] for c in creates)
+        assert all('--prefer-index=false' in c for c in creates)
+    else:
+        with pytest.raises(ValueError):
+            module.publish(record, config, 'v0.7.1', record['candidate'], registry)
+        assert not any(c[3] == 'create' for c in calls)
+
+
+def test_workflow_event_publication_boundaries():
+    import yaml
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    jobs = workflow['jobs']
+    assert jobs['build']['if'] == "github.event_name == 'pull_request' || github.ref == 'refs/heads/main'"
+    build = next(s for s in jobs['build']['steps'] if 'with' in s and 'push' in s['with'])
+    assert build['with']['push'] == "${{ github.event_name != 'pull_request' }}"
+    assert build['with']['tags'] == '${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}'
+    assert jobs['manifest']['if'] == "github.ref == 'refs/heads/main' && github.event_name != 'pull_request'"
+    assert jobs['release']['if'] == "startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'"
+    release = str(jobs['release'])
+    assert 'build-push-action' not in release
+    assert 'status=success' in release and 'head_sha=${commit}' in release
+    assert '--publish candidate/candidate.json' in release
+    assert jobs['release']['concurrency']['cancel-in-progress'] is False

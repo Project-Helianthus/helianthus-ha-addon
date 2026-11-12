@@ -21,6 +21,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -85,9 +86,7 @@ jobs:
           context: ./helianthus
           push: ${{ github.event_name != 'pull_request' }}
           platforms: ${{ matrix.platform }}
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
-            ${{ env.IMAGE_NAME }}:${{ steps.addon.outputs.version }}-${{ matrix.arch }}
+          tags: ${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ env.OCI_SOURCE }}
             org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
@@ -101,7 +100,7 @@ jobs:
             github_token=${{ secrets.REPO_READ_TOKEN }}
 
   manifest:
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -121,29 +120,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create multi-arch manifests
+      - name: Create immutable candidate index
+        env:
+          CANDIDATE: candidate-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           docker buildx imagetools create \
             --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
             --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
             --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
-            -t "${IMAGE_NAME}:latest" \
-            "${IMAGE_NAME}:latest-amd64" \
-            "${IMAGE_NAME}:latest-aarch64" \
-            "${IMAGE_NAME}:latest-armv7" \
-            "${IMAGE_NAME}:latest-armhf" \
-            "${IMAGE_NAME}:latest-i386"
-          docker buildx imagetools create \
-            --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
-            --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
-            --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
-            -t "${IMAGE_NAME}:${{ steps.addon.outputs.version }}" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-amd64" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-aarch64" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armv7" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-armhf" \
-            "${IMAGE_NAME}:${{ steps.addon.outputs.version }}-i386"
+            -t "${IMAGE_NAME}:${CANDIDATE}" \
+            "${IMAGE_NAME}:${CANDIDATE}-amd64" \
+            "${IMAGE_NAME}:${CANDIDATE}-aarch64" \
+            "${IMAGE_NAME}:${CANDIDATE}-armv7" \
+            "${IMAGE_NAME}:${CANDIDATE}-armhf" \
+            "${IMAGE_NAME}:${CANDIDATE}-i386"
+          docker buildx imagetools inspect "${IMAGE_NAME}:${CANDIDATE}" --format '{{json .Manifest}}' > descriptor.json
+          jq --arg version '${{ steps.addon.outputs.version }}' \
+            --arg image "$IMAGE_NAME" --arg candidate "$CANDIDATE" \
+            '{version: $version, image: $image, candidate: $candidate, digest: .digest}' descriptor.json > candidate.json
+          echo "Candidate ${CANDIDATE}: $(jq -r .digest candidate.json)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record candidate digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ github.run_attempt }}
+          path: candidate.json
 
       - name: Verify GHCR package is public
         env:
@@ -156,3 +158,29 @@ jobs:
             echo "Open https://github.com/orgs/${{ github.repository_owner }}/packages/container/package/helianthus-ha-addon and set visibility to public."
             exit 1
           fi
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: addon-release-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select successful main candidate for release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?branch=main&event=push&status=success&head_sha=${commit}&per_page=100" > runs.json
+          run="$(jq -er --arg commit "$commit" '[.workflow_runs[] | select(.head_sha == $commit)] | first | .id // error("no successful main candidate")' runs.json)"
+          attempt="$(jq -er --argjson run "$run" '.workflow_runs[] | select(.id == $run) | .run_attempt' runs.json)"
+          gh run download "$run" --name "release-candidate-${attempt}" --dir candidate
+          python3 scripts/release_promotion_plan.py --publish candidate/candidate.json --release-tag "$GITHUB_REF_NAME" --candidate "candidate-${run}-${attempt}"
