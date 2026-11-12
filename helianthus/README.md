@@ -59,6 +59,7 @@ Key options are exposed in `config.json`:
 - `subscription_path`: GraphQL subscriptions endpoint path
 - `mcp_path`: MCP endpoint path
 - `mdns`: enable/disable mDNS advertisement
+- `adapter_mux_idle_release_grace`, `adapter_mux_max_ownership_duration` and `adapter_mux_read_timeout`: positive adapter-mux timing durations (defaults `200ms`, `10s` and `50ms`; see Adapter-mux timing below)
 - `eebus_enabled`: enable raw eeBUS runtime; pairing remains closed by default
 - `eebus_listen_port`, `eebus_interface`, `eebus_subnets`, `eebus_discovery_enabled`, and `eebus_remote_ski_allowlist`: raw eeBUS runtime network controls
 - `modbus_tcp_enabled`: opt in to the read-only Modbus TCP sidecar (default `false`)
@@ -119,6 +120,29 @@ and `proxy_listen_addr=<listen-host:port>`. ENH emits
 Keep `proxy_profile=disabled`: adapter-direct and an external proxy endpoint are
 mutually exclusive configurations. The gateway-integrated proxy listener is
 preserved for both adapter protocols.
+
+Adapter-mux timing. Three options tune the adapter mux that arbitrates bus
+ownership between the gateway and other eBUS clients. Each takes a duration in
+whole milliseconds (`ms`) or seconds (`s`), and each value must be positive: the
+options schema rejects zero, negative, fractional and other units before the
+gateway starts, and the wrapper repeats that check. A configuration that keeps
+the defaults gives the gateway its documented defaults.
+
+| Option | Gateway flag | Unit | Default | Effect |
+| --- | --- | --- | --- | --- |
+| `adapter_mux_idle_release_grace` | `-adapter-mux-idle-release-grace` | `ms` or `s` | `200ms` | Idle release grace of the adapter mux. |
+| `adapter_mux_max_ownership_duration` | `-adapter-mux-max-ownership-duration` | `ms` or `s` | `10s` | Maximum continuous bus ownership duration. |
+| `adapter_mux_read_timeout` | `-adapter-mux-read-timeout` | `ms` or `s` | `50ms` | Read timeout of the adapter mux. |
+
+- `adapter_mux_read_timeout` is separate from `read_timeout`, which feeds the
+  generic `-read-timeout` flag (default `5s`). It does not reuse, alias or derive
+  from `read_timeout`.
+- `50ms` is the effective adapter-mux read timeout default. The gateway always
+  sets the mux read timeout from its flag, so the mux's internal fallback for an
+  unset value never applies.
+- The wrapper passes each flag only when the packaged gateway advertises it. A
+  gateway without the flag starts only while the option keeps its default;
+  a changed value then stops the add-on at startup.
 
 A serial adapter is configured by device path instead of `<host>:<port>`, for
 example `adapter_direct_address=/dev/serial/by-id/<device>` (replace `<device>`
@@ -394,6 +418,9 @@ defaults only; “not set” means the schema has no default.
 | `read_timeout` | "5s" | Gateway read timeout. Consumer: `-read-timeout`. |
 | `write_timeout` | "5s" | Gateway write timeout. Consumer: `-write-timeout`. |
 | `dial_timeout` | "5s" | Gateway dial timeout. Consumer: `-dial-timeout`. |
+| `adapter_mux_idle_release_grace` | "200ms" | Adapter-mux idle release grace; positive whole ms or s only. Passed only when supported; a gateway without the flag must keep the default. Consumer: `-adapter-mux-idle-release-grace`. |
+| `adapter_mux_max_ownership_duration` | "10s" | Adapter-mux maximum continuous bus ownership duration; positive whole ms or s only. Passed only when supported; a gateway without the flag must keep the default. Consumer: `-adapter-mux-max-ownership-duration`. |
+| `adapter_mux_read_timeout` | "50ms" | Adapter-mux read timeout; positive whole ms or s only. Independent of read_timeout. Passed only when supported; a gateway without the flag must keep the default. Consumer: `-adapter-mux-read-timeout`. |
 | `observe_first_enabled` | true | Gateway observe-first switch; missing values use true. Consumer: `-observe-first-enabled`. |
 | `passive_state_direct_apply` | true | Gateway passive state direct-apply switch; missing values use true. Consumer: `-passive-state-direct-apply`. |
 | `passive_config_direct_apply` | false | Gateway passive configuration direct-apply switch; missing values use false. Consumer: `-passive-config-direct-apply`. |

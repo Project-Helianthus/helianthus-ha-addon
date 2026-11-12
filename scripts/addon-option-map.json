@@ -864,6 +864,36 @@
         "dial-timeout"
       ]
     },
+    "adapter_mux_idle_release_grace": {
+      "kind": "gateway",
+      "description": "Adapter-mux idle release grace; positive whole ms or s only.",
+      "read": "run_144",
+      "transforms": [],
+      "consumer": "run_145",
+      "flags": [
+        "adapter-mux-idle-release-grace"
+      ]
+    },
+    "adapter_mux_max_ownership_duration": {
+      "kind": "gateway",
+      "description": "Adapter-mux maximum continuous bus ownership duration; positive whole ms or s only.",
+      "read": "run_146",
+      "transforms": [],
+      "consumer": "run_147",
+      "flags": [
+        "adapter-mux-max-ownership-duration"
+      ]
+    },
+    "adapter_mux_read_timeout": {
+      "kind": "gateway",
+      "description": "Adapter-mux read timeout; positive whole ms or s only. Independent of read_timeout.",
+      "read": "run_148",
+      "transforms": [],
+      "consumer": "run_149",
+      "flags": [
+        "adapter-mux-read-timeout"
+      ]
+    },
     "observe_first_enabled": {
       "kind": "gateway",
       "description": "Gateway observe-first switch; missing values use true.",
@@ -2716,6 +2746,30 @@
     "run_143": {
       "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
       "text": "    eebus_discovery_value=false"
+    },
+    "run_144": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_mux_idle_release_grace=$(bashio::config 'adapter_mux_idle_release_grace')"
+    },
+    "run_145": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if adapter_mux_timing_admitted adapter_mux_idle_release_grace \"${adapter_mux_idle_release_grace}\" 200ms adapter-mux-idle-release-grace; then\n  adapter_mux_args+=(-adapter-mux-idle-release-grace \"${adapter_mux_idle_release_grace}\")"
+    },
+    "run_146": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_mux_max_ownership_duration=$(bashio::config 'adapter_mux_max_ownership_duration')"
+    },
+    "run_147": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if adapter_mux_timing_admitted adapter_mux_max_ownership_duration \"${adapter_mux_max_ownership_duration}\" 10s adapter-mux-max-ownership-duration; then\n  adapter_mux_args+=(-adapter-mux-max-ownership-duration \"${adapter_mux_max_ownership_duration}\")"
+    },
+    "run_148": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "adapter_mux_read_timeout=$(bashio::config 'adapter_mux_read_timeout')"
+    },
+    "run_149": {
+      "file": "helianthus/rootfs/etc/services.d/helianthus-gateway/run",
+      "text": "if adapter_mux_timing_admitted adapter_mux_read_timeout \"${adapter_mux_read_timeout}\" 50ms adapter-mux-read-timeout; then\n  adapter_mux_args+=(-adapter-mux-read-timeout \"${adapter_mux_read_timeout}\")"
     }
   }
 }

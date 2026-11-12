@@ -108,6 +108,8 @@ bashio::config() {
     passive_config_direct_apply|enable_static_seed_table|adapter_direct_enabled|modbus_tcp_enabled) printf '%s\n' false ;;
     mdns_instance) printf '%s\n' helianthus ;; source_addr) printf '%s\n' auto ;;
     scan_request_timeout) printf '%s\n' 400ms ;; read_timeout|write_timeout|dial_timeout|modbus_tcp_dial_timeout) printf '%s\n' 5s ;;
+    adapter_mux_idle_release_grace) printf '%s\n' 200ms ;; adapter_mux_max_ownership_duration) printf '%s\n' 10s ;;
+    adapter_mux_read_timeout) printf '%s\n' 50ms ;;
     proxy_listen_addr) printf '%s\n' 0.0.0.0:19001 ;; external_write_policy) printf '%s\n' record_only ;;
     v8_classifier_mode) printf '%s\n' enforce ;; eebus_listen_port) printf '%s\n' 4712 ;;
     eebus_interface) printf '%s\n' lo ;; eebus_subnets) printf '%s\n' 192.0.2.0/24 ;;
@@ -125,7 +127,8 @@ bashio::exit.nok() { printf 'NOK: %s\n' "$*" >&2; exit 1; }
     text = text.replace("/usr/local/bin/helianthus-gateway", "${TEST_GATEWAY}")
     text = text.replace("/data/helianthus-gateway", "${TEST_OVERRIDE}")
     text = text.replace("/data/source_addr.last", "${TEST_SOURCE_STATE}")
-    text = text.replace("/etc/machine-id", "${TEST_MACHINE_ID}")
+    # Quoted: the wrapper names this path unquoted, and a temporary path may contain spaces.
+    text = text.replace("/etc/machine-id", '"${TEST_MACHINE_ID}"')
     text = text.replace('interface_id_path="/sys/class/net/${eebus_interface}/address"', 'interface_id_path="${TEST_INTERFACE_ID_PATH}"')
     text = text.replace("/usr/share/helianthus/eebus_admin_credentials.py", "${TEST_LEGACY_HELPER}")
     text = text.replace("/run/helianthus/eebus-admin", "${TEST_LEGACY_RUNTIME}")

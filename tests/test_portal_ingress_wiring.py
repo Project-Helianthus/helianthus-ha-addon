@@ -151,6 +151,8 @@ def _expected_argv(
         "-read-timeout", "5s", "-write-timeout", "5s", "-dial-timeout", "5s",
         "-observe-first-enabled=true", "-passive-state-direct-apply=true",
         "-passive-config-direct-apply=false", "-external-write-policy", "record_only",
+        "-adapter-mux-idle-release-grace", "200ms", "-adapter-mux-max-ownership-duration", "10s",
+        "-adapter-mux-read-timeout", "50ms",
         "-enable-static-seed-table=false", "-semantic-cache-path", str(data / "semantic_cache.json"),
     ]
     if portal:

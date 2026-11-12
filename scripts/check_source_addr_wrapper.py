@@ -47,6 +47,9 @@ bashio::config() {
     read_timeout) printf '%s\n' "${TEST_READ_TIMEOUT:-5s}" ;;
     write_timeout) printf '%s\n' "${TEST_WRITE_TIMEOUT:-5s}" ;;
     dial_timeout) printf '%s\n' "${TEST_DIAL_TIMEOUT:-5s}" ;;
+    adapter_mux_idle_release_grace) printf '%s\n' "${TEST_ADAPTER_MUX_IDLE_RELEASE_GRACE:-200ms}" ;;
+    adapter_mux_max_ownership_duration) printf '%s\n' "${TEST_ADAPTER_MUX_MAX_OWNERSHIP_DURATION:-10s}" ;;
+    adapter_mux_read_timeout) printf '%s\n' "${TEST_ADAPTER_MUX_READ_TIMEOUT:-50ms}" ;;
     adapter_direct_enabled) printf '%s\n' "${TEST_ADAPTER_DIRECT_ENABLED:-false}" ;;
     adapter_direct_address) printf '%s\n' "${TEST_ADAPTER_DIRECT_ADDRESS:-}" ;;
     adapter_direct_protocol) printf '%s\n' "${TEST_ADAPTER_DIRECT_PROTOCOL:-enh}" ;;
