@@ -235,7 +235,14 @@ jobs:
         run: |
           set -euo pipefail
 """),
-    ("candidate manifest member list", r"""          docker buildx imagetools create \
+    ("candidate manifest member list", r"""          # Every architecture must be published by this attempt; partial retries are unsupported.
+          for arch in amd64 aarch64 armv7 armhf i386; do
+            if ! docker buildx imagetools inspect "${IMAGE_NAME}:${CANDIDATE}-${arch}" > /dev/null; then
+              echo "Missing current-attempt image for ${arch}; use Re-run all jobs, not Re-run failed jobs." >&2
+              exit 1
+            fi
+          done
+          docker buildx imagetools create \
             --annotation "index:org.opencontainers.image.source=${OCI_SOURCE}" \
             --annotation "index:org.opencontainers.image.description=${OCI_DESCRIPTION}" \
             --annotation "index:org.opencontainers.image.licenses=${OCI_LICENSE}" \
@@ -272,6 +279,10 @@ jobs:
 """),
     ("release promotion job", r"""
   release:
+    permissions:
+      contents: read
+      packages: write
+      actions: read
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
     runs-on: ubuntu-latest
     concurrency:

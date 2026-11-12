@@ -306,3 +306,73 @@ def test_workflow_event_publication_boundaries():
     assert 'status=success' in release and 'head_sha=${commit}' in release
     assert '--publish candidate/candidate.json' in release
     assert jobs['release']['concurrency']['cancel-in-progress'] is False
+
+
+def test_release_artifact_download_permissions_and_selection(tmp_path):
+    import json
+    import os
+    import subprocess
+    import yaml
+
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    release = workflow['jobs']['release']
+    assert release['permissions'] == {'contents': 'read', 'packages': 'write', 'actions': 'read'}
+    step = next(s for s in release['steps'] if s.get('name', '').startswith('Select successful'))
+    assert step['env']['GH_TOKEN'] == '${{ github.token }}'
+    # Exercise the actual selection/download shell with a paginated-API-shaped response.
+    commit = 'synthetic-release-commit'
+    (tmp_path / 'runs-fixture.json').write_text(json.dumps({'workflow_runs': [
+        {'id': 123, 'head_sha': commit, 'run_attempt': 2}]}))
+    for name, body in {
+        'git': 'echo synthetic-release-commit',
+        'gh': '''if [ "$1" = api ]; then
+  cat runs-fixture.json
+else
+  test "$*" = 'run download 123 --name release-candidate-2 --dir candidate' || exit 1
+  mkdir candidate
+  echo '{}' > candidate/candidate.json
+fi''',
+        'python3': '''test -f candidate/candidate.json
+test "$*" = 'scripts/release_promotion_plan.py --publish candidate/candidate.json --release-tag v0.7.1 --candidate candidate-123-2' ''',
+    }.items():
+        path = tmp_path / name
+        path.write_text('#!/bin/bash\nset -eu\n' + body + '\n')
+        path.chmod(0o755)
+    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path,
+                            env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
+                                     GITHUB_REPOSITORY='example/addon', GITHUB_REF_NAME='v0.7.1'),
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'candidate/candidate.json').is_file()
+
+
+@pytest.mark.parametrize('missing', [None, 'amd64', 'i386'])
+def test_candidate_attempt_preflight(tmp_path, missing):
+    import os
+    import subprocess
+    import yaml
+
+    workflow = yaml.safe_load((module.ROOT / '.github/workflows/build.yml').read_text())
+    step = next(s for s in workflow['jobs']['manifest']['steps']
+                if s.get('name') == 'Create immutable candidate index')
+    preflight = step['run'].split('docker buildx imagetools create', 1)[0]
+    docker = tmp_path / 'docker'
+    docker.write_text('''#!/bin/bash
+set -eu
+echo "$*" >> calls
+[ "$1 $2 $3" = 'buildx imagetools inspect' ]
+[ "$4" != "example/image:candidate-123-2-${MISSING}" ]
+''')
+    docker.chmod(0o755)
+    result = subprocess.run(['bash', '-c', preflight], cwd=tmp_path,
+                            env=dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
+                                     IMAGE_NAME='example/image', CANDIDATE='candidate-123-2',
+                                     MISSING=missing or ''), capture_output=True, text=True)
+    calls = (tmp_path / 'calls').read_text().splitlines()
+    if missing:
+        assert result.returncode != 0
+        assert 'use Re-run all jobs' in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert len(calls) == 5
+    assert all('candidate-123-2-' in call for call in calls)

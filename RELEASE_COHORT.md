@@ -27,6 +27,13 @@ builds pull requests without publishing. Main runs publish only
 multi-architecture candidate index. Main never publishes version or `latest`
 tags. Each successful run retains its index digest as a workflow artifact.
 
+For a failed main candidate run, select **Re-run all jobs**. **Re-run failed
+jobs** is unsupported: successful architecture jobs retain the previous attempt's
+tags, while the index requires every architecture from the current attempt.
+The index preflight aborts on a missing current-attempt image and reports this
+recovery instruction before creating an index. Rerun all jobs even when only
+the manifest job failed.
+
 Push a `v<version>` release tag at the same commit as a successful main push
 run. The release job selects that run's candidate artifact, checks its version,
 repository and run identity against the release, and promotes its immutable
