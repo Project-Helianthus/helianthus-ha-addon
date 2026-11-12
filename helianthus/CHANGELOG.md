@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add the adapter-mux timing options `adapter_mux_idle_release_grace` (default
+  `200ms`), `adapter_mux_max_ownership_duration` (default `10s`) and
+  `adapter_mux_read_timeout` (default `50ms`). They map to
+  `-adapter-mux-idle-release-grace`, `-adapter-mux-max-ownership-duration` and
+  `-adapter-mux-read-timeout`; the schema and the wrapper admit only positive
+  whole `ms` or `s` durations. `adapter_mux_read_timeout` is independent of
+  `read_timeout` and its `-read-timeout` flag. A gateway that does not advertise a
+  flag does not receive it and starts only while that option keeps its default.
+  The gateway pin, the BOM and the add-on version are unchanged.
+
 - Remove the retired HTTP and GraphQL option aliases without migration. Configure
   `http_port` and `graphql_path`; stored retired values are ignored and canonical
   defaults apply until these options are set.

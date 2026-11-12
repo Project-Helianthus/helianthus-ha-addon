@@ -215,6 +215,8 @@ bashio::config() {
     passive_config_direct_apply|enable_static_seed_table|adapter_direct_enabled|eebus_enabled|eebus_discovery_enabled|modbus_tcp_enabled) printf '%s\n' false ;;
     mdns_instance) printf '%s\n' helianthus ;; source_addr) printf '%s\n' auto ;;
     scan_request_timeout) printf '%s\n' 400ms ;; read_timeout|write_timeout|dial_timeout|modbus_tcp_dial_timeout) printf '%s\n' 5s ;;
+    adapter_mux_idle_release_grace) printf '%s\n' 200ms ;; adapter_mux_max_ownership_duration) printf '%s\n' 10s ;;
+    adapter_mux_read_timeout) printf '%s\n' 50ms ;;
     proxy_listen_addr) printf '%s\n' 0.0.0.0:19001 ;; external_write_policy) printf '%s\n' record_only ;;
     v8_classifier_mode) printf '%s\n' enforce ;;
     eebus_remote_ski_allowlist|adapter_direct_address|modbus_tcp_endpoint) printf '\n' ;;

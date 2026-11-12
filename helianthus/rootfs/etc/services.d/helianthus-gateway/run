@@ -25,6 +25,15 @@ scan_request_timeout=$(bashio::config 'scan_request_timeout')
 read_timeout=$(bashio::config 'read_timeout')
 write_timeout=$(bashio::config 'write_timeout')
 dial_timeout=$(bashio::config 'dial_timeout')
+adapter_mux_idle_release_grace=$(bashio::config 'adapter_mux_idle_release_grace' 2>/dev/null || true)
+# An in-place upgrade can still serve the previous schema; absent keys take the gateway default.
+if [ -z "${adapter_mux_idle_release_grace}" ] || [ "${adapter_mux_idle_release_grace}" = "null" ]; then adapter_mux_idle_release_grace=200ms; fi
+adapter_mux_max_ownership_duration=$(bashio::config 'adapter_mux_max_ownership_duration' 2>/dev/null || true)
+# An in-place upgrade can still serve the previous schema; absent keys take the gateway default.
+if [ -z "${adapter_mux_max_ownership_duration}" ] || [ "${adapter_mux_max_ownership_duration}" = "null" ]; then adapter_mux_max_ownership_duration=10s; fi
+adapter_mux_read_timeout=$(bashio::config 'adapter_mux_read_timeout' 2>/dev/null || true)
+# An in-place upgrade can still serve the previous schema; absent keys take the gateway default.
+if [ -z "${adapter_mux_read_timeout}" ] || [ "${adapter_mux_read_timeout}" = "null" ]; then adapter_mux_read_timeout=50ms; fi
 adapter_direct_enabled=$(bashio::config 'adapter_direct_enabled' 2>/dev/null || true)
 adapter_direct_protocol=$(bashio::config 'adapter_direct_protocol' 2>/dev/null || true)
 adapter_direct_address=$(bashio::config 'adapter_direct_address' 2>/dev/null || true)
@@ -1048,6 +1057,35 @@ else
   bashio::exit.nok "source_addr=${source_addr_intent} requires gateway startup source override validation support; upgrade helianthus-gateway or set source_addr=auto"
 fi
 
+# Adapter-mux timing options. They are independent of read_timeout and its
+# -read-timeout flag. Like the schema, admit only positive whole ms or s values.
+# A binary that lacks a flag starts only while that option keeps its default,
+# and the flag is then omitted.
+adapter_mux_args=()
+adapter_mux_timing_admitted() {
+  local option="$1" value="$2" default="$3" flag="$4"
+  if ! [[ "${value}" =~ ^[1-9][0-9]*(ms|s)$ ]]; then
+    bashio::exit.nok "${option} must be a positive duration in whole ms or s (default ${default})"
+  fi
+  if gateway_supports_flag "${flag}"; then
+    return 0
+  fi
+  if [ "${value}" != "${default}" ]; then
+    bashio::exit.nok "${option}=${value} requires gateway support for -${flag}; restore ${default} or upgrade helianthus-gateway"
+  fi
+  bashio::log.warning "Packaged gateway binary does not support -${flag}; ${option} keeps its default ${default} and is not passed"
+  return 1
+}
+if adapter_mux_timing_admitted adapter_mux_idle_release_grace "${adapter_mux_idle_release_grace}" 200ms adapter-mux-idle-release-grace; then
+  adapter_mux_args+=(-adapter-mux-idle-release-grace "${adapter_mux_idle_release_grace}")
+fi
+if adapter_mux_timing_admitted adapter_mux_max_ownership_duration "${adapter_mux_max_ownership_duration}" 10s adapter-mux-max-ownership-duration; then
+  adapter_mux_args+=(-adapter-mux-max-ownership-duration "${adapter_mux_max_ownership_duration}")
+fi
+if adapter_mux_timing_admitted adapter_mux_read_timeout "${adapter_mux_read_timeout}" 50ms adapter-mux-read-timeout; then
+  adapter_mux_args+=(-adapter-mux-read-timeout "${adapter_mux_read_timeout}")
+fi
+
 gateway_common_args=(
   -transport "${effective_transport}"
   -network "${effective_network}"
@@ -1077,6 +1115,7 @@ gateway_args+=(
   -passive-config-direct-apply="${passive_config_direct_apply}"
   -external-write-policy "${external_write_policy}"
 )
+if [ "${#adapter_mux_args[@]}" -ne 0 ]; then gateway_args+=("${adapter_mux_args[@]}"); fi
 if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[@]}"); fi
 if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
 if [ "${#portal_args[@]}" -ne 0 ]; then gateway_args+=("${portal_args[@]}"); fi

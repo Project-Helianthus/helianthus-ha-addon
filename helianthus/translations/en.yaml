@@ -65,6 +65,15 @@ configuration:
   dial_timeout:
     name: "Dial timeout"
     description: "Gateway dial timeout."
+  adapter_mux_idle_release_grace:
+    name: "Adapter-mux idle release grace"
+    description: "Idle release grace of the adapter mux (-adapter-mux-idle-release-grace). Positive whole ms or s only. Default 200ms."
+  adapter_mux_max_ownership_duration:
+    name: "Adapter-mux maximum ownership duration"
+    description: "Maximum continuous bus ownership duration of the adapter mux (-adapter-mux-max-ownership-duration). Positive whole ms or s only. Default 10s."
+  adapter_mux_read_timeout:
+    name: "Adapter-mux read timeout"
+    description: "Read timeout of the adapter mux (-adapter-mux-read-timeout). Positive whole ms or s only. Default 50ms. Independent of the gateway read timeout option."
   observe_first_enabled:
     name: "Observe first enabled"
     description: "Gateway observe-first switch; missing values use true."
