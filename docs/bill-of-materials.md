@@ -43,7 +43,9 @@ never opens a network connection. It fails when the BOM disagrees with
 `semantic_contract` is missing, has unknown or missing members, names another
 module or a version other than the `go_modules` entry, or carries a malformed
 element catalog entry, and when a build file references an image at a digest
-other than the BOM's `pinned_digest`. Local CI runs it on every change.
+other than the BOM's `pinned_digest`. A BOM whose `freeze.status` is `frozen`
+is always held to the `check --frozen` rules, so an incomplete freeze cannot
+pass plain `check`. Local CI runs it on every change.
 
 ## `check --frozen`
 

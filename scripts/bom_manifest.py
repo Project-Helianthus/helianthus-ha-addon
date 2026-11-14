@@ -9,7 +9,8 @@ images and the gateway CLI flag set the wrapper was verified against.
 
   check           offline; fails when the BOM disagrees with the Dockerfile,
                   the build workflow, config.json or the flags the wrapper
-                  passes to the gateway.
+                  passes to the gateway. A BOM whose freeze.status is frozen
+                  is always held to the --frozen rules.
   check --frozen  offline; every check rule plus the release freeze: status
                   frozen, every builder and base image referenced by its pinned
                   digest, the element catalog named, commit pins only.
@@ -350,6 +351,9 @@ def frozen_errors(bom: dict[str, Any], docker: dict[str, Any]) -> list[str]:
 
 def validate(bom: dict[str, Any], frozen: bool = False) -> list[str]:
     errors: list[str] = []
+    freeze_record = bom.get("freeze")
+    if isinstance(freeze_record, dict) and freeze_record.get("status") == "frozen":
+        frozen = True
     if bom.get("format") != FORMAT:
         errors.append(f"format must be {FORMAT}")
     docker = dockerfile_pins(DOCKERFILE.read_text(encoding="utf-8"))

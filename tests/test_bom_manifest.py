@@ -374,6 +374,17 @@ def test_frozen_check_rejects_an_unfrozen_status(tmp_path: Path, monkeypatch: py
     assert any("freeze.status" in error for error in bom_manifest.validate(bom, frozen=True))
 
 
+def test_plain_check_applies_frozen_rules_to_a_bom_declaring_itself_frozen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bom = _frozen(tmp_path, monkeypatch)
+    bom["semantic_contract"]["element_catalog"] = None
+    _image_entry(bom, IMAGE_KEYS[0])["pinned_digest"] = None
+    errors = bom_manifest.validate(bom)
+    assert any("element_catalog" in error for error in errors)
+    assert any("pinned" in error for error in errors)
+
+
 @pytest.mark.parametrize("key", IMAGE_KEYS)
 def test_frozen_check_rejects_an_image_without_a_pinned_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
@@ -390,7 +401,7 @@ def test_frozen_check_rejects_a_build_reference_without_the_pinned_digest(
 ) -> None:
     bom = _frozen(tmp_path, monkeypatch, skip_reference=key)
     where = "build workflow" if key.startswith("base.") else "Dockerfile"
-    assert bom_manifest.validate(bom) == []
+    assert bom_manifest.validate({**bom, "freeze": {**bom["freeze"], "status": "unfrozen"}}) == []
     errors = bom_manifest.validate(bom, frozen=True)
     assert any(where in error and f"images.{key}" in error for error in errors), errors
 
@@ -409,7 +420,7 @@ def test_checker_rejects_a_build_digest_other_than_the_pinned_digest(
 def test_frozen_check_rejects_a_null_element_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bom = _frozen(tmp_path, monkeypatch)
     bom["semantic_contract"]["element_catalog"] = None
-    assert bom_manifest.validate(bom) == []
+    assert bom_manifest.validate({**bom, "freeze": {**bom["freeze"], "status": "unfrozen"}}) == []
     assert any("element_catalog" in error for error in bom_manifest.validate(bom, frozen=True))
 
 
@@ -422,7 +433,7 @@ def test_frozen_check_rejects_an_explorer_tag_pin(tmp_path: Path, monkeypatch: p
         image_digests={key: _image_entry(bom, key)["pinned_digest"] for key in IMAGE_KEYS},
     )
     bom["vrc_explorer"] = copy.deepcopy(BOM["vrc_explorer"])
-    assert bom_manifest.validate(bom) == []
+    assert bom_manifest.validate({**bom, "freeze": {**bom["freeze"], "status": "unfrozen"}}) == []
     errors = bom_manifest.validate(bom, frozen=True)
     assert any("VRCEXPLORER_VERSION" in error and "commit" in error for error in errors), errors
 
@@ -434,7 +445,7 @@ def test_frozen_check_rejects_a_workflow_base_the_bom_does_not_track(
     workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
     untracked = "ghcr.io/home-assistant/armv7-base:3.20"
     assert f"base: {untracked}" in workflow
-    assert bom_manifest.validate(bom) == []
+    assert bom_manifest.validate({**bom, "freeze": {**bom["freeze"], "status": "unfrozen"}}) == []
     errors = bom_manifest.validate(bom, frozen=True)
     assert any(untracked in error and "not covered" in error for error in errors), errors
 
