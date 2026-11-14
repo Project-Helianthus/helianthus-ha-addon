@@ -111,6 +111,23 @@ def workflow_bases(text: str) -> dict[str, str | None]:
     return bases
 
 
+def go_mod_replaces(text: str) -> list[str]:
+    """Replace directives of a go.mod, block entries expanded to single-line form."""
+    replaces: list[str] = []
+    in_block = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line == "replace (":
+            in_block = True
+        elif in_block and line == ")":
+            in_block = False
+        elif in_block and line and not line.startswith("//"):
+            replaces.append("replace " + line)
+        elif line.startswith("replace ") and not line.endswith("("):
+            replaces.append(line)
+    return sorted(replaces)
+
+
 def parse_go_mod(text: str) -> dict[str, Any]:
     go = re.search(r"^go (\S+)$", text, re.M)
     module = re.search(r"^module (\S+)$", text, re.M)
@@ -130,9 +147,7 @@ def parse_go_mod(text: str) -> dict[str, Any]:
             fields = body.split("//")[0].split()
             if len(fields) == 2:
                 requires.append({"path": fields[0], "version": fields[1], "indirect": indirect})
-    replaces = sorted(
-        line.strip() for line in text.splitlines() if line.strip().startswith("replace ")
-    )
+    replaces = go_mod_replaces(text)
     requires.sort(key=lambda item: item["path"])
     return {
         "module": module.group(1) if module else "",
@@ -200,6 +215,16 @@ def registry_pin(modules: Any) -> str | None:
     return None
 
 
+def registry_replaced(modules: Any) -> bool:
+    """True when the gateway go.mod replaces the semantic registry module."""
+    replaces = modules.get("replace") if isinstance(modules, dict) else None
+    for line in replaces if isinstance(replaces, list) else []:
+        fields = str(line).removeprefix("replace ").split("=>")[0].split()
+        if fields and fields[0] == REGISTRY_MODULE:
+            return True
+    return False
+
+
 def element_catalog_errors(entry: Any) -> list[str]:
     if entry is None:
         return []
@@ -257,6 +282,8 @@ def semantic_contract_errors(bom: dict[str, Any], frozen: bool) -> list[str]:
         errors.append(f"go_modules.requires has no {REGISTRY_MODULE} entry")
     elif section.get("registry_version") != pinned:
         errors.append(f"semantic_contract.registry_version differs from the go_modules entry of {REGISTRY_MODULE}")
+    if registry_replaced(bom.get("go_modules")):
+        errors.append(f"go_modules.replace redirects {REGISTRY_MODULE}; the semantic contract cannot name the effective revision")
     errors.extend(element_catalog_errors(section.get("element_catalog")))
     if frozen and section.get("element_catalog") is None:
         errors.append("semantic_contract.element_catalog must name the element catalog in a frozen BOM")
@@ -374,6 +401,10 @@ def validate(bom: dict[str, Any], frozen: bool = False) -> list[str]:
     if docker["build_from"] != "ghcr.io/home-assistant/base:3.20":
         errors.append("Dockerfile default BUILD_FROM changed; update BASE_IMAGES and the BOM")
     errors.extend(image_digest_errors(images, docker, workflow, frozen))
+    if frozen:
+        tracked = {entry.get("ref") for entry in bases.values() if isinstance(entry, dict)}
+        for ref in sorted(set(workflow_bases(workflow)) - tracked):
+            errors.append(f"build workflow base {ref} is not covered by images.base in a frozen BOM")
 
     errors.extend(semantic_contract_errors(bom, frozen))
     errors.extend(gateway_flag_errors(bom.get("gateway_cli_flags")))
@@ -500,6 +531,8 @@ def element_catalog_from_registry(commit: str) -> dict[str, Any] | None:
 
 
 def semantic_contract_from_registry(modules: dict[str, Any]) -> dict[str, Any]:
+    if registry_replaced(modules):
+        raise ValueError(f"the gateway go.mod replaces {REGISTRY_MODULE}; the effective revision cannot be recorded")
     version = registry_pin(modules)
     if version is None:
         raise ValueError(f"the gateway go.mod does not require {REGISTRY_MODULE}")

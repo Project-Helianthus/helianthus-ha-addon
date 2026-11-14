@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -320,7 +321,23 @@ def _image_entry(bom: dict, key: str) -> dict:
     return bom["images"][key]
 
 
-def _frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, skip_reference: str = "") -> dict:
+def _drop_untracked_matrix_entries() -> None:
+    """Remove matrix entries whose base image the BOM does not track."""
+    workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
+    for arch in ("armv7", "armhf", "i386"):
+        workflow = re.sub(
+            rf"          - platform: [^\n]+\n            arch: {arch}\n            base: [^\n]+\n", "", workflow
+        )
+    bom_manifest.WORKFLOW.write_text(workflow, encoding="utf-8")
+
+
+def _frozen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    skip_reference: str = "",
+    keep_untracked: bool = False,
+) -> dict:
     """A synthetic frozen BOM with build files referencing every image by digest."""
     digests = {key: "sha256:" + _hex(f"pinned {key}") for key in IMAGE_KEYS}
     commit = _commit("frozen explorer")
@@ -330,6 +347,8 @@ def _frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, skip_reference: 
         explorer=commit,
         image_digests={key: value for key, value in digests.items() if key != skip_reference},
     )
+    if not keep_untracked:
+        _drop_untracked_matrix_entries()
     bom = copy.deepcopy(BOM)
     bom["vrc_explorer"]["tag"] = None
     bom["vrc_explorer"]["commit"] = commit
@@ -406,6 +425,58 @@ def test_frozen_check_rejects_an_explorer_tag_pin(tmp_path: Path, monkeypatch: p
     assert bom_manifest.validate(bom) == []
     errors = bom_manifest.validate(bom, frozen=True)
     assert any("VRCEXPLORER_VERSION" in error and "commit" in error for error in errors), errors
+
+
+def test_frozen_check_rejects_a_workflow_base_the_bom_does_not_track(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bom = _frozen(tmp_path, monkeypatch, keep_untracked=True)
+    workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
+    untracked = "ghcr.io/home-assistant/armv7-base:3.20"
+    assert f"base: {untracked}" in workflow
+    assert bom_manifest.validate(bom) == []
+    errors = bom_manifest.validate(bom, frozen=True)
+    assert any(untracked in error and "not covered" in error for error in errors), errors
+
+
+@pytest.mark.parametrize(
+    "replace",
+    (
+        [f"replace {REGISTRY_MODULE} v0.0.0-20200101000000-aaaaaaaaaaaa => {REGISTRY_MODULE} v0.0.0-20210101000000-bbbbbbbbbbbb"],
+        [f"replace {REGISTRY_MODULE} => {REGISTRY_MODULE} v0.0.0-20210101000000-bbbbbbbbbbbb"],
+    ),
+)
+def test_checker_rejects_a_registry_replacement(replace: list[str]) -> None:
+    mutated = copy.deepcopy(BOM)
+    mutated["go_modules"]["replace"] = replace
+    errors = bom_manifest.validate(mutated)
+    assert any("replace" in error and REGISTRY_MODULE in error for error in errors), errors
+
+
+def test_parse_go_mod_reads_replace_blocks() -> None:
+    text = f"module m\n\ngo 1.22\n\nreplace (\n\t{REGISTRY_MODULE} v1 => ../x\n)\n"
+    parsed = bom_manifest.parse_go_mod(text)
+    assert parsed["replace"] == [f"replace {REGISTRY_MODULE} v1 => ../x"]
+    assert bom_manifest.registry_replaced(parsed)
+
+
+def test_generate_refuses_a_registry_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_network(monkeypatch, {})
+    original = bom_manifest.http_text
+
+    def with_replace(url: str, headers=None) -> bytes:
+        data = original(url, headers)
+        if "/go.mod" in url:
+            data += f"\nreplace {REGISTRY_MODULE} v1 => {REGISTRY_MODULE} v2\n".encode()
+        return data
+
+    monkeypatch.setattr(bom_manifest, "http_text", with_replace)
+    code, out, stdout = _run_generate(tmp_path, monkeypatch, capsys)
+    assert code == 1
+    assert not out.exists()
+    assert "replaces" in stdout
 
 
 def test_frozen_check_cli_reports_the_committed_bom_as_unfrozen() -> None:
