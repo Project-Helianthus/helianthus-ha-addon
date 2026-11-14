@@ -31,9 +31,12 @@ covers Portal configuration and passive observation/cache;
 [gateway #1001](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1001)
 covers selective publication. Add-on #239 consumes those contracts for Ingress
 and minimal installation. Output participation/publication also depends on
-[eeBUS registry #137](https://github.com/Project-Helianthus/helianthus-eebusreg/issues/137)
-and [Matter binding #4](https://github.com/Project-Helianthus/helianthus-matter-binding/issues/4).
+[eeBUS registry #137](https://github.com/Project-Helianthus/helianthus-eebusreg/issues/137).
 This slice supplies none of those implementations or their completion evidence.
+
+The add-on image builds its gateway with the profile that leaves out Matter
+(`-tags nomatter`), so the add-on carries no Matter output surface; Matter ships
+only with the standalone bridge.
 
 ## Gateway owner acceptance handoff
 
@@ -90,7 +93,7 @@ record the mapping explicitly and apply it consistently to every row.
   backend request outside that boundary. Distinguish HA session admission from
   gateway authorization; an authenticated page is not authority for all actions.
 - [ ] Against the #1001 publication matrix, independently inspect Portal,
-  adapter proxy, GraphQL, MCP, eeBUS and Matter output surfaces. A Portal session
+  adapter proxy, GraphQL, MCP and eeBUS output surfaces. A Portal session
   must not automatically publish any of them. A withheld surface remains
   unreachable/unadvertised as specified by its owner, including direct paths;
   a hidden button is insufficient. Test selective choices independently.
@@ -98,6 +101,10 @@ record the mapping explicitly and apply it consistently to every row.
   and stale/unavailable markers across failures. Unknown native facts remain
   Unknown; Proven/Hypothesis/Unknown evidence is separate from qualification.
   Do not infer qualification or write authority from visibility in Portal.
+- [ ] On the add-on build, confirm that the Portal reports no Matter: no Matter
+  section, capability, output binding, bootstrap endpoint or status entry, and
+  no Matter flag in the gateway's `--help`. Any Matter report is a FAIL of the
+  add-on candidate, not a withheld surface.
 
 The gateway owner handoff also includes zero-device onboarding with optional
 families/output bindings absent, saved configuration surviving a synthetic

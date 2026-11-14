@@ -120,3 +120,28 @@ def test_wrapper_scan_detects_an_unsupported_flag_and_omits_client_auth() -> Non
     used = bom_manifest.gateway_flag_mentions(injected)
     assert "unsupported-test-only-flag" in used
     assert not used <= set(BOM["gateway_cli_flags"])
+
+
+def test_the_bom_lists_no_matter_flag_for_the_add_on_profile_build() -> None:
+    assert not [flag for flag in BOM["gateway_cli_flags"] if "matter" in flag]
+
+
+@pytest.mark.parametrize("flag", ("matter-library-enabled", "matter-output", "nomatter-probe"))
+def test_checker_refuses_any_gateway_flag_naming_matter(flag: str) -> None:
+    mutated = copy.deepcopy(BOM)
+    mutated["gateway_cli_flags"] = sorted({*mutated["gateway_cli_flags"], flag})
+    errors = bom_manifest.validate(mutated)
+    assert any("matter" in error and flag in error for error in errors), errors
+
+
+def test_usage_says_the_help_capture_comes_from_the_add_on_profile_build() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/bom_manifest.py"), "generate", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    usage = " ".join(result.stdout.split())
+    assert "add-on profile build (-tags nomatter)" in usage
+    assert "add-on profile build (-tags nomatter)" in " ".join((bom_manifest.__doc__ or "").split())

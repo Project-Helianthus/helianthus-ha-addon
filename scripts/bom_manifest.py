@@ -9,7 +9,11 @@ gateway CLI flag set the wrapper was verified against.
   check    offline; fails when the BOM disagrees with the Dockerfile, the build
            workflow, config.json or the flags the wrapper passes to the gateway.
   generate online; rebuilds the BOM from the pins in the Dockerfile. Needs a
-           gateway `--help` capture of the pinned commit (--gateway-help).
+           gateway `--help` capture of the pinned commit, taken from the
+           add-on profile build (-tags nomatter) (--gateway-help).
+
+The add-on gateway carries no Matter code, so the check refuses any gateway
+flag that names Matter.
 """
 
 from __future__ import annotations
@@ -125,6 +129,27 @@ def gateway_flag_mentions(text: str) -> set[str]:
     return found
 
 
+def gateway_flag_errors(flags: Any) -> list[str]:
+    if not isinstance(flags, list) or not flags or flags != sorted(set(flags)):
+        return ["gateway_cli_flags must be a sorted, unique, non-empty list"]
+    errors: list[str] = []
+    bad = [flag for flag in flags if not FLAG_RE.match(flag)]
+    if bad:
+        errors.append(f"gateway_cli_flags has malformed entries: {bad}")
+    matter = [flag for flag in flags if "matter" in flag]
+    if matter:
+        errors.append(
+            "gateway_cli_flags names matter, which the add-on profile build leaves out: "
+            + ", ".join(matter)
+        )
+    # Flags the wrapper probes with gateway_supports_flag are optional on
+    # older gateways; at the pinned commit every one must exist.
+    unknown = sorted(gateway_flag_mentions(WRAPPER.read_text(encoding="utf-8")) - set(flags))
+    if unknown:
+        errors.append("wrapper uses flags the pinned gateway does not define: " + ", ".join(unknown))
+    return errors
+
+
 def validate(bom: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if bom.get("format") != FORMAT:
@@ -187,20 +212,7 @@ def validate(bom: dict[str, Any]) -> list[str]:
     if docker["build_from"] != "ghcr.io/home-assistant/base:3.20":
         errors.append("Dockerfile default BUILD_FROM changed; update BASE_IMAGES and the BOM")
 
-    flags = bom.get("gateway_cli_flags")
-    if not isinstance(flags, list) or not flags or flags != sorted(set(flags)):
-        errors.append("gateway_cli_flags must be a sorted, unique, non-empty list")
-    else:
-        bad = [flag for flag in flags if not FLAG_RE.match(flag)]
-        if bad:
-            errors.append(f"gateway_cli_flags has malformed entries: {bad}")
-        # Flags the wrapper probes with gateway_supports_flag are optional on
-        # older gateways; at the pinned commit every one must exist.
-        unknown = sorted(gateway_flag_mentions(WRAPPER.read_text(encoding="utf-8")) - set(flags))
-        if unknown:
-            errors.append(
-                "wrapper uses flags the pinned gateway does not define: " + ", ".join(unknown)
-            )
+    errors.extend(gateway_flag_errors(bom.get("gateway_cli_flags")))
 
     freeze = bom.get("freeze", {})
     if freeze.get("status") not in {"unfrozen", "frozen"}:
@@ -322,7 +334,12 @@ def main() -> int:
     check = sub.add_parser("check")
     check.add_argument("--bom", type=Path, default=BOM_PATH)
     gen = sub.add_parser("generate")
-    gen.add_argument("--gateway-help", type=Path, required=True, help="capture of `gateway --help` built from the pinned commit")
+    gen.add_argument(
+        "--gateway-help",
+        type=Path,
+        required=True,
+        help="capture of `gateway --help` from the add-on profile build (-tags nomatter) of the pinned commit",
+    )
     gen.add_argument("--out", type=Path, default=BOM_PATH)
     args = parser.parse_args()
 

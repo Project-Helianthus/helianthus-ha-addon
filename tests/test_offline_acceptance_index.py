@@ -1408,13 +1408,13 @@ def test_physical_gates_mirror_the_consolidated_handoff_rows():
                      + [f"legacy-identity-p{number}" for number in range(1, 7)]
                      + [f"legacy-identity-n{number}" for number in range(1, 6)]
                      + ["legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle",
-                        "explorer-pi", "eebus-output-binding", "matter-output-binding"]
+                        "explorer-pi", "eebus-output-binding"]
                      + list(HUAWEI_GATES))
     assert list(oai.ROW_GATES) == expected_rows
     assert all(cases[gate] == (gate,) for gate in expected_rows)
     assert list(oai.PHYSICAL_GATE_IDS) == ranges + expected_rows
-    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 64
-    assert sum(len(gate_cases) for _, gate_cases in oai.PHYSICAL_GATES) == 159
+    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 63
+    assert sum(len(gate_cases) for _, gate_cases in oai.PHYSICAL_GATES) == 158
     assert not any("rtu" in gate for gate in oai.PHYSICAL_GATE_IDS), "historical RTU evidence is never a live row"
     assert all(ccm.OPAQUE_ID.fullmatch(gate) for gate in oai.PHYSICAL_GATE_IDS)
 
@@ -1732,6 +1732,15 @@ def test_the_ambiguous_gate_partner_is_shared_through_a_hard_link(tmp_path):
 
 
 # ------------------------------------------------------ Huawei Modbus TCP rows
+def test_the_add_on_candidate_carries_no_matter_gate_and_keeps_the_eebus_output_gate():
+    assert not [gate for gate in oai.PHYSICAL_GATE_IDS + oai.SOFTWARE_GATE_IDS if "matter" in gate]
+    assert oai.CASES["eebus-output-binding"] == ("eebus-output-binding",)
+    assert oai.ROW_GATES.index("eebus-output-binding") == oai.ROW_GATES.index("explorer-pi") + 1
+    document = DOC.read_text(encoding="utf-8")
+    assert "matter" not in document.lower()
+    assert "| `eebus-output-binding` | INT-12 eeBUS output binding | the gate's own ID |" in document
+
+
 # The rows are the gateway handoff's blank Huawei rows: per gateway family, identity, monitoring
 # publication, degraded and reconnect, and negative cross-family. Fields of a row's identity: the
 # family and the kind. Each test below varies both, so a production mutation that keys a row by
@@ -1749,7 +1758,7 @@ def huawei_gate(family: str, kind: str) -> str:
 def test_the_huawei_rows_are_one_single_case_gate_per_family_and_kind_after_the_other_rows():
     assert tuple(oai.HUAWEI_GATES) == HUAWEI_GATES and len(set(HUAWEI_GATES)) == 12
     assert list(oai.PHYSICAL_GATE_IDS[-12:]) == list(HUAWEI_GATES)
-    assert oai.PHYSICAL_GATE_IDS[-13] == "matter-output-binding"
+    assert oai.PHYSICAL_GATE_IDS[-13] == "eebus-output-binding"
     for family, kind in HUAWEI_PAIRS:
         gate = huawei_gate(family, kind)
         assert gate == f"huawei-{family}-{kind}" and oai.CASES[gate] == (gate,)

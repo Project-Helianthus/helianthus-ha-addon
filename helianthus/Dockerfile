@@ -34,7 +34,7 @@ RUN --mount=type=secret,id=github_token \
     if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
       GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
-      go build -trimpath -buildvcs=true \
+      go build -trimpath -buildvcs=true -tags nomatter \
       -ldflags "-X main.buildVersion=${BUILD_VERSION} -X main.buildID=${EBUSGATEWAY_VERSION}" \
       -o /out/gateway ./cmd/gateway; \
     if [ -n "${github_token_value}" ]; then \

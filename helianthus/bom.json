@@ -303,7 +303,6 @@
     "m2m-graphql-server-cert",
     "m2m-graphql-server-key",
     "m2m-graphql-server-name",
-    "matter-library-enabled",
     "mcp-path",
     "mdns",
     "mdns-instance",
