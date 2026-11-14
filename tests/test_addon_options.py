@@ -9,6 +9,16 @@ classification, undocumented behavior, redirected/deleted config reads, missing
 transformation evidence, redirected/deleted sinks and renamed/swapped CLI flags.
 Source mutations independently remove each recorded read and emission; these
 catch production reads or derived argument construction drifting from the map.
+
+Class fields: class, reason (bootstrap) and portal_key (portal). Each is varied
+on every option: deleting or renaming class catches an unclassified option;
+swapping bootstrap and portal catches a misclassified owner; deleting, renaming
+or swapping a reason catches an unexplained bootstrap option; deleting,
+inventing or swapping a Portal key catches a setting attributed to a record
+member the gateway Portal contract does not define or that does not own it.
+The classes document is varied per option (row removed, class and reason or
+key changed) and per reason (definition removed). The Portal key set itself is
+read from the gateway Portal configuration contract when it is staged.
 """
 import importlib.util
 import json
@@ -31,7 +41,8 @@ KEYS = list(MAP['options'])
 def tree(tmp_path):
     for path in (guard.RUN, guard.SERIAL, guard.MODBUS, guard.MAP,
                  'helianthus/config.json', 'helianthus/bom.json',
-                 'helianthus/translations/en.yaml', 'helianthus/README.md'):
+                 'helianthus/translations/en.yaml', 'helianthus/README.md',
+                 guard.CLASSES_DOC):
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / path, target)
@@ -324,3 +335,143 @@ def test_retired_endpoint_keys_are_absent():
         assert f"bashio::config '{key}'" not in run
         assert f"${{{key}}}" not in run
         assert f"`{key}`" not in readme
+
+
+# Gateway Portal configuration contract, staged read-only beside the worktree.
+PORTAL_DOCS = ROOT / '.tmp/references/ebusgateway/docs'
+CLASS_FIELDS = {'bootstrap': 'reason', 'portal': 'portal_key'}
+
+
+def staged_portal_keys():
+    if not (PORTAL_DOCS / guard.PORTAL_CONTRACT).is_file():
+        pytest.skip('gateway Portal configuration contract is not staged')
+    return guard.portal_keys_from_docs(PORTAL_DOCS)
+
+
+def test_every_option_is_classified():
+    for key, entry in MAP['options'].items():
+        assert entry.get('class') in CLASS_FIELDS, key
+        member = CLASS_FIELDS[entry['class']]
+        assert isinstance(entry.get(member), str) and entry[member], key
+
+
+def test_portal_keys_match_gateway_contract():
+    assert staged_portal_keys() == guard.PORTAL_KEYS
+
+
+def test_every_portal_key_is_defined_by_gateway_contract(tree):
+    keys = staged_portal_keys()
+    used = {e['portal_key'] for e in MAP['options'].values() if e['class'] == 'portal'}
+    assert used and used <= keys
+    assert guard.validate(tree, portal_keys=keys) == len(KEYS)
+
+
+@pytest.mark.parametrize('key', [k for k in KEYS if MAP['options'][k]['class'] == 'portal'])
+def test_portal_key_absent_from_gateway_contract_rejected(tree, key):
+    keys = staged_portal_keys() - {MAP['options'][key]['portal_key']}
+    with pytest.raises(ValueError):
+        guard.validate(tree, portal_keys=keys)
+
+
+def test_gateway_contract_parsing_needs_both_sources(tmp_path):
+    staged_portal_keys()
+    target = tmp_path / guard.PORTAL_CONTRACT
+    target.parent.mkdir(parents=True)
+    text = (PORTAL_DOCS / guard.PORTAL_CONTRACT).read_text()
+    for marker in ('| Record option |', 'The editable drivers are'):
+        target.write_text(text.replace(marker, 'synthetic removed marker'))
+        with pytest.raises(ValueError):
+            guard.portal_keys_from_docs(tmp_path)
+
+
+def classify(tree, key, mutate):
+    value = read_map(tree)
+    mutate(value['options'][key])
+    write_map(tree, value)
+    reject(tree)
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_missing_class_rejected(tree, key):
+    classify(tree, key, lambda entry: entry.pop('class'))
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_unknown_class_rejected(tree, key):
+    classify(tree, key, lambda entry: entry.update({'class': 'synthetic_class'}))
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_swapped_class_rejected(tree, key):
+    def swap(entry):
+        if entry.pop('class') == 'portal':
+            entry['class'] = 'bootstrap'
+            entry['reason'] = entry.pop('portal_key') and 'listener'
+        else:
+            entry['class'] = 'portal'
+            entry['portal_key'] = entry.pop('reason') and sorted(guard.PORTAL_KEYS)[0]
+    classify(tree, key, swap)
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_missing_class_member_rejected(tree, key):
+    classify(tree, key, lambda entry: entry.pop(CLASS_FIELDS[entry['class']]))
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_member_of_other_class_rejected(tree, key):
+    def add(entry):
+        other = 'portal_key' if entry['class'] == 'bootstrap' else 'reason'
+        entry[other] = 'listener' if other == 'reason' else sorted(guard.PORTAL_KEYS)[0]
+    classify(tree, key, add)
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_unknown_reason_or_portal_key_rejected(tree, key):
+    classify(tree, key, lambda entry: entry.update({CLASS_FIELDS[entry['class']]: 'synthetic.unknown'}))
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_swapped_valid_reason_or_portal_key_rejected(tree, key):
+    def swap(entry):
+        member = CLASS_FIELDS[entry['class']]
+        choices = guard.BOOTSTRAP_REASONS if member == 'reason' else guard.PORTAL_KEYS
+        entry[member] = sorted(set(choices) - {entry[member]})[0]
+    classify(tree, key, swap)
+
+
+def doc_rows(tree):
+    path = tree / guard.CLASSES_DOC
+    return path, path.read_text()
+
+
+@pytest.mark.parametrize('key', KEYS)
+@pytest.mark.parametrize('column', ['row', 'class', 'detail'])
+def test_classes_document_row_checked(tree, key, column):
+    path, text = doc_rows(tree)
+    pattern = re.compile(r'^\| `' + re.escape(key) + r'` \| ([^|]+) \| ([^|]+) \|\n', re.M)
+    match = pattern.search(text)
+    assert match is not None, key
+    if column == 'row':
+        replacement = ''
+    elif column == 'class':
+        other = 'portal' if match.group(1).strip() == 'bootstrap' else 'bootstrap'
+        replacement = match.group(0).replace(' ' + match.group(1) + ' ', ' ' + other + ' ', 1)
+    else:
+        replacement = match.group(0).replace(match.group(2), 'synthetic_detail', 1)
+    path.write_text(text.replace(match.group(0), replacement, 1))
+    reject(tree)
+
+
+@pytest.mark.parametrize('reason', sorted(guard.BOOTSTRAP_REASONS))
+def test_bootstrap_reason_definition_required(tree, reason):
+    path, text = doc_rows(tree)
+    row = re.search(r'^\| `' + re.escape(reason) + r'` \| [^\n]+\n', text, re.M)
+    assert row is not None, reason
+    path.write_text(text.replace(row.group(0), '', 1))
+    reject(tree)
+
+
+def test_addon_readme_links_classes_document():
+    readme = (ROOT / 'helianthus/README.md').read_text()
+    assert 'docs/addon-option-classes.md' in readme

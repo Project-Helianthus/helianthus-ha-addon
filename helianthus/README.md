@@ -391,6 +391,10 @@ packaging reads and consumers; it establishes no protocol or hardware qualificat
 Gateway capability probing and native admission remain authoritative. GraphQL
 and MCP routing are preserved. The maintained [option map](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/scripts/addon-option-map.json)
 records exact source excerpts; the offline guard rejects inventory and source drift.
+The [option classes](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/addon-option-classes.md)
+mark each option as a bootstrap setting the host keeps, with its reason, or as a
+setting whose ordinary choice the gateway Portal configuration owns; option
+behavior is unchanged.
 For endpoint fields, `[]` denotes each list entry. Defaults below are add-on
 defaults only; “not set” means the schema has no default.
 

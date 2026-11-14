@@ -3,9 +3,12 @@
 
 This validates packaging wiring, not native support or hardware qualification.
 The schema, shipped reads, helper binding tables and BOM are independent inputs.
+Every option is also classified as a bootstrap setting the host keeps or a
+setting the gateway Portal configuration record owns.
 """
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -19,6 +22,143 @@ RUN = 'helianthus/rootfs/etc/services.d/helianthus-gateway/run'
 SERIAL = 'helianthus/rootfs/usr/share/helianthus/serial_can_options.py'
 MODBUS = 'helianthus/rootfs/usr/share/helianthus/modbus_runtime_guard.py'
 MAP = 'scripts/addon-option-map.json'
+CLASSES_DOC = 'docs/addon-option-classes.md'
+CLASS_FIELDS = ('class', 'reason', 'portal_key')
+# Gateway Portal configuration contract, relative to the gateway docs directory.
+PORTAL_CONTRACT = 'architecture/portal-config-sharing.md'
+
+# Members of the gateway Portal configuration record. Driver enablement is one
+# member per editable driver. portal_keys_from_docs rederives this set from the
+# gateway contract so drift is caught wherever that contract is available.
+PORTAL_KEYS = frozenset({
+    'drivers[ebus.primary].enabled', 'drivers[eebus.primary].enabled',
+    'drivers[growatt.bms.rs485].enabled', 'drivers[modbus.sunspec].enabled',
+    'sharing.graphql', 'sharing.mcp', 'adapter_proxy', 'output_bindings.matter',
+})
+
+# Why the host, not the Portal record, keeps a bootstrap option.
+BOOTSTRAP_REASONS = ('listener', 'transport', 'identity', 'paths',
+                     'native-policy', 'unmanaged-driver')
+
+# Options whose ordinary choice the Portal record owns. The add-on value stays
+# host eligibility: a Portal selection narrows it and never widens it.
+PORTAL_OWNERS = {
+    'eebus_enabled': 'drivers[eebus.primary].enabled',
+    'growatt_bms_rs485_enabled': 'drivers[growatt.bms.rs485].enabled',
+    'modbus_tcp_enabled': 'drivers[modbus.sunspec].enabled',
+}
+
+BOOTSTRAP_OPTIONS = {
+    'listener': ('host', 'http_port', 'mdns', 'proxy_listen_addr', 'eebus_listen_port',
+                 'eebus_interface', 'eebus_subnets', 'eebus_discovery_enabled',
+                 'm2m_graphql_enabled'),
+    'transport': ('adapter_direct_enabled', 'adapter_direct_protocol', 'adapter_direct_address',
+                  'transport', 'network', 'address', 'proxy_profile', 'proxy_endpoint',
+                  'scan_request_timeout', 'read_timeout', 'write_timeout', 'dial_timeout',
+                  'adapter_mux_idle_release_grace', 'adapter_mux_max_ownership_duration',
+                  'adapter_mux_read_timeout', 'modbus_tcp_endpoint', 'modbus_tcp_dial_timeout',
+                  'modbus_tcp_endpoints'),
+    'identity': ('source_addr', 'mdns_instance', 'eebus_remote_ski_allowlist',
+                 'm2m_graphql_server_name', 'm2m_graphql_asset_ref',
+                 'modbus_tcp_endpoints[].label'),
+    'paths': ('graphql_path', 'subscription_path', 'mcp_path'),
+    'native-policy': ('broadcast', 'observe_first_enabled', 'passive_state_direct_apply',
+                      'passive_config_direct_apply', 'external_write_policy',
+                      'enable_static_seed_table', 'v8_classifier_mode',
+                      'modbus_tcp_endpoints[].family'),
+    'unmanaged-driver': ('growatt_bms_can_enabled', 'growatt_bms_pcs_can_enabled',
+                         'growatt_bms_link_can_enabled', 'tesla_gen3_hsc_retained_enabled'),
+}
+
+# Family members not listed above follow their suffix.
+BOOTSTRAP_SUFFIXES = (
+    ('identity', r'(asset_id|source_id|source_epoch|driver_generation|unit_id|endpoint_id'
+                 r'|clock_epoch|evse_id|connector_id|node)'),
+    ('native-policy', r'(stale_after|project_code|release|native_profile|scope|bank|context'
+                      r'|native_contract|source_selectors)'),
+    ('transport', r'(serial_path|baud|parity|stop_bits|response_timeout|max_response_delay'
+                  r'|max_quiescence|interface|listen_only_confirmed)'),
+)
+
+
+def expected_class(key: str) -> tuple[str, str]:
+    if key in PORTAL_OWNERS:
+        return 'portal', PORTAL_OWNERS[key]
+    for reason, keys in BOOTSTRAP_OPTIONS.items():
+        if key in keys:
+            return 'bootstrap', reason
+    if key.startswith('modbus_tcp_endpoints[].'):
+        return 'bootstrap', 'transport'
+    if key.startswith(('growatt_', 'tesla_')):
+        for reason, suffix in BOOTSTRAP_SUFFIXES:
+            if re.search(r'_' + suffix + r'$', key):
+                return 'bootstrap', reason
+    raise ValueError('No option class rule: ' + key)
+
+
+def portal_keys_from_docs(docs: Path) -> frozenset[str]:
+    """Derive the record members from the gateway Portal configuration contract."""
+    text = (docs / PORTAL_CONTRACT).read_text(encoding='utf-8')
+    if '| Record option |' not in text:
+        raise ValueError('Portal contract has no record option table')
+    table = text.split('| Record option |', 1)[1].split('\n\n', 1)[0]
+    members = re.findall(r'(?m)^\| `([^`]+)` \|', table)
+    drivers = re.search(r'The editable drivers are the compiled managed set:(.+?)\.\s', text, re.S)
+    if not members or drivers is None:
+        raise ValueError('Portal contract has no editable driver set')
+    ids = re.findall(r'`([^`]+)`', drivers.group(1))
+    keys = set()
+    for member in members:
+        if member == 'drivers[].enabled':
+            keys.update(f'drivers[{driver}].enabled' for driver in ids)
+        else:
+            keys.add(member)
+    if not ids or 'drivers[].enabled' not in members:
+        raise ValueError('Portal contract has no driver enablement member')
+    return frozenset(keys)
+
+
+def section(text: str, heading: str) -> str:
+    if '\n' + heading + '\n' not in text:
+        raise ValueError('Missing section: ' + heading)
+    body = text.split('\n' + heading + '\n', 1)[1]
+    return re.split(r'(?m)^## ', body, maxsplit=1)[0]
+
+
+def classified(mapped: dict, document: str, portal_keys: frozenset[str]) -> dict:
+    """Check each option's class against its rule, the Portal keys and the document."""
+    unknown = set(PORTAL_OWNERS.values()) - portal_keys
+    if unknown:
+        raise ValueError(f'Portal key absent from gateway contract: {sorted(unknown)}')
+    reasons = dict(re.findall(r'(?m)^\| `([^`]+)` \| ([^|\n]*\S[^|\n]*) \|$',
+                              section(document, '## Bootstrap reasons')))
+    if set(reasons) != set(BOOTSTRAP_REASONS):
+        raise ValueError('Bootstrap reasons are not all defined')
+    rows = re.findall(r'(?m)^\| `([^`]+)` \| (bootstrap|portal) \| `([^`]+)` \|$',
+                      section(document, '## Classification'))
+    documented = {key: (cls, detail) for key, cls, detail in rows}
+    if len(rows) != len(documented) or set(documented) != set(mapped):
+        raise ValueError('Option classes document inventory mismatch')
+    for key, entry in mapped.items():
+        if documented[key] != option_class(key, entry, portal_keys):
+            raise ValueError('Option classes document mismatch: ' + key)
+    return mapped
+
+
+def option_class(key: str, entry: dict, portal_keys: frozenset[str]) -> tuple[str, str]:
+    cls = entry.get('class')
+    member = {'bootstrap': 'reason', 'portal': 'portal_key'}.get(cls)
+    if member is None:
+        raise ValueError('Unclassified option: ' + key)
+    if set(entry) & {'reason', 'portal_key'} != {member}:
+        raise ValueError('Class member mismatch: ' + key)
+    detail = entry[member]
+    allowed = BOOTSTRAP_REASONS if cls == 'bootstrap' else portal_keys
+    if detail not in allowed:
+        raise ValueError(f'Unknown {member}: {key}')
+    if (cls, detail) != expected_class(key):
+        raise ValueError('Incorrect option class: ' + key)
+    return cls, detail
 
 
 def inventory(schema: dict, prefix: str = '') -> set[str]:
@@ -180,7 +320,7 @@ HANDOFFS = {
 }
 
 
-def validate(root: Path = ROOT) -> int:
+def validate(root: Path = ROOT, portal_keys: frozenset[str] = PORTAL_KEYS) -> int:
     def read(path: str) -> str:
         return (root / path).read_text(encoding='utf-8')
 
@@ -190,7 +330,7 @@ def validate(root: Path = ROOT) -> int:
     mapping = json.loads(read(MAP))
     if mapping.get('format') != 1:
         raise ValueError('Unknown option map format')
-    mapped = mapping['options']
+    mapped = classified(mapping['options'], read(CLASSES_DOC), portal_keys)
     # Restrict row extraction to the maintained table, so a prose mention cannot
     # satisfy coverage and earlier explanatory tables may remain useful.
     table = read('helianthus/README.md').split('## Complete option inventory\n', 1)[1]
@@ -222,7 +362,7 @@ def validate(root: Path = ROOT) -> int:
     if referenced != set(evidence):
         raise ValueError('Missing or orphan source proof')
     for key, stored in mapped.items():
-        entry = dict(stored)
+        entry = {field: value for field, value in stored.items() if field not in CLASS_FIELDS}
         entry['read'] = evidence[stored['read']]
         entry['consumer'] = evidence[stored['consumer']]
         entry['transforms'] = [evidence[ref] for ref in stored['transforms']]
@@ -301,13 +441,21 @@ def validate(root: Path = ROOT) -> int:
     return len(expected)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--portal-docs', type=Path,
+                        help='gateway docs directory; derive Portal keys from its configuration contract')
+    args = parser.parse_args(argv)
     try:
-        count = validate()
+        keys = PORTAL_KEYS if args.portal_docs is None else portal_keys_from_docs(args.portal_docs)
+        if keys != PORTAL_KEYS:
+            raise ValueError('Portal keys differ from the gateway contract')
+        count = validate(portal_keys=keys)
     except (ValueError, KeyError, IndexError, TypeError, OSError, yaml.YAMLError) as error:
         print('FAIL:', error, file=sys.stderr)
         return 1
-    print(f'PASS: {count} option paths have English translations, README rows and source-backed consumers')
+    print(f'PASS: {count} option paths have English translations, README rows, source-backed consumers'
+          ' and a bootstrap or Portal class')
     return 0
 
 
