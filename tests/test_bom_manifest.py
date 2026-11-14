@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -270,7 +269,7 @@ def _write_build_files(
     workflow = workflow.replace(f"VRCEXPLORER_VERSION={current}", f"VRCEXPLORER_VERSION={explorer}")
     for name, digest in (image_digests or {}).items():
         if name.startswith("base."):
-            ref = BOM["images"]["base"][name.split(".", 1)[1]]["ref"]
+            ref = bom_manifest.BUILD_BASE_IMAGES[name.split(".", 1)[1]]
             workflow = workflow.replace(f"base: {ref}\n", f"base: {ref}@{digest}\n")
         else:
             ref = BOM["images"][name]["ref"]
@@ -312,7 +311,9 @@ def test_checker_rejects_an_explorer_commit_pin_that_disagrees(
     assert any(needle in error for error in errors), errors
 
 
-IMAGE_KEYS = ("builder_go", "builder_python", "base.amd64", "base.aarch64")
+IMAGE_KEYS = ("builder_go", "builder_python") + tuple(
+    f"base.{arch}" for arch in bom_manifest.BUILD_BASE_IMAGES
+)
 
 
 def _image_entry(bom: dict, key: str) -> dict:
@@ -321,14 +322,10 @@ def _image_entry(bom: dict, key: str) -> dict:
     return bom["images"][key]
 
 
-def _drop_untracked_matrix_entries() -> None:
-    """Remove matrix entries whose base image the BOM does not track."""
-    workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
-    for arch in ("armv7", "armhf", "i386"):
-        workflow = re.sub(
-            rf"          - platform: [^\n]+\n            arch: {arch}\n            base: [^\n]+\n", "", workflow
-        )
-    bom_manifest.WORKFLOW.write_text(workflow, encoding="utf-8")
+def _track_every_workflow_base(bom: dict) -> None:
+    """Add the base images the build workflow publishes beyond the declared ones."""
+    for arch, ref in bom_manifest.WORKFLOW_ONLY_BASE_IMAGES.items():
+        bom["images"]["base"][arch] = {"ref": ref, "observed_digest": "sha256:" + _hex(f"observed {arch}")}
 
 
 def _frozen(
@@ -336,9 +333,8 @@ def _frozen(
     monkeypatch: pytest.MonkeyPatch,
     *,
     skip_reference: str = "",
-    keep_untracked: bool = False,
 ) -> dict:
-    """A synthetic frozen BOM with build files referencing every image by digest."""
+    """A synthetic frozen BOM over the unmodified build matrix, every image by digest."""
     digests = {key: "sha256:" + _hex(f"pinned {key}") for key in IMAGE_KEYS}
     commit = _commit("frozen explorer")
     _write_build_files(
@@ -347,9 +343,8 @@ def _frozen(
         explorer=commit,
         image_digests={key: value for key, value in digests.items() if key != skip_reference},
     )
-    if not keep_untracked:
-        _drop_untracked_matrix_entries()
     bom = copy.deepcopy(BOM)
+    _track_every_workflow_base(bom)
     bom["vrc_explorer"]["tag"] = None
     bom["vrc_explorer"]["commit"] = commit
     for key, digest in digests.items():
@@ -363,8 +358,47 @@ def test_frozen_check_passes_for_a_synthetic_frozen_bom(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bom = _frozen(tmp_path, monkeypatch)
+    # The build matrix keeps every architecture the workflow publishes.
+    workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
+    for ref in bom_manifest.BUILD_BASE_IMAGES.values():
+        assert f"base: {ref}@" in workflow
+    assert set(bom_manifest.workflow_bases(workflow)) == set(bom_manifest.BUILD_BASE_IMAGES.values())
     assert bom_manifest.validate(bom) == []
     assert bom_manifest.validate(bom, frozen=True) == []
+
+
+def test_build_base_images_are_the_build_workflow_matrix() -> None:
+    workflow = SOURCE_WORKFLOW.read_text(encoding="utf-8")
+    assert set(bom_manifest.workflow_bases(workflow)) == set(bom_manifest.BUILD_BASE_IMAGES.values())
+    assert set(bom_manifest.BASE_IMAGES) <= set(bom_manifest.BUILD_BASE_IMAGES)
+
+
+def test_plain_check_accepts_an_unfrozen_bom_tracking_every_workflow_base() -> None:
+    mutated = copy.deepcopy(BOM)
+    _track_every_workflow_base(mutated)
+    assert bom_manifest.validate(mutated) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "needle"),
+    (
+        ("drop amd64", "images.base must list the declared add-on architectures"),
+        ("add riscv64", "images.base must list the declared add-on architectures"),
+        ("retag armv7", "images.base.armv7.ref differs"),
+    ),
+)
+def test_plain_check_rejects_base_images_outside_the_build_matrix(change: str, needle: str) -> None:
+    mutated = copy.deepcopy(BOM)
+    _track_every_workflow_base(mutated)
+    bases = mutated["images"]["base"]
+    if change == "drop amd64":
+        del bases["amd64"]
+    elif change == "add riscv64":
+        bases["riscv64"] = {"ref": "ghcr.io/home-assistant/riscv64-base:3.20", "observed_digest": "sha256:" + _hex("r")}
+    else:
+        bases["armv7"]["ref"] = "ghcr.io/home-assistant/armv7-base:3.19"
+    errors = bom_manifest.validate(mutated)
+    assert any(needle in error for error in errors), errors
 
 
 def test_frozen_check_rejects_an_unfrozen_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -441,13 +475,13 @@ def test_frozen_check_rejects_an_explorer_tag_pin(tmp_path: Path, monkeypatch: p
 def test_frozen_check_rejects_a_workflow_base_the_bom_does_not_track(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    bom = _frozen(tmp_path, monkeypatch, keep_untracked=True)
-    workflow = bom_manifest.WORKFLOW.read_text(encoding="utf-8")
-    untracked = "ghcr.io/home-assistant/armv7-base:3.20"
-    assert f"base: {untracked}" in workflow
+    bom = _frozen(tmp_path, monkeypatch)
+    untracked = bom["images"]["base"].pop("armv7")["ref"]
+    assert f"base: {untracked}@" in bom_manifest.WORKFLOW.read_text(encoding="utf-8")
     assert bom_manifest.validate({**bom, "freeze": {**bom["freeze"], "status": "unfrozen"}}) == []
     errors = bom_manifest.validate(bom, frozen=True)
     assert any(untracked in error and "not covered" in error for error in errors), errors
+    assert any("every build workflow architecture" in error for error in errors), errors
 
 
 @pytest.mark.parametrize(
@@ -597,6 +631,16 @@ def test_generate_records_the_digest_computed_from_the_fetched_catalog(
     }
     # Every registry file is read at the full commit the version names.
     assert fetched and {commit for commit, _ in fetched} == {REGISTRY_COMMIT}
+
+
+def test_generate_records_a_base_image_for_every_build_workflow_architecture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_network(monkeypatch, {})
+    code, out, _ = _run_generate(tmp_path, monkeypatch, capsys)
+    assert code == 0
+    bases = json.loads(out.read_text(encoding="utf-8"))["images"]["base"]
+    assert {arch: entry["ref"] for arch, entry in bases.items()} == bom_manifest.BUILD_BASE_IMAGES
 
 
 def test_generate_records_a_null_catalog_for_a_registry_without_the_copy(

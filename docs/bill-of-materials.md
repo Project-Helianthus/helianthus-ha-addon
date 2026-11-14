@@ -15,7 +15,7 @@ files name.
 | `vrc_explorer` | Explorer repository and pin: a version tag (`vX.Y.Z`) with the commit it resolves to, or a commit alone with `tag` set to `null`. |
 | `go_modules` | Go module pins of the gateway build at the pinned commit (`go.mod` requirements and replacements, SHA-256 of `go.mod` and `go.sum`). |
 | `semantic_contract` | The semantic registry the gateway build pins and the element catalog that registry implements (below). |
-| `images` | Builder and per-architecture base images: the tag reference, the digest observed at generation time and, once frozen, the `pinned_digest` the build references. |
+| `images` | Builder and per-architecture base images: the tag reference, the digest observed at generation time and, once frozen, the `pinned_digest` the build references. `base` lists the Supervisor architectures and may list the further architectures the build workflow publishes (`armv7`, `armhf`, `i386`); `generate` records all of them. |
 | `gateway_cli_flags` | The gateway flag set of the add-on profile build (`-tags nomatter`) at the pinned commit. |
 | `freeze` | Release freeze record: `owner`, `status` (`unfrozen` or `frozen`) and a note. |
 
@@ -53,6 +53,8 @@ pass plain `check`. Local CI runs it on every change.
 adds the release freeze rules:
 
 - `freeze.status` is `frozen`;
+- `images.base` lists every architecture the build workflow builds and
+  publishes, not only the Supervisor architectures;
 - every builder and base image the BOM lists has a `pinned_digest`, and the
   Dockerfile (builder images) or the build workflow matrix (base images)
   references it as `<ref>@sha256:<digest>` with exactly that digest;

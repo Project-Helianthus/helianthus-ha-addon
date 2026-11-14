@@ -12,7 +12,8 @@ images and the gateway CLI flag set the wrapper was verified against.
                   passes to the gateway. A BOM whose freeze.status is frozen
                   is always held to the --frozen rules.
   check --frozen  offline; every check rule plus the release freeze: status
-                  frozen, every builder and base image referenced by its pinned
+                  frozen, a base image for every build workflow architecture,
+                  every builder and base image referenced by its pinned
                   digest, the element catalog named, commit pins only.
   generate        online; rebuilds the BOM from the pins in the Dockerfile and
                   reads the element catalog pin of the semantic registry at its
@@ -72,6 +73,14 @@ BASE_IMAGES = {
     "amd64": "ghcr.io/home-assistant/amd64-base:3.20",
     "aarch64": "ghcr.io/home-assistant/aarch64-base:3.20",
 }
+# Further architectures the build workflow builds and publishes in the candidate
+# manifest. An unfrozen BOM may track them; a frozen BOM must track them all.
+WORKFLOW_ONLY_BASE_IMAGES = {
+    "armv7": "ghcr.io/home-assistant/armv7-base:3.20",
+    "armhf": "ghcr.io/home-assistant/armhf-base:3.20",
+    "i386": "ghcr.io/home-assistant/i386-base:3.20",
+}
+BUILD_BASE_IMAGES = {**BASE_IMAGES, **WORKFLOW_ONLY_BASE_IMAGES}
 
 
 def split_image(value: str) -> tuple[str, str | None]:
@@ -395,10 +404,14 @@ def validate(bom: dict[str, Any], frozen: bool = False) -> list[str]:
         if not DIGEST_RE.match(str(images.get(name, {}).get("observed_digest", ""))):
             errors.append(f"images.{name}.observed_digest must be sha256:<64 hex>")
     bases = images.get("base", {})
-    if set(bases) != set(BASE_IMAGES):
-        errors.append("images.base must list exactly the declared add-on architectures")
+    if not set(BASE_IMAGES) <= set(bases) <= set(BUILD_BASE_IMAGES):
+        errors.append(
+            "images.base must list the declared add-on architectures and only build workflow architectures"
+        )
+    if frozen and set(bases) != set(BUILD_BASE_IMAGES):
+        errors.append("images.base must list every build workflow architecture in a frozen BOM")
     for arch, entry in bases.items():
-        if entry.get("ref") != BASE_IMAGES.get(arch) or f"base: {entry.get('ref')}" not in workflow:
+        if entry.get("ref") != BUILD_BASE_IMAGES.get(arch) or f"base: {entry.get('ref')}" not in workflow:
             errors.append(f"images.base.{arch}.ref differs from build workflow matrix")
         if not DIGEST_RE.match(str(entry.get("observed_digest", ""))):
             errors.append(f"images.base.{arch}.observed_digest must be sha256:<64 hex>")
@@ -603,7 +616,7 @@ def generate(help_path: Path) -> dict[str, Any]:
         "images": {
             "builder_go": image(docker["go_image"], docker["go_image_digest"]),
             "builder_python": image(docker["python_image"], docker["python_image_digest"]),
-            "base": {arch: image(ref, bases.get(ref)) for arch, ref in BASE_IMAGES.items()},
+            "base": {arch: image(ref, bases.get(ref)) for arch, ref in BUILD_BASE_IMAGES.items()},
             "digest_note": "Digests were observed at generation time; the build references tags. INT-16 replaces them with pinned digests when it freezes the BOM.",
             "observed_at": now,
         },

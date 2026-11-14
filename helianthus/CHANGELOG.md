@@ -8,8 +8,9 @@
   because the pinned registry predates its catalog copy. `generate` computes the
   catalog digest from the fetched bytes and refuses one that differs from the
   digest the registry declares. The BOM accepts an Explorer pin by commit alone.
-  The new `check --frozen` additionally requires a frozen status, digest-pinned
-  builder and base images in the Dockerfile and the build workflow, the element
+  The new `check --frozen` additionally requires a frozen status, a base image
+  for every architecture the build workflow publishes, digest-pinned builder
+  and base images in the Dockerfile and the build workflow, the element
   catalog and commit pins; it fails on the current unfrozen BOM. See
   `docs/bill-of-materials.md`. Every pin, the Dockerfile, the workflows and the
   add-on version are unchanged.
