@@ -204,6 +204,11 @@
     "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/b223acf12162f8fee470ac337e1207a9382bae0e/go.mod",
     "build_mode": "GOWORK=off GOFLAGS=-mod=readonly (Dockerfile builder stage)"
   },
+  "semantic_contract": {
+    "registry_module": "github.com/Project-Helianthus/helianthus-semreg",
+    "registry_version": "v0.0.0-20261107204616-b3e8cdfc4a60",
+    "element_catalog": null
+  },
   "images": {
     "builder_go": {
       "ref": "golang:1.26.2-alpine",
