@@ -22,6 +22,7 @@ read from the gateway Portal configuration contract when it is staged.
 """
 import importlib.util
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -344,6 +345,8 @@ CLASS_FIELDS = {'bootstrap': 'reason', 'portal': 'portal_key'}
 
 def staged_portal_keys():
     if not (PORTAL_DOCS / guard.PORTAL_CONTRACT).is_file():
+        if os.environ.get('REQUIRE_PORTAL_CONTRACT'):
+            pytest.fail('gateway Portal configuration contract is not staged')
         pytest.skip('gateway Portal configuration contract is not staged')
     return guard.portal_keys_from_docs(PORTAL_DOCS)
 
@@ -380,6 +383,30 @@ def test_gateway_contract_parsing_needs_both_sources(tmp_path):
     text = (PORTAL_DOCS / guard.PORTAL_CONTRACT).read_text()
     for marker in ('| Record option |', 'The editable drivers are'):
         target.write_text(text.replace(marker, 'synthetic removed marker'))
+        with pytest.raises(ValueError):
+            guard.portal_keys_from_docs(tmp_path)
+
+
+SYNTHETIC_CONTRACT = '''# Synthetic Portal contract
+
+| Record option | Meaning |
+| --- | --- |
+| `drivers[].enabled` | Driver enablement |
+| `sharing.mcp` | Sharing |
+
+The editable drivers are the compiled managed set: `alpha.one`, `beta.two`.
+'''
+
+
+def test_gateway_contract_parser_expands_driver_members(tmp_path):
+    # Runs without the staged gateway documents, so parser breakage fails in any checkout.
+    target = tmp_path / guard.PORTAL_CONTRACT
+    target.parent.mkdir(parents=True)
+    target.write_text(SYNTHETIC_CONTRACT)
+    assert guard.portal_keys_from_docs(tmp_path) == {
+        'drivers[alpha.one].enabled', 'drivers[beta.two].enabled', 'sharing.mcp'}
+    for marker in ('| Record option |', 'The editable drivers are'):
+        target.write_text(SYNTHETIC_CONTRACT.replace(marker, 'removed'))
         with pytest.raises(ValueError):
             guard.portal_keys_from_docs(tmp_path)
 
