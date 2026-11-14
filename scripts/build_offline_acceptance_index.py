@@ -90,7 +90,7 @@ ROW_GATES = (
     + _rows("legacy-persist", _ids("P", 1, 6, 1) + _ids("N", 1, 4, 1))
     + _rows("legacy-identity", _ids("P", 1, 6, 1) + _ids("N", 1, 5, 1))
     + ("legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle", "explorer-pi",
-       "eebus-output-binding", "matter-output-binding")
+       "eebus-output-binding")
     + HUAWEI_GATES
 )  # The handoff's prior RTU applicability row is historical evidence, never a live result: not required.
 PHYSICAL_GATES = RANGE_GATES + tuple((gate, (gate,)) for gate in ROW_GATES)

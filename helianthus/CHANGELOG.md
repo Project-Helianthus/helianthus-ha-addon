@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Build the add-on gateway with the profile that leaves out Matter
+  (`-tags nomatter`). The BOM no longer lists `matter-library-enabled`, and its
+  check refuses any gateway flag that names Matter; the BOM help capture is taken
+  from that profile build. The offline acceptance index drops the
+  `matter-output-binding` physical gate; the eeBUS output gate is unchanged. The
+  Portal acceptance checklist expects the add-on Portal to report no Matter. The
+  Matter bridge ships only standalone. The gateway pin, every option and the
+  add-on version are unchanged; the image drops the Matter code once the release
+  freeze moves the pin to a gateway that defines the profile.
+
 - Add the adapter-mux timing options `adapter_mux_idle_release_grace` (default
   `200ms`), `adapter_mux_max_ownership_duration` (default `10s`) and
   `adapter_mux_read_timeout` (default `50ms`). They map to
