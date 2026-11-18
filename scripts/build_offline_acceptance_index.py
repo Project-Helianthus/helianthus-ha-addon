@@ -11,6 +11,8 @@ as pass, fail or unverified; anything unrecognised is a named reason, never an
 interpretation. A complete index is not a candidate disposition, which stays the
 validator's and, without its private receipt, never rises above not-ready.
 
+The physical gates are the active form of the gateway's hardware-acceptance catalog, read
+from the copy beside this script; a copy whose SHA-256 differs from the pin refuses to start.
 Every input is an explicit file inside the supplied worktree. Nothing is executed,
 fetched, built, written, deployed, released or tagged, no directory outside the worktree
 is listed, and the index never echoes input paths or free-form input text.
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -58,43 +61,158 @@ SOFTWARE_GATES = (
 SOFTWARE_GATE_IDS = tuple(gate for gate, _ in SOFTWARE_GATES)
 
 
-def _ids(prefix: str, first: int, last: int, width: int = 2) -> tuple[str, ...]:
-    return tuple(f"{prefix}{number:0{width}d}" for number in range(first, last + 1))
-
-
-def _rows(family: str, ids: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(f"{family}-{row.lower()}" for row in ids)
-
-
-# Physical gates: one per live row of the gateway's consolidated candidate hardware acceptance handoff, in
-# its order. A range row accounts for every case ID in its range through one per-case report; every
-# other row is a single-case gate (the case is named after the gate) with its own record and review.
-RANGE_GATES = (
-    ("transport-direct-adapter", _ids("T", 1, 4)),
-    ("transport-ebusd-tcp", _ids("T", 5, 8)),
-    ("transport-proxy-single-client", _ids("T", 9, 24)),
-    ("transport-proxy-dual-client", _ids("T", 25, 88)),
-    ("proxy-semantics-adjunct", _ids("PX", 1, 12)),
-)
+# Physical gates: one per gate of the active form of the gateway's hardware-acceptance catalog, in the
+# catalog's order, taken from the copy beside this script. The copy is used only when its SHA-256 equals the
+# pin below, so the catalog changes only through a reviewed change of the copy and the pin together. Every
+# gate is a single-case gate (the case is named after the gate) with its own record and review.
+CATALOG_FILE = Path(__file__).resolve().parent / "fixtures" / "hardware-acceptance-catalog.json"
+CATALOG_SHA256 = "cc0d54e96ac6a9ce35ccfcbab8b998ff6c1558fb0d8a8183f8285b2cd2657bd1"
+CATALOG_REFUSED = "the hardware-acceptance catalog copy does not match the pin in this script"
 # The handoff's Huawei Modbus TCP rows: for each gateway family of the multi-endpoint contract, in the
-# handoff's order, one row per kind of evidence. The gateway registers every Huawei instance withheld until
+# catalog's order, one row per kind of evidence. The gateway registers every Huawei instance withheld until
 # that family's own native contract admits a qualification, so these gates stay unverified until the
 # operator supplies reviewed live evidence for them. Simulated evidence and software results never count.
 HUAWEI_FAMILIES = ("smartlogger", "emma", "sdongle")
 HUAWEI_ROWS = ("identity", "monitoring-publication", "degraded-reconnect", "negative-cross-family")
 HUAWEI_GATES = tuple(f"huawei-{family}-{row}" for family in HUAWEI_FAMILIES for row in HUAWEI_ROWS)
-ROW_GATES = (
-    _rows("adapter-direct", _ids("AD", 1, 12))
-    + _rows("passive-smoke", _ids("P", 1, 6))
-    + ("esera-passive-boundary",)
-    + _rows("legacy-persist", _ids("P", 1, 6, 1) + _ids("N", 1, 4, 1))
-    + _rows("legacy-identity", _ids("P", 1, 6, 1) + _ids("N", 1, 5, 1))
-    + ("legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle", "explorer-pi",
-       "eebus-output-binding")
-    + HUAWEI_GATES
-)  # The handoff's prior RTU applicability row is historical evidence, never a live result: not required.
-PHYSICAL_GATES = RANGE_GATES + tuple((gate, (gate,)) for gate in ROW_GATES)
-PHYSICAL_GATE_IDS = tuple(gate for gate, _ in PHYSICAL_GATES)
+# The one table from the catalog's retained rows to index gates: each keeps its index name. The output
+# binding that the add-on build leaves out maps to None and is not a gate here. Every other row of the
+# active form must be a matrix cell, named adaptermux-<transport>-<invariant> in lower case; a row that is
+# neither makes the catalog copy unusable. The prior RTU applicability row is historical, never a gate.
+RETAINED_GATES: dict[str, str | None] = {
+    "P01": "passive-smoke-p01",
+    "P02": "passive-smoke-p02",
+    "P06": "passive-smoke-p06",
+    "ESERA / FOLLOWUP-01": "esera-passive-boundary",
+    "LEGACY-PERSIST P1": "legacy-persist-p1",
+    "LEGACY-PERSIST P2": "legacy-persist-p2",
+    "LEGACY-PERSIST P3": "legacy-persist-p3",
+    "LEGACY-PERSIST P4": "legacy-persist-p4",
+    "LEGACY-PERSIST P5": "legacy-persist-p5",
+    "LEGACY-PERSIST P6": "legacy-persist-p6",
+    "LEGACY-PERSIST N1": "legacy-persist-n1",
+    "LEGACY-PERSIST N2": "legacy-persist-n2",
+    "LEGACY-PERSIST N3": "legacy-persist-n3",
+    "LEGACY-PERSIST N4": "legacy-persist-n4",
+    "LEGACY-IDENTITY P1": "legacy-identity-p1",
+    "LEGACY-IDENTITY P2": "legacy-identity-p2",
+    "LEGACY-IDENTITY P3": "legacy-identity-p3",
+    "LEGACY-IDENTITY P4": "legacy-identity-p4",
+    "LEGACY-IDENTITY P5": "legacy-identity-p5",
+    "LEGACY-IDENTITY P6": "legacy-identity-p6",
+    "LEGACY-IDENTITY N1": "legacy-identity-n1",
+    "LEGACY-IDENTITY N2": "legacy-identity-n2",
+    "LEGACY-IDENTITY N3": "legacy-identity-n3",
+    "LEGACY-IDENTITY N4": "legacy-identity-n4",
+    "LEGACY-IDENTITY N5": "legacy-identity-n5",
+    "LEGACY-MUX": "legacy-mux",
+    "HA/Ingress routing": "ha-ingress-routing",
+    "HA/Ingress trust": "ha-ingress-trust",
+    "HA/Ingress lifecycle and identity": "ha-ingress-lifecycle",
+    "Explorer Pi": "explorer-pi",
+    "INT-12 eeBUS output binding": "eebus-output-binding",
+    "INT-13 Matter output binding": None,
+    "HUAWEI-SMARTLOGGER identity": "huawei-smartlogger-identity",
+    "HUAWEI-SMARTLOGGER monitoring publication": "huawei-smartlogger-monitoring-publication",
+    "HUAWEI-SMARTLOGGER degraded and reconnect": "huawei-smartlogger-degraded-reconnect",
+    "HUAWEI-SMARTLOGGER negative cross-family": "huawei-smartlogger-negative-cross-family",
+    "HUAWEI-EMMA identity": "huawei-emma-identity",
+    "HUAWEI-EMMA monitoring publication": "huawei-emma-monitoring-publication",
+    "HUAWEI-EMMA degraded and reconnect": "huawei-emma-degraded-reconnect",
+    "HUAWEI-EMMA negative cross-family": "huawei-emma-negative-cross-family",
+    "HUAWEI-SDONGLE identity": "huawei-sdongle-identity",
+    "HUAWEI-SDONGLE monitoring publication": "huawei-sdongle-monitoring-publication",
+    "HUAWEI-SDONGLE degraded and reconnect": "huawei-sdongle-degraded-reconnect",
+    "HUAWEI-SDONGLE negative cross-family": "huawei-sdongle-negative-cross-family",
+}
+CELL_ID = re.compile(r"([A-Z]+)-([A-Z]+[0-9]+)")
+# A reserved cell is reported without being run: its one passing case outcome is its category's outcome.
+CATEGORY_OUTCOMES = ("blocked-infra", "planned")
+
+
+class CatalogRefusedError(Exception):
+    """The catalog copy is not the pinned one, or its active form does not fit this index."""
+
+    def __init__(self) -> None:
+        super().__init__(CATALOG_REFUSED)
+
+
+@dataclass(frozen=True)
+class Catalog:
+    version: str
+    form: str
+    gate_names: dict[str, str | None]  # Every row of the active form, in its order, to its gate or None.
+    cells: tuple[str, ...]
+    reserved: dict[str, tuple[str, str]]  # Cell gate to its first category in precedence order and outcome.
+
+    @property
+    def gates(self) -> tuple[str, ...]:
+        return tuple(gate for gate in self.gate_names.values() if gate is not None)
+
+
+def _cell_gate(cell: Any) -> str:
+    match = CELL_ID.fullmatch(cell) if type(cell) is str else None
+    if match is None:
+        raise ValueError("not a matrix cell")
+    return f"adaptermux-{match[1].lower()}-{match[2].lower()}"
+
+
+def _gate_names(doc: dict[str, Any]) -> dict[str, str | None]:
+    active, cells = doc["forms"][doc["active_form"]], doc["v2_cells"]
+    single = {row["id"] for row in doc["handoff_rows"] if row["kind"] == "single" and row["cases"] == [row["id"]]}
+    retained = [row for row in active if row not in cells]
+    if (len(set(active)) != len(active) or set(retained) != set(RETAINED_GATES) or not set(cells) <= set(active)
+            or not set(retained) <= single):  # No range row and no row of another form.
+        raise ValueError("the active form does not fit the gate table")
+    names = {row: RETAINED_GATES[row] if row in RETAINED_GATES else _cell_gate(row) for row in active}
+    gates = [gate for gate in names.values() if gate is not None]
+    if len(set(gates)) != len(gates) or not all(ccm.OPAQUE_ID.fullmatch(gate) for gate in gates):
+        raise ValueError("gate names are not distinct opaque IDs")
+    return names
+
+
+def _reserved(doc: dict[str, Any], names: dict[str, str | None]) -> dict[str, tuple[str, str]]:
+    categories = {category["id"]: category for category in doc["categories"]}
+    reserved: dict[str, tuple[str, str]] = {}
+    for cell in doc["v2_cells"]:
+        first = next((name for name in doc["category_precedence"] if cell in categories[name]["cases"]), None)
+        if first is not None:
+            if categories[first]["outcome"] not in CATEGORY_OUTCOMES:
+                raise ValueError("a reserved category has an outcome this index cannot accept")
+            reserved[names[cell]] = (first, categories[first]["outcome"])
+    return reserved
+
+
+def load_catalog(raw: bytes) -> Catalog:
+    """The pinned catalog's active form, checked byte for byte against the pin before it is parsed."""
+    if hashlib.sha256(raw).hexdigest() != CATALOG_SHA256:
+        raise CatalogRefusedError()
+    try:
+        doc = ccm._strict_json(raw)
+        names = _gate_names(doc)
+        return Catalog(doc["version"], doc["active_form"], names,
+                       tuple(names[cell] for cell in doc["v2_cells"]), _reserved(doc, names))
+    except (ccm._Invalid, KeyError, TypeError, ValueError, AttributeError):
+        raise CatalogRefusedError() from None
+
+
+def _pinned_catalog() -> Catalog | None:
+    try:  # One checked descriptor, bounded like every input; the copy is never written.
+        return load_catalog(ccm._read_path(CATALOG_FILE))
+    except (OSError, RuntimeError, ValueError, ccm._WrongType, CatalogRefusedError):
+        return None
+
+
+CATALOG = _pinned_catalog()  # None when the copy is missing or does not match the pin: nothing starts.
+CATALOG_VERSION = CATALOG.version if CATALOG else None
+CATALOG_FORM = CATALOG.form if CATALOG else None
+GATE_NAMES: dict[str, str | None] = dict(CATALOG.gate_names) if CATALOG else {}
+CELL_GATES: tuple[str, ...] = CATALOG.cells if CATALOG else ()
+PHYSICAL_GATE_IDS: tuple[str, ...] = CATALOG.gates if CATALOG else ()
+ROW_GATES = tuple(gate for gate in PHYSICAL_GATE_IDS if gate not in CELL_GATES)
+RESERVED = {gate: outcome for gate, (_, outcome) in (CATALOG.reserved if CATALOG else {}).items()}
+RESERVED_UNDER = {gate: category for gate, (category, _) in (CATALOG.reserved if CATALOG else {}).items()}
+PHYSICAL_GATES = tuple((gate, (gate,)) for gate in PHYSICAL_GATE_IDS)
 CASES = dict(PHYSICAL_GATES)
 # Per-row evidence records are published by the project; any other repository is not a record.
 EVIDENCE_OWNER = "https://github.com/project-helianthus/"
@@ -107,7 +225,7 @@ EVIDENCE_GATE_FIELDS = ("gate", "independent_review", "evidence_ref", "cases")
 CASE_FIELDS = ("case", "outcome")
 ENVIRONMENTS = ("live", "simulated")
 REVIEW_VALUES = ("satisfied", "missing")
-CASE_OUTCOMES = ("pass", "fail", "blocked", "not-run")
+CASE_OUTCOMES = ("pass", "fail", "blocked", "not-run", *CATEGORY_OUTCOMES)
 CHECK_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 
 # Validator result classes. Only VALID (exit 0) establishes the candidate identity: the private receipt
@@ -268,7 +386,9 @@ def _validate_evidence(doc: Any) -> None:
             if case["case"] in cases:
                 raise ccm._Invalid(f"{at}.case repeats a case of {gate}")
             cases.add(case["case"])
-            ccm._enum(case["outcome"], CASE_OUTCOMES, f"{at}.outcome")
+            outcome = ccm._enum(case["outcome"], CASE_OUTCOMES, f"{at}.outcome")
+            if outcome in CATEGORY_OUTCOMES and RESERVED.get(gate) != outcome:  # Never generic missing evidence.
+                raise ccm._Invalid(f"{at}.outcome {outcome} is not the category outcome of {gate}")
 
 
 def _results(doc: dict[str, Any]) -> list[_Result]:
@@ -444,16 +564,25 @@ def _physical_row(gate: str, cases: tuple[str, ...], meta: dict[str, Any] | None
         return row("fail", f"{len(failed)} case(s) failed")
     if not entry.reviewed:
         return row("unverified", "independent review of this row's evidence is missing")
-    problem = _record_problem(entry.evidence_ref, root, inputs, shared, root_fd=root_fd)
+    problem = _record_problem(entry.evidence_ref, root, inputs, shared, root_fd=root_fd) or _case_problem(
+        cases, entry)
     if problem:
         return row("unverified", problem)
+    return row("pass")
+
+
+def _case_problem(cases: tuple[str, ...], entry: _Evidence) -> str | None:
+    """Why the cases of a live, reviewed and recorded entry do not pass the gate, or None."""
     unaccounted = [case for case in cases if case not in entry.cases]
     if unaccounted:
-        return row("unverified", f"{len(unaccounted)} case(s) are not accounted for")
-    open_cases = [case for case in cases if entry.cases[case] != "pass"]
+        return f"{len(unaccounted)} case(s) are not accounted for"
+    for case in cases:  # A reserved cell passes only with its category outcome, and with nothing else.
+        if case in RESERVED and entry.cases[case] != RESERVED[case]:
+            return f"the cell is reserved under {RESERVED_UNDER[case]}; its case outcome must be {RESERVED[case]}"
+    open_cases = [case for case in cases if entry.cases[case] != RESERVED.get(case, "pass")]
     if open_cases:
-        return row("unverified", f"{len(open_cases)} case(s) were blocked or not run")
-    return row("pass")
+        return f"{len(open_cases)} case(s) were blocked or not run"
+    return None
 
 
 def _section(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -474,6 +603,8 @@ def _sanitized(value: Any) -> Any:
 def build_index(package_root: str | Path, metadata: str | Path, results: list[str | Path] | None = None,
                 operator_evidence: list[str | Path] | None = None) -> Index:
     """Join explicit worktree-local result manifests and operator evidence to a validated candidate."""
+    if CATALOG is None:
+        raise CatalogRefusedError()
     errors: list[str] = []
     seen: set[tuple[int, int]] = set()
     root = _resolve_root(Path(package_root))
@@ -527,6 +658,7 @@ def _build(root: Path | None, root_fd: int | None, errors: list[str], seen: set[
         "format": INDEX_FORMAT,
         "evidence": "complete" if complete else "incomplete",
         "candidate": candidate,
+        "hardware_acceptance_catalog": {"version": CATALOG_VERSION, "form": CATALOG_FORM},
         "software": _section(software),
         "physical": _section(physical),
         "input_errors": errors,
@@ -549,6 +681,9 @@ class _Parser(argparse.ArgumentParser):
 
 
 def main(argv: list[str] | None = None) -> int:
+    if CATALOG is None:  # Refuse before reading any argument or input: no physical gate can be named.
+        print(f"{Path(__file__).name}: {CATALOG_REFUSED}", file=sys.stderr)
+        return 1
     parser = _Parser(
         description=__doc__.splitlines()[0],
         epilog=(
@@ -561,8 +696,10 @@ def main(argv: list[str] | None = None) -> int:
             "separately supplied live operator evidence, reviewed row by row with a linked per-row record, "
             "accounts for every case; simulated evidence never upgrades them. The candidate metadata is "
             "validated in public-only mode; its packaging shape is the validator's decision and a complete "
-            "index promotes no disposition. Reads only the explicit files named here, which must lie inside "
-            "--package-root, and, through the validator, that worktree's packaging files: no execution, "
+            "index promotes no disposition. The physical gates are the active form of the pinned "
+            "hardware-acceptance catalog copy beside this script; a copy that does not match its SHA-256 pin "
+            "refuses to start (exit 1). Reads only that copy, the explicit files named here, which must lie "
+            "inside --package-root, and, through the validator, that worktree's packaging files: no execution, "
             "fetch, build, write, deployment, release, tag or listing outside the worktree; the index is "
             "not a release or hardware qualification."
         ),
