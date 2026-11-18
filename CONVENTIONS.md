@@ -52,6 +52,17 @@ never reads or changes `config.json`, the BOM or the stable gateway pin. The tag
 logic lives in `scripts/test_image_plan.py` (tested by
 `tests/test_test_image_plan.py`).
 
+Official images stay on the Dockerfile's default `GATEWAY_TAGS=nomatter`, which
+builds the gateway without Matter; the build workflow never sets that argument.
+A Matter test image is the `test-image` workflow with the boolean input
+`include_matter`: it passes `GATEWAY_TAGS=default` (the gateway's default
+profile) and every tag starts with `test-matter-`. It is not a release. When the
+packaged binary supports both `-matter-library-enabled` and
+`-matter-endpoint-store`, the start-up wrapper enables the library and keeps the
+endpoint store at `/data/matter-endpoint-store`; otherwise it passes neither.
+There is no add-on option for Matter, and the BOM keeps describing the official
+build.
+
 Install on an existing installation by retag only after the
 [pre-replacement compatibility requirements](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/docs/cohort-upgrade-rollback.md)
 are satisfied: check options and persisted-state upgrade/downgrade readability
