@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add an opt-in Matter test image. The Dockerfile's builder argument
+  `GATEWAY_TAGS` defaults to `nomatter`, which official images keep; `default`
+  builds the gateway's default profile and any other value fails the build. The
+  manual `test-image` workflow's boolean input `include_matter` (default off)
+  passes `default` and publishes only `test-matter-<label>-<short sha>`, never
+  `latest` or a version tag. When the packaged binary supports both Matter
+  flags, the start-up wrapper enables the library and keeps the endpoint store
+  in `/data/matter-endpoint-store`; the official image gains no argument. The
+  options, the BOM, the build workflow and the add-on version are unchanged.
+
 - Take the physical gates of the offline acceptance index from the gateway's
   hardware-acceptance catalog, version 4, through a byte-for-byte copy in
   `scripts/fixtures/hardware-acceptance-catalog.json` whose SHA-256 the tool

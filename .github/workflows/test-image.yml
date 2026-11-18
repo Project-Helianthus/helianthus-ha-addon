@@ -4,6 +4,8 @@ name: test-image
 # on pull requests or pushes, never reads helianthus/config.json for a tag, and
 # publishes only test-<label>-<short sha> (never `latest`, never a version tag);
 # per-architecture images carry the run id so a manifest only combines its own run.
+# With include_matter the gateway builds its default profile, which includes
+# Matter, and every tag starts with test-matter-; official builds never do this.
 # See "Test images" in CONVENTIONS.md.
 on:
   workflow_dispatch:
@@ -17,15 +19,20 @@ on:
         required: false
         default: second-site
         type: string
+      include_matter:
+        description: Build the gateway's default profile with Matter (tag test-matter-<label>-<short sha>)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
   packages: write
 
-# Identical dispatches (same label and gateway commit) publish the same tags, so
+# Identical dispatches (same label, gateway commit and profile) publish the same tags, so
 # they run one after another. A running publish is never cancelled.
 concurrency:
-  group: test-image-${{ inputs.test_label }}-${{ inputs.gateway_sha }}
+  group: test-image-${{ inputs.test_label }}-${{ inputs.gateway_sha }}-${{ inputs.include_matter }}
   cancel-in-progress: false
 
 env:
@@ -50,11 +57,12 @@ jobs:
           GATEWAY_SHA: ${{ inputs.gateway_sha }}
           TEST_LABEL: ${{ inputs.test_label }}
           RUN_ID: ${{ github.run_id }}
+          INCLUDE_MATTER: ${{ inputs.include_matter }}
         run: |
           set -euo pipefail
           python3 scripts/test_image_plan.py plan \
             --gateway-sha "${GATEWAY_SHA}" --test-label "${TEST_LABEL}" \
-            --run-id "${RUN_ID}" >> "$GITHUB_OUTPUT"
+            --run-id "${RUN_ID}" --include-matter "${INCLUDE_MATTER}" >> "$GITHUB_OUTPUT"
 
   build:
     needs: plan
@@ -79,7 +87,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Exactly one of the two build steps runs. Without include_matter the
+      # build passes no GATEWAY_TAGS, so the Dockerfile default (no Matter)
+      # applies; with it, the build passes the gateway's default profile.
       - name: Build and push test image (${{ matrix.arch }})
+        if: ${{ !inputs.include_matter }}
         uses: docker/build-push-action@v5
         with:
           context: ./helianthus
@@ -100,6 +112,31 @@ jobs:
             EBUSGATEWAY_VERSION=${{ inputs.gateway_sha }}
             VRCEXPLORER_VERSION=v0.6.1
             BUILD_FROM=${{ matrix.base }}
+          secrets: |
+            github_token=${{ secrets.REPO_READ_TOKEN }}
+      - name: Build and push Matter test image (${{ matrix.arch }})
+        if: ${{ inputs.include_matter }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./helianthus
+          push: true
+          platforms: ${{ matrix.platform }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}-r${{ github.run_id }}
+          labels: |
+            org.opencontainers.image.source=${{ env.OCI_SOURCE }}
+            org.opencontainers.image.description=${{ env.OCI_DESCRIPTION }}
+            org.opencontainers.image.licenses=${{ env.OCI_LICENSE }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.helianthus.test-image=true
+            io.helianthus.gateway-commit=${{ inputs.gateway_sha }}
+            io.helianthus.workflow-run=${{ github.run_id }}
+          build-args: |
+            BUILD_VERSION=${{ needs.plan.outputs.build_version }}
+            EBUSGATEWAY_VERSION=${{ inputs.gateway_sha }}
+            VRCEXPLORER_VERSION=v0.6.1
+            BUILD_FROM=${{ matrix.base }}
+            GATEWAY_TAGS=default
           secrets: |
             github_token=${{ secrets.REPO_READ_TOKEN }}
 

@@ -750,6 +750,21 @@ else
   bashio::log.warning "Packaged gateway binary does not support -portal-path; the Ingress entry relies on the gateway default Portal mount ${portal_mount}"
 fi
 
+# Matter is present only in a manually built test image. The official add-on
+# build leaves it out, so its binary has neither flag and gains no argument; the
+# BOM describes that build and therefore names neither flag, which is why the
+# names are held in variables. A binary with both flags enables the library and
+# keeps its endpoint store in the add-on data directory; with one flag missing,
+# neither is passed. No add-on option controls this.
+matter_library_flag="matter-library-enabled"
+matter_store_flag="matter-endpoint-store"
+matter_endpoint_store="/data/matter-endpoint-store"
+matter_args=()
+if gateway_supports_flag "${matter_library_flag}" && gateway_supports_flag "${matter_store_flag}"; then
+  matter_args=("-${matter_library_flag}=true" "-${matter_store_flag}" "${matter_endpoint_store}")
+  bashio::log.info "Matter test build: library enabled, endpoint store ${matter_endpoint_store}"
+fi
+
 eebus_args=()
 if bashio::var.true "${eebus_enabled}"; then
   eebus_interface=$(printf '%s' "${eebus_interface}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
@@ -1119,6 +1134,7 @@ if [ "${#adapter_mux_args[@]}" -ne 0 ]; then gateway_args+=("${adapter_mux_args[
 if [ "${#static_seed_args[@]}" -ne 0 ]; then gateway_args+=("${static_seed_args[@]}"); fi
 if [ "${#semantic_cache_args[@]}" -ne 0 ]; then gateway_args+=("${semantic_cache_args[@]}"); fi
 if [ "${#portal_args[@]}" -ne 0 ]; then gateway_args+=("${portal_args[@]}"); fi
+if [ "${#matter_args[@]}" -ne 0 ]; then gateway_args+=("${matter_args[@]}"); fi
 if [ "${#proxy_listen_args[@]}" -ne 0 ]; then gateway_args+=("${proxy_listen_args[@]}"); fi
 if [ "${#m2m_args[@]}" -ne 0 ]; then gateway_args+=("${m2m_args[@]}"); fi
 

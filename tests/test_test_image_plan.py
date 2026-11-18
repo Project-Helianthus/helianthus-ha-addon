@@ -101,12 +101,14 @@ def test_workflow_matrix_is_exactly_the_declared_architectures() -> None:
 def test_workflow_build_tags_are_exactly_the_planned_arch_tags() -> None:
     steps = _workflow()["jobs"]["build"]["steps"]
     pushes = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action")]
-    assert len(pushes) == 1
-    tags = [line.strip() for line in pushes[0]["with"]["tags"].splitlines() if line.strip()]
-    assert tags == [
-        "${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}-r${{ github.run_id }}"
-    ]
-    assert pushes[0]["with"]["push"] is True
+    # One step per gateway profile; their conditions are exclusive, so one runs.
+    assert [step["if"] for step in pushes] == ["${{ !inputs.include_matter }}", "${{ inputs.include_matter }}"]
+    for push in pushes:
+        tags = [line.strip() for line in push["with"]["tags"].splitlines() if line.strip()]
+        assert tags == [
+            "${{ env.IMAGE_NAME }}:${{ needs.plan.outputs.tag }}-${{ matrix.arch }}-r${{ github.run_id }}"
+        ]
+        assert push["with"]["push"] is True
 
 
 def test_workflow_manifest_destination_and_sources_come_only_from_the_plan() -> None:
@@ -131,9 +133,12 @@ def test_workflow_serializes_identical_dispatches_and_labels_the_run() -> None:
     assert concurrency["cancel-in-progress"] is False
     group = concurrency["group"]
     assert "${{ inputs.test_label }}" in group and "${{ inputs.gateway_sha }}" in group
+    assert "${{ inputs.include_matter }}" in group
     steps = workflow["jobs"]["build"]["steps"]
-    push = next(step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action"))
-    assert "io.helianthus.workflow-run=${{ github.run_id }}" in push["with"]["labels"]
+    pushes = [step for step in steps if str(step.get("uses", "")).startswith("docker/build-push-action")]
+    assert pushes
+    for push in pushes:
+        assert "io.helianthus.workflow-run=${{ github.run_id }}" in push["with"]["labels"]
     manifest = next(step for step in workflow["jobs"]["manifest"]["steps"] if "run" in step)
     assert manifest["env"]["RUN_ID"] == "${{ github.run_id }}"
     assert 'index:io.helianthus.workflow-run=${RUN_ID}' in manifest["run"]

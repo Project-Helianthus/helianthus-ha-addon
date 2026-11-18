@@ -9,6 +9,10 @@ ARG TARGETARCH
 ARG TARGETVARIANT
 ARG BUILD_VERSION
 ARG EBUSGATEWAY_VERSION=b223acf12162f8fee470ac337e1207a9382bae0e
+# Gateway build profile. Official images keep the default `nomatter`, which
+# leaves Matter out. Only the manual test-image workflow passes `default`, which
+# builds the gateway's default profile. Any other value fails the build.
+ARG GATEWAY_TAGS=nomatter
 
 RUN apk add --no-cache git ca-certificates
 COPY build/verify-no-secret.sh /usr/local/bin/verify-no-secret
@@ -18,6 +22,11 @@ ENV GOPRIVATE=github.com/Project-Helianthus/*
 
 RUN --mount=type=secret,id=github_token \
     set -eu; \
+    case "${GATEWAY_TAGS}" in \
+      nomatter) gateway_tags_args="-tags nomatter" ;; \
+      default) gateway_tags_args="" ;; \
+      *) echo "GATEWAY_TAGS must be nomatter or default" >&2; exit 1 ;; \
+    esac; \
     github_token_value=""; \
     if [ -f /run/secrets/github_token ]; then \
       github_token_value="$(cat /run/secrets/github_token)"; \
@@ -34,7 +43,7 @@ RUN --mount=type=secret,id=github_token \
     if [ "${TARGETARCH}" = "arm" ] && [ -n "${TARGETVARIANT}" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     GOWORK=off GOENV=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
       GOMODCACHE=/tmp/helianthus-gomod GOCACHE=/tmp/helianthus-gocache \
-      go build -trimpath -buildvcs=true -tags nomatter \
+      go build -trimpath -buildvcs=true ${gateway_tags_args} \
       -ldflags "-X main.buildVersion=${BUILD_VERSION} -X main.buildID=${EBUSGATEWAY_VERSION}" \
       -o /out/gateway ./cmd/gateway; \
     if [ -n "${github_token_value}" ]; then \
