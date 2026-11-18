@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Take the physical gates of the offline acceptance index from the gateway's
+  hardware-acceptance catalog, version 4, through a byte-for-byte copy in
+  `scripts/fixtures/hardware-acceptance-catalog.json` whose SHA-256 the tool
+  pins; a copy that does not match the pin refuses to start. The gates are the
+  catalog's active form `adaptermux-v2` in its order: the retained rows keep their
+  names, the 173 matrix cells are `adaptermux-<transport>-<invariant>`, and the
+  output binding the add-on build leaves out stays without a gate. The five
+  transport and proxy summary gates, the twelve adapter-direct gates and P03 to
+  P05 are gone without an alias. A reserved cell (`BI-02`, `PL-01` to `PL-04`)
+  passes only with live, reviewed and recorded evidence whose case outcome is its
+  category outcome, `blocked-infra` or `planned`. The index names the catalog
+  version and form. Software gates, inputs, exit codes and diagnostics are
+  unchanged. See `docs/offline-acceptance-index.md`.
+
 - Record in the BOM the semantic contract the pinned semantic registry
   implements: `semantic_contract` names the registry module, its version (equal
   to the `go_modules` pin) and the element catalog with its SHA-256, or `null`

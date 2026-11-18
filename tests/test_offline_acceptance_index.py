@@ -39,8 +39,47 @@ OTHER_ASSOCIATION = "association-synthetic-earlier"
 EVIDENCE = "docs/synthetic-evidence.md"
 ARTIFACTS = {"addon": "artifact-addon-index", "gateway": "artifact-gateway-index",
              "explorer": "artifact-explorer-index", "ha_integration": "artifact-integration-index"}
-RANGE = "transport-proxy-dual-client"
-SINGLE = "adapter-direct-ad01"
+SINGLE = "adaptermux-ens-ad01"
+CELL = "adaptermux-enh-px12"
+CATALOG_COPY = ROOT / "scripts/fixtures/hardware-acceptance-catalog.json"
+CATALOG = json.loads(CATALOG_COPY.read_text(encoding="utf-8"))
+# The catalog's retained rows and the index gate each keeps; the one output binding the add-on build
+# leaves out maps to no gate. Matrix cells are named adaptermux-<transport>-<invariant> in lower case.
+RETAINED = {
+    "P01": "passive-smoke-p01", "P02": "passive-smoke-p02", "P06": "passive-smoke-p06",
+    "ESERA / FOLLOWUP-01": "esera-passive-boundary",
+    **{f"LEGACY-PERSIST {kind}{number}": f"legacy-persist-{kind.lower()}{number}"
+       for kind, last in (("P", 6), ("N", 4)) for number in range(1, last + 1)},
+    **{f"LEGACY-IDENTITY {kind}{number}": f"legacy-identity-{kind.lower()}{number}"
+       for kind, last in (("P", 6), ("N", 5)) for number in range(1, last + 1)},
+    "LEGACY-MUX": "legacy-mux", "HA/Ingress routing": "ha-ingress-routing", "HA/Ingress trust": "ha-ingress-trust",
+    "HA/Ingress lifecycle and identity": "ha-ingress-lifecycle", "Explorer Pi": "explorer-pi",
+    "INT-12 eeBUS output binding": "eebus-output-binding", "INT-13 Matter output binding": None,
+    **{f"HUAWEI-{family.upper()} {label}": f"huawei-{family}-{kind}" for family in ("smartlogger", "emma", "sdongle")
+       for label, kind in (("identity", "identity"), ("monitoring publication", "monitoring-publication"),
+                           ("degraded and reconnect", "degraded-reconnect"),
+                           ("negative cross-family", "negative-cross-family"))},
+}
+
+
+def cell_gate(cell: str) -> str:
+    transport, invariant = cell.split("-")
+    return f"adaptermux-{transport.lower()}-{invariant.lower()}"
+
+
+def reserved_outcomes() -> dict:
+    """Index gate of each reserved cell and its category outcome, the first category in precedence order."""
+    categories = {category["id"]: category for category in CATALOG["categories"]}
+    reserved = {}
+    for cell in CATALOG["v2_cells"]:
+        for name in CATALOG["category_precedence"]:
+            if cell in categories[name]["cases"]:
+                reserved[cell_gate(cell)] = (name, categories[name]["outcome"])
+                break
+    return reserved
+
+
+RESERVED = reserved_outcomes()
 # The gateway handoff's Huawei Modbus TCP rows, per gateway family and kind of evidence, in its order.
 HUAWEI_FAMILIES = ("smartlogger", "emma", "sdongle")
 HUAWEI_KINDS = ("identity", "monitoring-publication", "degraded-reconnect", "negative-cross-family")
@@ -117,12 +156,16 @@ def record(gate: str) -> str:
 
 def evidence_doc(environment: str = "live", bundle: str = BUNDLE, association: str = ASSOCIATION,
                  gates: tuple[str, ...] | None = None) -> dict:
-    """Live operator evidence, reviewed row by row, with every case passing for the selected gates."""
+    """Live operator evidence, reviewed row by row, with every case passing for the selected gates.
+
+    A reserved cell is reported without being run: its case outcome names its category outcome.
+    """
     selected = gates if gates is not None else oai.PHYSICAL_GATE_IDS
     return {"format": oai.EVIDENCE_FORMAT, "bundle_id": bundle, "association_id": association,
             "environment": environment,
             "gates": [{"gate": gate, "independent_review": "satisfied", "evidence_ref": ref(record(gate)),
-                       "cases": [{"case": case, "outcome": "pass"} for case in oai.CASES[gate]]}
+                       "cases": [{"case": case, "outcome": RESERVED.get(case, (None, "pass"))[1]}
+                                 for case in oai.CASES[gate]]}
                       for gate in selected]}
 
 
@@ -446,14 +489,13 @@ def edit_evidence(gate: str, edit) -> dict:
 
 
 @pytest.mark.parametrize("gate, edit, status, reason", [
-    (RANGE, lambda entry: entry["cases"][0].update(outcome="fail"), "fail", "1 case(s) failed"),
-    (RANGE, lambda entry: entry["cases"].pop(), "unverified", "1 case(s) are not accounted for"),
-    (RANGE, lambda entry: entry["cases"][2].update(outcome="blocked"), "unverified",
+    (CELL, lambda entry: entry["cases"][0].update(outcome="fail"), "fail", "1 case(s) failed"),
+    (CELL, lambda entry: entry["cases"][0].update(outcome="blocked"), "unverified",
      "1 case(s) were blocked or not run"),
-    (RANGE, lambda entry: entry["cases"][3].update(outcome="not-run"), "unverified",
+    (CELL, lambda entry: entry["cases"][0].update(outcome="not-run"), "unverified",
      "1 case(s) were blocked or not run"),
-    (RANGE, lambda entry: (entry["cases"].pop(), entry["cases"][0].update(outcome="fail")), "fail",
-     "1 case(s) failed"),
+    (CELL, lambda entry: (entry.update(independent_review="missing"), entry["cases"][0].update(outcome="fail")),
+     "fail", "1 case(s) failed"),
     (SINGLE, lambda entry: entry["cases"][0].update(outcome="fail"), "fail", "1 case(s) failed"),
     (SINGLE, lambda entry: entry["cases"][0].update(outcome="blocked"), "unverified",
      "1 case(s) were blocked or not run"),
@@ -487,7 +529,7 @@ def test_a_record_that_vanishes_after_the_existence_check_is_not_verified(tmp_pa
     metadata = write(tree, "metadata.json", candidate_metadata())
     results = write(tree, "results.json", results_doc())
     evidence = write(tree, "evidence.json", edit_evidence(
-        "adapter-direct-ad07", lambda entry: entry.update(evidence_ref=ref("docs/vanishing-record.json"))))
+        "adaptermux-ens-ad07", lambda entry: entry.update(evidence_ref=ref("docs/vanishing-record.json"))))
     original = ccm._absent_locally
 
     def spy(reference, root, **kwargs):
@@ -499,16 +541,16 @@ def test_a_record_that_vanishes_after_the_existence_check_is_not_verified(tmp_pa
     index = oai.build_index(tree, metadata, [results], [evidence])
     assert not record.exists()
     assert index.exit_code == 2
-    assert row(index, "adapter-direct-ad07") == (
+    assert row(index, "adaptermux-ens-ad07") == (
         "unverified", ["the linked per-row evidence record does not exist in the worktree"])
 
 
 def test_each_row_needs_its_own_review(tmp_path):
     doc = evidence_doc()
-    gate_entry(doc, "adapter-direct-ad07")["independent_review"] = "missing"
+    gate_entry(doc, "adaptermux-ens-ad07")["independent_review"] = "missing"
     index = run(tmp_path, results=(results_doc(),), evidence=(doc,))
-    assert row(index, "adapter-direct-ad07") == ("unverified", ["independent review of this row's evidence is missing"])
-    assert row(index, "adapter-direct-ad06") == ("pass", [])
+    assert row(index, "adaptermux-ens-ad07") == ("unverified", ["independent review of this row's evidence is missing"])
+    assert row(index, "adaptermux-ens-ad06") == ("pass", [])
 
 
 def test_records_in_other_project_repositories_are_navigation_references(tmp_path):
@@ -538,13 +580,13 @@ def test_an_evidence_record_through_a_link_leaving_the_worktree_is_never_listed(
     ("association_id", OTHER_ASSOCIATION,
      "only operator evidence for another association of this bundle was supplied (stale)"),
     ("gate", "ha-ingress-trust", "no operator evidence was supplied"),
-    ("case", "T05", None),
+    ("case", SINGLE, None),
     ("environment", "simulated", "only simulated evidence was supplied; it cannot establish live acceptance"),
     ("independent_review", "missing", "independent review of this row's evidence is missing"),
 ])
 def test_every_operator_evidence_key_field_must_match(tmp_path, field, value, reason):
-    """Vary bundle, association, gate, case, environment and review one at a time for one range gate."""
-    gate = "transport-direct-adapter"
+    """Vary bundle, association, gate, case, environment and review one at a time for one matrix cell."""
+    gate = "adaptermux-enh-ad01"
     rest, varied = evidence_doc(gates=without(gate)), evidence_doc(gates=(gate,))
     if field == "gate":
         rest, varied = evidence_doc(gates=without(gate, value)), evidence_doc(gates=(value,))
@@ -555,7 +597,7 @@ def test_every_operator_evidence_key_field_must_match(tmp_path, field, value, re
     else:
         varied[field] = value
     index = run(tmp_path, results=(results_doc(),), evidence=(rest, varied))
-    if field == "case":  # T05 belongs to another gate: the record is malformed, not silently accepted.
+    if field == "case":  # The case of another cell: the record is malformed, not silently accepted.
         assert index.exit_code == 1
         assert index.document["input_errors"] == [
             f"operator evidence[1]: gates[0].cases[0].case is not a case of {gate}"]
@@ -575,19 +617,19 @@ def test_more_than_one_live_record_for_a_gate_is_ambiguous(tmp_path):
 
 @pytest.mark.parametrize("edit, message", [
     (lambda doc: doc["gates"].__setitem__(1, copy.deepcopy(doc["gates"][0])),
-     "gates[1].gate repeats transport-direct-adapter"),
+     "gates[1].gate repeats passive-smoke-p01"),
     (lambda doc: doc["gates"].append(copy.deepcopy(doc["gates"][0])),
      f"gates must not exceed {len(oai.PHYSICAL_GATES)} entries"),
     (lambda doc: doc["gates"][0]["cases"].append(dict(doc["gates"][0]["cases"][0])),
-     "gates[0].cases must not exceed 4 entries"),
-    (lambda doc: doc["gates"][0]["cases"].__setitem__(1, {"case": "T01", "outcome": "pass"}),
-     "gates[0].cases[1].case repeats a case of transport-direct-adapter"),
-    (lambda doc: doc["gates"][5]["cases"].__setitem__(0, {"case": "AD01", "outcome": "pass"}),
-     "gates[5].cases[0].case is not a case of adapter-direct-ad01"),
+     "gates[0].cases must not exceed 1 entries"),
+    (lambda doc: doc["gates"][5]["cases"].__setitem__(0, {"case": "LEGACY-PERSIST P2", "outcome": "pass"}),
+     "gates[5].cases[0].case is not a case of legacy-persist-p2"),
     (lambda doc: doc["gates"][0]["cases"].__setitem__(0, {"case": 1, "outcome": "pass"}),
-     "gates[0].cases[0].case is not a case of transport-direct-adapter"),
+     "gates[0].cases[0].case is not a case of passive-smoke-p01"),
     (lambda doc: doc["gates"][0]["cases"][0].update(outcome="xpass"),
-     "gates[0].cases[0].outcome must be one of pass, fail, blocked, not-run"),
+     "gates[0].cases[0].outcome must be one of pass, fail, blocked, not-run, blocked-infra, planned"),
+    (lambda doc: doc["gates"][0]["cases"][0].update(outcome="planned"),
+     "gates[0].cases[0].outcome planned is not the category outcome of passive-smoke-p01"),
     (lambda doc: doc.update(environment="replay"), "environment must be one of live, simulated"),
     (lambda doc: doc["gates"][0].update(independent_review=True),
      "gates[0].independent_review must be one of satisfied, missing"),
@@ -1334,8 +1376,8 @@ def test_the_builder_imports_and_calls_nothing_that_executes_writes_or_enumerate
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             imported.add((node.module or "").split(".")[0])
-    assert imported <= {"__future__", "argparse", "dataclasses", "json", "os", "pathlib", "re", "stat", "sys",
-                        "typing", "check_candidate_metadata"}
+    assert imported <= {"__future__", "argparse", "dataclasses", "hashlib", "json", "os", "pathlib", "re", "stat",
+                        "sys", "typing", "check_candidate_metadata"}
     os_uses = {node.attr for node in ast.walk(tree)
                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "os"}
     assert os_uses <= {"open", "fstat", "stat", "read", "close", "O_RDONLY", "O_NONBLOCK", "O_NOFOLLOW"}, os_uses
@@ -1391,32 +1433,194 @@ def test_the_real_package_is_never_a_usable_candidate(tmp_path):
 
 # ------------------------------------------------------------ catalogue
 
-def test_physical_gates_mirror_the_consolidated_handoff_rows():
-    cases = oai.CASES
-    ranges = [gate for gate, _ in oai.RANGE_GATES]
-    assert ranges == ["transport-direct-adapter", "transport-ebusd-tcp", "transport-proxy-single-client",
-                      "transport-proxy-dual-client", "proxy-semantics-adjunct"]
-    transport = [case for gate in ranges[:4] for case in cases[gate]]
-    assert transport == [f"T{number:02d}" for number in range(1, 89)]
-    assert [len(cases[gate]) for gate in ranges[:4]] == [4, 4, 16, 64]
-    assert cases["proxy-semantics-adjunct"] == tuple(f"PX{number:02d}" for number in range(1, 13))
-    expected_rows = ([f"adapter-direct-ad{number:02d}" for number in range(1, 13)]
-                     + [f"passive-smoke-p{number:02d}" for number in range(1, 7)]
-                     + ["esera-passive-boundary"]
-                     + [f"legacy-persist-p{number}" for number in range(1, 7)]
-                     + [f"legacy-persist-n{number}" for number in range(1, 5)]
-                     + [f"legacy-identity-p{number}" for number in range(1, 7)]
-                     + [f"legacy-identity-n{number}" for number in range(1, 6)]
-                     + ["legacy-mux", "ha-ingress-routing", "ha-ingress-trust", "ha-ingress-lifecycle",
-                        "explorer-pi", "eebus-output-binding"]
-                     + list(HUAWEI_GATES))
-    assert list(oai.ROW_GATES) == expected_rows
-    assert all(cases[gate] == (gate,) for gate in expected_rows)
-    assert list(oai.PHYSICAL_GATE_IDS) == ranges + expected_rows
-    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 63
-    assert sum(len(gate_cases) for _, gate_cases in oai.PHYSICAL_GATES) == 158
+def expected_gate(row_id: str) -> str | None:
+    return RETAINED[row_id] if row_id in RETAINED else cell_gate(row_id)
+
+
+def test_the_catalog_copy_matches_the_pin_in_the_script():
+    assert oai.CATALOG_FILE == CATALOG_COPY
+    assert hashlib.sha256(CATALOG_COPY.read_bytes()).hexdigest() == oai.CATALOG_SHA256
+    assert oai.CATALOG_VERSION == CATALOG["version"] and oai.CATALOG_FORM == CATALOG["active_form"]
+
+
+def test_physical_gates_follow_the_active_form_of_the_catalog_in_its_order():
+    active = CATALOG["forms"][CATALOG["active_form"]]
+    assert CATALOG["active_form"] == "adaptermux-v2" and len(active) == 217
+    assert set(oai.GATE_NAMES) == set(active), "the table names every row of the active form and nothing else"
+    assert {row_id: oai.GATE_NAMES[row_id] for row_id in active} == {row_id: expected_gate(row_id) for row_id in active}
+    expected = [expected_gate(row_id) for row_id in active if expected_gate(row_id) is not None]
+    assert list(oai.PHYSICAL_GATE_IDS) == expected
+    cells = [cell_gate(cell) for cell in CATALOG["v2_cells"]]
+    assert list(oai.CELL_GATES) == cells and len(cells) == 173
+    assert list(oai.ROW_GATES) == [gate for gate in expected if gate not in cells]
+    assert len(oai.ROW_GATES) == 43 and oai.PHYSICAL_GATE_IDS[43:] == tuple(cells)
+    assert len(oai.PHYSICAL_GATE_IDS) == len(set(oai.PHYSICAL_GATE_IDS)) == 216
+    assert all(oai.CASES[gate] == (gate,) for gate in oai.PHYSICAL_GATE_IDS), "every gate is a single-case gate"
     assert not any("rtu" in gate for gate in oai.PHYSICAL_GATE_IDS), "historical RTU evidence is never a live row"
-    assert all(ccm.OPAQUE_ID.fullmatch(gate) for gate in oai.PHYSICAL_GATE_IDS)
+    assert all(ccm.OPAQUE_ID.fullmatch(gate) and not HEXLIKE.search(gate) for gate in oai.PHYSICAL_GATE_IDS)
+
+
+def test_a_cell_gate_is_named_by_its_transport_and_its_invariant():
+    """Both fields of a cell's identity reach its name: varying either one yields another gate."""
+    transports = {cell.split("-")[0] for cell in CATALOG["v2_cells"]}
+    invariants = {cell.split("-")[1] for cell in CATALOG["v2_cells"]}
+    assert len(transports) == 8 and len(invariants) == 26
+    for cell in CATALOG["v2_cells"]:
+        gate = oai.GATE_NAMES[cell]
+        assert gate == cell_gate(cell) and gate in oai.CASES
+    assert oai.GATE_NAMES["ENS-AD01"] != oai.GATE_NAMES["ENH-AD01"] != oai.GATE_NAMES["ENH-AD02"]
+    assert oai.GATE_NAMES["UARTRAW-CX01"] == "adaptermux-uartraw-cx01"
+    assert oai.GATE_NAMES["EBUSD-ES01"] == "adaptermux-ebusd-es01"
+
+
+def test_no_gate_of_the_retired_form_remains():
+    retired = ("transport-direct-adapter", "transport-ebusd-tcp", "transport-proxy-single-client",
+               "transport-proxy-dual-client", "proxy-semantics-adjunct",
+               *(f"adapter-direct-ad{number:02d}" for number in range(1, 13)),
+               "passive-smoke-p03", "passive-smoke-p04", "passive-smoke-p05")
+    assert not set(retired) & set(oai.PHYSICAL_GATE_IDS)
+    assert not hasattr(oai, "RANGE_GATES")
+    assert not [gate for gate in oai.PHYSICAL_GATE_IDS if gate.startswith(("transport-", "adapter-direct"))]
+    assert all(len(cases) == 1 for cases in oai.CASES.values()), "no range gate"
+    for retired_row in CATALOG["retired_v2"]:
+        assert retired_row not in oai.GATE_NAMES
+
+
+@pytest.mark.parametrize("gate", ["transport-direct-adapter", "adapter-direct-ad01", "passive-smoke-p03",
+                                  "proxy-semantics-adjunct"])
+def test_a_retired_gate_name_is_refused_without_an_alias(tmp_path, gate):
+    doc = evidence_doc(gates=(SINGLE,))
+    doc["gates"][0].update(gate=gate, cases=[{"case": gate, "outcome": "pass"}])
+    index = run(tmp_path, results=(results_doc(),), evidence=(doc,))
+    assert index.exit_code == 1
+    assert index.document["input_errors"] == [
+        f"operator evidence[0]: gates[0].gate must be one of {', '.join(oai.PHYSICAL_GATE_IDS)}"]
+    assert gate not in rows(index)
+
+
+def test_the_reserved_cells_follow_the_category_precedence():
+    assert len(RESERVED) == 140 and len(oai.CELL_GATES) - len(RESERVED) == 33
+    assert oai.RESERVED == {gate: outcome for gate, (_, outcome) in RESERVED.items()}
+    # Both fields of a cell vary: the transport (same invariant) and the invariant (same transport).
+    assert RESERVED["adaptermux-ens-ad05"] == ("PL-03", "planned")
+    assert "adaptermux-ens-ad04" not in RESERVED
+    assert RESERVED["adaptermux-udp-ad05"] == ("PL-01", "planned")
+    assert RESERVED["adaptermux-uartens-ad05"] == ("BI-02", "blocked-infra")
+    # The first category in precedence order decides: BI-02 before PL-02, PL-01 before XF-01's cell.
+    assert RESERVED["adaptermux-uartens-px09"] == ("BI-02", "blocked-infra")
+    assert RESERVED["adaptermux-tcp-cx01"] == ("PL-01", "planned")
+    assert "adaptermux-udp-ds01" not in RESERVED and "adaptermux-ebusd-es01" not in RESERVED
+
+
+@pytest.mark.parametrize("gate, outcome, status, reason", [
+    ("adaptermux-uartens-ad01", "blocked-infra", "pass", None),
+    ("adaptermux-udp-ad01", "planned", "pass", None),
+    ("adaptermux-ens-px05", "planned", "pass", None),
+    ("adaptermux-uartens-px09", "blocked-infra", "pass", None),
+    ("adaptermux-tcp-cx01", "planned", "pass", None),
+    ("adaptermux-uartens-ad01", "pass", "unverified",
+     "the cell is reserved under BI-02; its case outcome must be blocked-infra"),
+    ("adaptermux-udp-ad01", "pass", "unverified", "the cell is reserved under PL-01; its case outcome must be planned"),
+    ("adaptermux-ens-ad05", "not-run", "unverified",
+     "the cell is reserved under PL-03; its case outcome must be planned"),
+    ("adaptermux-ens-px05", "blocked", "unverified",
+     "the cell is reserved under PL-04; its case outcome must be planned"),
+    ("adaptermux-udp-ad01", "fail", "fail", "1 case(s) failed"),
+])
+def test_a_reserved_cell_passes_only_when_its_case_outcome_names_its_category_outcome(
+        tmp_path, gate, outcome, status, reason):
+    index = run(tmp_path, results=(results_doc(),),
+                evidence=(edit_evidence(gate, lambda entry: entry["cases"][0].update(outcome=outcome)),))
+    assert row(index, gate) == (status, [reason] if reason else [])
+    assert index.exit_code == (0 if status == "pass" else 2), index.document["blocking"]
+    assert all(row(index, other) == ("pass", []) for other in oai.PHYSICAL_GATE_IDS if other != gate)
+
+
+@pytest.mark.parametrize("gate, outcome", [
+    ("adaptermux-ens-ad01", "planned"),
+    ("adaptermux-ens-ad01", "blocked-infra"),
+    ("adaptermux-uartens-px09", "planned"),
+    ("adaptermux-udp-ad01", "blocked-infra"),
+    ("legacy-mux", "planned"),
+])
+def test_a_category_outcome_outside_the_cell_category_is_malformed(tmp_path, gate, outcome):
+    index = run(tmp_path, results=(results_doc(),),
+                evidence=(edit_evidence(gate, lambda entry: entry["cases"][0].update(outcome=outcome)),))
+    assert index.exit_code == 1
+    position = oai.PHYSICAL_GATE_IDS.index(gate)
+    assert index.document["input_errors"] == [
+        f"operator evidence[0]: gates[{position}].cases[0].outcome {outcome} is not the category outcome of {gate}"]
+
+
+@pytest.mark.parametrize("edit, reason", [
+    (lambda doc: doc.update(environment="simulated"),
+     "only simulated evidence was supplied; it cannot establish live acceptance"),
+    (lambda doc: doc["gates"][0].update(independent_review="missing"),
+     "independent review of this row's evidence is missing"),
+    (lambda doc: doc["gates"][0].update(evidence_ref=None), "no per-row evidence record is linked"),
+])
+def test_a_reserved_cell_still_needs_live_reviewed_recorded_operator_evidence(tmp_path, edit, reason):
+    gate = "adaptermux-uartraw-cx01"
+    rest, reserved = evidence_doc(gates=without(gate)), evidence_doc(gates=(gate,))
+    assert reserved["gates"][0]["cases"] == [{"case": gate, "outcome": "blocked-infra"}]
+    edit(reserved)
+    index = run(tmp_path, results=(results_doc(),), evidence=(rest, reserved))
+    assert row(index, gate) == ("unverified", [reason])
+    index = run(tmp_path, results=(results_doc(),), evidence=(rest,))
+    assert row(index, gate) == ("unverified", ["no operator evidence was supplied"])
+
+
+def test_the_index_names_the_catalog_version_and_form(tmp_path):
+    expected = {"version": CATALOG["version"], "form": CATALOG["active_form"]}
+    assert complete(tmp_path).document["hardware_acceptance_catalog"] == expected
+    index = run(tmp_path, results=(results_doc(),))
+    assert index.document["hardware_acceptance_catalog"] == expected
+
+
+def copy_scripts(tmp_path: Path, catalog: bytes | None) -> Path:
+    scripts = tmp_path / "scripts"
+    (scripts / "fixtures").mkdir(parents=True)
+    for name in ("build_offline_acceptance_index.py", "check_candidate_metadata.py", "check_release_cohort.py"):
+        (scripts / name).write_bytes((ROOT / "scripts" / name).read_bytes())
+    if catalog is not None:
+        (scripts / "fixtures/hardware-acceptance-catalog.json").write_bytes(catalog)
+    return scripts / "build_offline_acceptance_index.py"
+
+
+REFUSED = "the hardware-acceptance catalog copy does not match the pin in this script"
+
+
+@pytest.mark.parametrize("catalog", [
+    CATALOG_COPY.read_bytes() + b"\n",  # Same content, other bytes: the pin is on the bytes.
+    CATALOG_COPY.read_bytes().replace(b'"version": "4"', b'"version": "5"', 1),
+    b"",
+    None,
+], ids=["whitespace", "content", "empty", "missing"])
+def test_the_index_refuses_to_start_when_the_catalog_copy_does_not_match_its_pin(tmp_path, catalog):
+    script = copy_scripts(tmp_path / "copy", catalog)
+    tree = make_worktree(tmp_path)
+    metadata = write(tree, "metadata.json", candidate_metadata())
+    evidence = write(tree, "evidence.json", evidence_doc())
+    done = subprocess.run([sys.executable, str(script), "--package-root", str(tree), "--metadata", str(metadata),
+                           "--operator-evidence", str(evidence)], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 1
+    assert done.stdout == ""
+    assert done.stderr.strip() == f"{script.name}: {REFUSED}"
+    assert str(tmp_path) not in done.stderr
+
+
+def test_the_pinned_copy_starts_from_a_copied_script(tmp_path):
+    script = copy_scripts(tmp_path / "copy", CATALOG_COPY.read_bytes())
+    done = subprocess.run([sys.executable, str(script), "--help"], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+
+
+@pytest.mark.parametrize("raw", [CATALOG_COPY.read_bytes()[:-1], b"{}", b"x" * 64])
+def test_the_catalog_loader_checks_the_bytes_before_reading_them(raw):
+    with pytest.raises(oai.CatalogRefusedError) as refused:
+        oai.load_catalog(raw)
+    assert str(refused.value) == REFUSED
+    assert oai.load_catalog(CATALOG_COPY.read_bytes()).version == CATALOG["version"]
 
 
 def test_software_gates_cover_each_named_component_once():
@@ -1429,10 +1633,17 @@ def test_the_companion_page_documents_the_catalogue_and_formats():
     page = DOC.read_text(encoding="utf-8")
     for literal in [oai.INDEX_FORMAT, oai.RESULTS_FORMAT, oai.EVIDENCE_FORMAT, oai.CANDIDATE_GATE,
                     *oai.SOFTWARE_GATE_IDS, *oai.OUTCOMES, *oai.CASE_OUTCOMES, *oai.ENVIRONMENTS,
-                    *oai.REVIEW_VALUES, *(gate for gate, _ in oai.RANGE_GATES)]:
+                    *oai.REVIEW_VALUES, "adaptermux-<transport>-<invariant>", oai.CELL_GATES[0],
+                    oai.CELL_GATES[-1], "scripts/fixtures/hardware-acceptance-catalog.json",
+                    *CATALOG["category_precedence"], CATALOG["active_form"]]:
         assert f"`{literal}`" in page, literal
-    for gate, gate_cases in oai.RANGE_GATES:
-        assert f"| `{gate}` |" in page and f"`{gate_cases[0]}`–`{gate_cases[-1]}`" in page, gate
+    for retained_row, gate in RETAINED.items():
+        if gate is not None and not gate.startswith("huawei-"):
+            assert retained_row.split()[0] in page, retained_row
+    assert "range" not in page.lower(), "no range gate remains"
+    for statement in ["SHA-256", f"version {CATALOG['version']}", "byte for byte", "one change",
+                      "refuses to start", "hardware_acceptance_catalog"]:
+        assert statement in page, statement
     families = {}
     for gate in oai.ROW_GATES:
         family = re.sub(r"-[pn]?\d+$|-ad\d+$", "", gate) if re.search(r"\d$", gate) else gate
@@ -1521,7 +1732,7 @@ def test_usage_errors_never_echo_option_text_or_values(tmp_path, capsys):
 # ------------------------------------------------ one record per physical gate
 
 SHARED = "the linked per-row evidence record is also linked from another gate; each gate needs its own record"
-FIRST, SECOND = "adapter-direct-ad01", "adapter-direct-ad02"
+FIRST, SECOND = "adaptermux-ens-ad01", "adaptermux-ens-ad02"
 
 
 def shared_run(tmp_path: Path, links: dict, prepare=None, edit=None) -> oai.Index:
@@ -1711,7 +1922,7 @@ def test_a_partner_of_an_ambiguous_gate_is_shared_only_for_the_record_it_links(t
     index = ambiguous_run(tmp_path, (ref(record(FIRST)), ref(record(SECOND))), second_ref=ref(record(SECOND)))
     assert index.exit_code == 2
     only_ambiguous(index, shared=(SECOND,))
-    assert row(index, "adapter-direct-ad03") == ("pass", [])
+    assert row(index, "adaptermux-ens-ad03") == ("pass", [])
 
 
 def test_one_gate_linking_a_record_twice_is_not_shared_with_another_gate(tmp_path):
@@ -1755,10 +1966,13 @@ def huawei_gate(family: str, kind: str) -> str:
     return HUAWEI_BY_PAIR[(family, kind)]
 
 
-def test_the_huawei_rows_are_one_single_case_gate_per_family_and_kind_after_the_other_rows():
+def test_the_huawei_rows_are_one_single_case_gate_per_family_and_kind_after_the_other_retained_rows():
     assert tuple(oai.HUAWEI_GATES) == HUAWEI_GATES and len(set(HUAWEI_GATES)) == 12
-    assert list(oai.PHYSICAL_GATE_IDS[-12:]) == list(HUAWEI_GATES)
-    assert oai.PHYSICAL_GATE_IDS[-13] == "eebus-output-binding"
+    assert list(oai.ROW_GATES[-12:]) == list(HUAWEI_GATES)
+    assert oai.ROW_GATES[-13] == "eebus-output-binding"
+    start = oai.PHYSICAL_GATE_IDS.index("eebus-output-binding") + 1
+    assert list(oai.PHYSICAL_GATE_IDS[start:start + 12]) == list(HUAWEI_GATES)
+    assert oai.PHYSICAL_GATE_IDS[start + 12] == oai.CELL_GATES[0]
     for family, kind in HUAWEI_PAIRS:
         gate = huawei_gate(family, kind)
         assert gate == f"huawei-{family}-{kind}" and oai.CASES[gate] == (gate,)
@@ -1847,7 +2061,7 @@ def test_a_huawei_case_belongs_to_exactly_one_family_and_kind(tmp_path, family, 
     gate = huawei_gate(family, kind)
     same_family = huawei_gate(family, HUAWEI_KINDS[(HUAWEI_KINDS.index(kind) + 1) % len(HUAWEI_KINDS)])
     same_kind = huawei_gate(HUAWEI_FAMILIES[(HUAWEI_FAMILIES.index(family) + 1) % len(HUAWEI_FAMILIES)], kind)
-    for foreign in (same_family, same_kind, "adapter-direct-ad01"):
+    for foreign in (same_family, same_kind, SINGLE):
         doc = evidence_doc(gates=(gate,))
         doc["gates"][0]["cases"][0]["case"] = foreign
         index = run(tmp_path, results=(results_doc(),), evidence=(doc,))

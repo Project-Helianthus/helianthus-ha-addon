@@ -118,18 +118,22 @@ A `helianthus-operator-evidence/1` record reports physical gate results:
 record reference (the candidate metadata public reference form; `null` when not
 yet available) and cases drawn from that gate's case list, each at most once. A
 case `outcome` is the owning procedure's per-case disposition: `pass`, `fail`,
-`blocked` or `not-run`. The owning gate's classification decides it: a
-documented expected failure is `pass` only when that classification accepts the
-case, and an unexpected failure, an unexpected pass or an infrastructure block is
-`fail` or `blocked`, never `pass`. Operator evidence is supplied only through
+`blocked` or `not-run`, or, for a reserved matrix cell only, its category
+outcome `blocked-infra` or `planned` (see below). The owning gate's
+classification decides it: a documented expected failure is `pass` only when
+that classification accepts the case, and an unexpected failure, an unexpected
+pass or an infrastructure block is `fail` or `blocked`, never `pass`. A category
+outcome on any case other than a reserved cell of that category makes the record
+malformed. Operator evidence is supplied only through
 `--operator-evidence`; a record passed as a result manifest, or the reverse, is
 malformed.
 
 ## Required gates
 
-The catalogue is fixed in the tool. Rows are never taken from the inputs, so an
-omitted gate cannot disappear; changing the catalogue needs a reviewed change to
-the tool and this page.
+The software gates are fixed in the tool and the physical gates in its pinned
+catalog copy. Rows are never taken from the inputs, so an omitted gate cannot
+disappear; changing them needs a reviewed change to the tool, the copy and this
+page.
 
 | Software gate | Subject | Required result |
 | --- | --- | --- |
@@ -139,22 +143,28 @@ the tool and this page.
 | `explorer-offline-acceptance` | `components.explorer` | The [Explorer offline acceptance card](https://github.com/Project-Helianthus/helianthus-vrc-explorer/blob/main/docs/offline-acceptance.md) on the candidate Explorer artifact. |
 | `ha-integration-local-gate` | `components.ha_integration` | The HA integration repository's required local gate on the candidate integration artifact. |
 
-There is one physical gate per live-result row of the gateway's
-[consolidated candidate hardware acceptance handoff](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/testing/consolidated-candidate-handoff.md),
-in its order; its procedures, preconditions and stop conditions govern every
-case. A range row accounts for every case ID in its range through one per-case
-report. Every other row is a single-case gate whose one case is named after the
-gate, with its own per-row record and review.
+The physical gates come from the gateway's
+[hardware-acceptance catalog](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/testing/hardware-acceptance-catalog.md),
+version 4, through its copy in this repository,
+`scripts/fixtures/hardware-acceptance-catalog.json`. The tool pins the SHA-256 of
+that copy and refuses to start when the copy is missing or its bytes do not
+match the pin (exit `1`, one fixed line on standard error, no index). It reads
+the copy beside the script once at start, never a network or sibling copy.
+There is one physical gate per gate of the catalog's active form,
+`adaptermux-v2`, in the catalog's order: the retained handoff rows, then the 173
+matrix cells. The
+[consolidated candidate hardware acceptance handoff](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/testing/consolidated-candidate-handoff.md)
+governs every case with its procedures, preconditions and stop conditions.
+Every gate is a single-case gate whose one case is named after the gate, with its
+own per-row record and review. The index names the catalog it applied in
+`hardware_acceptance_catalog` (`version` and `form`).
 
-| Physical gates | Handoff rows | Cases |
+One table in the tool maps each catalog row to its gate. The retained rows keep
+their names:
+
+| Physical gates | Catalog rows | Cases |
 | --- | --- | --- |
-| `transport-direct-adapter` | T01–T04 | `T01`–`T04` |
-| `transport-ebusd-tcp` | T05–T08 | `T05`–`T08` |
-| `transport-proxy-single-client` | T09–T24 | `T09`–`T24` |
-| `transport-proxy-dual-client` | T25–T88 | `T25`–`T88` |
-| `proxy-semantics-adjunct` | PX01–PX12 | `PX01`–`PX12` |
-| `adapter-direct-ad01` … `adapter-direct-ad12` | AD01 … AD12 | the gate's own ID |
-| `passive-smoke-p01` … `passive-smoke-p06` | P01 … P06 | the gate's own ID |
+| `passive-smoke-p01`, `passive-smoke-p02`, `passive-smoke-p06` | P01, P02, P06 | the gate's own ID |
 | `esera-passive-boundary` | ESERA / FOLLOWUP-01 | the gate's own ID |
 | `legacy-persist-p1` … `legacy-persist-p6`, `legacy-persist-n1` … `legacy-persist-n4` | LEGACY-PERSIST P1 … N4 | the gate's own ID |
 | `legacy-identity-p1` … `legacy-identity-p6`, `legacy-identity-n1` … `legacy-identity-n5` | LEGACY-IDENTITY P1 … N5 | the gate's own ID |
@@ -165,6 +175,28 @@ gate, with its own per-row record and review.
 | `huawei-smartlogger-identity`, `huawei-smartlogger-monitoring-publication`, `huawei-smartlogger-degraded-reconnect`, `huawei-smartlogger-negative-cross-family` | HUAWEI-SMARTLOGGER identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
 | `huawei-emma-identity`, `huawei-emma-monitoring-publication`, `huawei-emma-degraded-reconnect`, `huawei-emma-negative-cross-family` | HUAWEI-EMMA identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
 | `huawei-sdongle-identity`, `huawei-sdongle-monitoring-publication`, `huawei-sdongle-degraded-reconnect`, `huawei-sdongle-negative-cross-family` | HUAWEI-SDONGLE identity, monitoring publication, degraded and reconnect, negative cross-family | the gate's own ID |
+| `adaptermux-<transport>-<invariant>`, from `adaptermux-ens-ad01` to `adaptermux-ebusd-es01` | each matrix cell, such as ENS-AD01 | the gate's own ID |
+
+A matrix cell's gate is its transport and invariant in lower case, so ENS-AD01
+is `adaptermux-ens-ad01`. The catalog's other output-binding row names an output
+that the add-on build leaves out; the table maps it to no gate. A catalog row
+that the table does not name, a retained row that is no longer in the active
+form, or a gate name that repeats makes the copy unusable, so the tool refuses
+to start. The gates of the retired form, its transport and proxy summaries, the
+AD rows and P03 to P05, are not gates and have no alias: a record that names one
+is malformed. The catalog's prior RTU applicability row is not a gate: it
+records historical evidence that stays Not run for this candidate, with no
+repeat session scheduled, and the index never turns it into a live result.
+
+Reserved categories, in the catalog's precedence order `BI-02`, `PL-01`,
+`PL-02`, `PL-03` and `PL-04`, name cells that are reported without being run.
+The first of these categories that lists a cell decides it. A reserved cell
+passes only with its own live, reviewed and recorded operator evidence whose
+case outcome is that category's outcome: `blocked-infra` for `BI-02`, `planned`
+for the others. Any other outcome of a reserved cell leaves it `unverified`,
+except `fail`, which fails it. A passing reserved cell is an index result for
+the supplied evidence; it is not physical acceptance of the behaviour the cell
+names.
 
 The twelve Huawei rows are the handoff's Modbus TCP rows for the gateway families
 `huawei.smartlogger`, `huawei.emma` and `huawei.sdongle` of the
@@ -178,12 +210,14 @@ A software result, simulated evidence or a record shared with another gate canno
 pass one. A pass is an index result for the supplied evidence, not a
 qualification, an admission or a support claim.
 
-The handoff makes `PX01`–`PX12` conditional on proxy wire semantics being in
-scope; the index cannot decide scope, so the row stays required until an owner
-decision changes this catalogue. The handoff's prior RTU applicability row is
-not a gate: it records historical evidence that stays Not run for this
-candidate, with no repeat session scheduled, and the index never turns it into
-a live result.
+### Refreshing the catalog copy
+
+A new catalog version is adopted in one change to this repository: copy the
+gateway's `docs/testing/hardware-acceptance-catalog-v1.json` byte for byte to
+`scripts/fixtures/hardware-acceptance-catalog.json`, set the pinned SHA-256 in
+the tool to the digest of those bytes, and update the gate table, the tests and
+this page when rows are added, retired or renamed. Never edit the copy, and never
+change the pin without the copy, or the copy without the pin.
 
 ## Joining and row results
 
