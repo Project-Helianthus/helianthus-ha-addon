@@ -378,7 +378,7 @@ remain pre-stable; this format creates no namespace or authorization gate.
 Nothing here declares stability before 1.0. Candidate acceptance does not
 publish a release, deploy, install or mutate a live system.
 `accepted-candidate` does not imply hardware qualification; reference the
-[consolidated hardware session](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1099)
+[consolidated hardware session](https://github.com/Project-Helianthus/helianthus-gateway/issues/1099)
 results under the same `association_id`, without duplicating them here.
 
 ## Synthetic preparatory example
@@ -405,7 +405,7 @@ The deliberately incomplete acceptance makes the only valid disposition
       }
     },
     "gateway": {
-      "name": "helianthus-ebusgateway",
+      "name": "helianthus-gateway",
       "release_label": "v0.7.0-rc.1",
       "artifact_id": "artifact-gateway-alpha",
       "public_ref": null

@@ -4,7 +4,7 @@ Home Assistant add-on that runs the Helianthus eBUS gateway (GraphQL + MCP).
 
 ## Status
 
-- Builds and runs `helianthus-ebusgateway`
+- Builds and runs `helianthus-gateway`
 - Can expose the gateway-embedded adaptermux proxy listener for other eBUS clients
 - Exposes GraphQL + MCP over HTTP
 - Advertises `_helianthus-graphql._tcp` via mDNS (optional)
@@ -169,7 +169,7 @@ external `proxy_endpoint` is rejected.
 `modbus_tcp_endpoints` replaces the three scalar options when the gateway should
 read several Modbus TCP endpoints (up to eight entries), each as its own read-only
 driver instance with its own connection, pacing and failure isolation. The contract is the
-[multi-endpoint runtime page](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/modbus-multi-endpoint-runtime.md)
+[multi-endpoint runtime page](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/977614c944cd685bef75b5b12148e1110ed7653a/api/modbus-multi-endpoint-runtime.md)
 of the public eBUS documentation; this add-on only validates the list, writes it
 and passes the gateway one path.
 

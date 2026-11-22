@@ -26,7 +26,7 @@ import check_release_cohort as k25  # noqa: E402
 SCRIPT = ROOT / "scripts/check_candidate_metadata.py"
 CONTRACT = ROOT / "docs/candidate-metadata-contract.md"
 ADDON = "https://github.com/Project-Helianthus/helianthus-ha-addon"
-GATEWAY = "https://github.com/Project-Helianthus/helianthus-ebusgateway"
+GATEWAY = "https://github.com/Project-Helianthus/helianthus-gateway"
 EXPLORER = "https://github.com/Project-Helianthus/helianthus-vrc-explorer"
 INTEGRATION = "https://github.com/synthetic-org/synthetic-ha-integration"
 NATIVE = "https://github.com/synthetic-org/synthetic-native-family-library"
@@ -63,7 +63,7 @@ def ready_metadata() -> dict:
         "cohort": "0.7",
         "components": {
             "addon": component("helianthus-ha-addon", "0.7.0", "artifact-addon-ready", ref("RELEASE_COHORT.md")),
-            "gateway": component("helianthus-ebusgateway", "v0.7.0", "artifact-gateway-ready",
+            "gateway": component("helianthus-gateway", "v0.7.0", "artifact-gateway-ready",
                                  ref("README.md", GATEWAY)),
             "explorer": component("helianthus-vrc-explorer", "v0.7.1", "artifact-explorer-ready",
                                   ref("README.md", EXPLORER)),

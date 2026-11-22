@@ -5,8 +5,8 @@ implementation lands, not a record of successful acceptance. Every checkbox is
 unexecuted. It is the documentation slice of
 [issue #249](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/249).
 Refs [add-on #239](https://github.com/Project-Helianthus/helianthus-ha-addon/issues/239),
-[gateway #999](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/999)
-and [gateway #1002](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1002).
+[gateway #999](https://github.com/Project-Helianthus/helianthus-gateway/issues/999)
+and [gateway #1002](https://github.com/Project-Helianthus/helianthus-gateway/issues/1002).
 Parent acceptance stays open. This checklist changes no image pin, option,
 listener, authentication policy or deployment.
 
@@ -20,15 +20,15 @@ Recheck these sources against the candidate before executing the checklist:
 | [Startup wrapper](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/rootfs/etc/services.d/helianthus-gateway/run) | Wires GraphQL/subscription/MCP paths, the explicit `/portal` mount and persistent instance identity. No trusted external prefix is passed because the gateway CLI exposes none, so this does not establish a trusted-proxy or prefix contract. |
 | [Add-on README](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/helianthus/README.md) | Documents `/data/instance_guid` surviving restart/update when `/data` is preserved. No promise of durable Portal configuration or investigation sessions follows from that identity file. |
 | [Smoke runbook](https://github.com/Project-Helianthus/helianthus-ha-addon/blob/main/SMOKE_RUNBOOK.md) | Existing runtime smoke checks are separate from Ingress acceptance; do not run its install/start steps as part of this offline procedure. |
-| [Portal handler](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/handler.go) and [assets](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/portal/static/assets/app.js) | Source serves a root-relative handler with relative HTML asset URLs and browser API/stream fetches. Bootstrap still supplies absolute `/portal/api/v1/...` paths plus configured GraphQL/subscription/MCP paths. Snapshot/session stores are constructed in memory. These are source observations, not verification of the packaged binary. |
-| [Gateway HTTP composition](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/cmd/gateway/main.go) | Source mounts the Portal handler under its Portal path using prefix stripping and redirects the path without a trailing slash. This alone does not implement arbitrary external Ingress prefixes. |
+| [Portal handler](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/portal/handler.go) and [assets](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/portal/static/assets/app.js) | Source serves a root-relative handler with relative HTML asset URLs and browser API/stream fetches. Bootstrap still supplies absolute `/portal/api/v1/...` paths plus configured GraphQL/subscription/MCP paths. Snapshot/session stores are constructed in memory. These are source observations, not verification of the packaged binary. |
+| [Gateway HTTP composition](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/cmd/gateway/main.go) | Source mounts the Portal handler under its Portal path using prefix stripping and redirects the path without a trailing slash. This alone does not implement arbitrary external Ingress prefixes. |
 
 The release-plan PORTAL work remains with its owners: #999 covers generic
 trusted external authentication and path-prefix embedding; #1002 coordinates
 standalone configuration and optional Home Assistant embedding;
-[gateway #1000](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1000)
+[gateway #1000](https://github.com/Project-Helianthus/helianthus-gateway/issues/1000)
 covers Portal configuration and passive observation/cache;
-[gateway #1001](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1001)
+[gateway #1001](https://github.com/Project-Helianthus/helianthus-gateway/issues/1001)
 covers selective publication. Add-on #239 consumes those contracts for Ingress
 and minimal installation. Output participation/publication also depends on
 [eeBUS registry #137](https://github.com/Project-Helianthus/helianthus-eebusreg/issues/137).
@@ -41,8 +41,8 @@ only with the standalone bridge.
 ## Gateway owner acceptance handoff
 
 The routing and trust cases below are requirements handed to
-[gateway #999](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/999)
-and [gateway #1002](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1002).
+[gateway #999](https://github.com/Project-Helianthus/helianthus-gateway/issues/999)
+and [gateway #1002](https://github.com/Project-Helianthus/helianthus-gateway/issues/1002).
 Executable implementation acceptance belongs in that repository, together with
 its candidate handler, synthetic providers, proxy/browser fixtures and CI
 registration. These cases are not steps in this add-on's local procedure and

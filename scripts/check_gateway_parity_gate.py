@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-REQUIRED_SOURCE_REPO = "Project-Helianthus/helianthus-ebusgateway"
+REQUIRED_SOURCE_REPO = "Project-Helianthus/helianthus-gateway"
 REQUIRED_GATES = ("parity_contract", "tool_classification")
 REQUIRED_JOBS = ("build", "test", "lint", "terminology")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")

@@ -197,7 +197,7 @@ or `portal-client-key.pem`
 leaves the Portal PV semantic view disabled independently of listener startup.
 When the complete bundle is supplied, verify that it is still passed to the
 Portal BFF. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs are
-unchanged by [the transport decision](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1127).
+unchanged by [the transport decision](https://github.com/Project-Helianthus/helianthus-gateway/issues/1127).
 
 The historical M5-08 checklist and artifact below retain their original mTLS
 qualification contract. They do not establish transport qualification;
