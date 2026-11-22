@@ -9,7 +9,7 @@
     ]
   },
   "gateway": {
-    "repository": "https://github.com/Project-Helianthus/helianthus-ebusgateway",
+    "repository": "https://github.com/Project-Helianthus/helianthus-gateway",
     "commit": "b223acf12162f8fee470ac337e1207a9382bae0e",
     "tree": "ba6864888a10e4616a8e6052f30033dff384c195"
   },
@@ -201,7 +201,7 @@
     "replace": [],
     "go_mod_sha256": "6d24104185cf52cfec3e567b13b43b1abb9fd01a67e7ffb3dfc4d6f374e0c23d",
     "go_sum_sha256": "21a4350f0365c9706c0326c518672aeec7d522e773d44bc06bc20c23a636471a",
-    "source": "https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/b223acf12162f8fee470ac337e1207a9382bae0e/go.mod",
+    "source": "https://github.com/Project-Helianthus/helianthus-gateway/blob/b223acf12162f8fee470ac337e1207a9382bae0e/go.mod",
     "build_mode": "GOWORK=off GOFLAGS=-mod=readonly (Dockerfile builder stage)"
   },
   "semantic_contract": {

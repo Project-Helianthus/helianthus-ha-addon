@@ -50,13 +50,13 @@ EXIT_OK = 0
 EXIT_MIGRATION_REQUIRED = 1  # AD09a; explicitly NOT sysexits-78 per consultant MF-1.
 
 # AD22 lowercase UUIDv4 regex (must match the JSON Schema artifact in
-# helianthus-docs-ebus runtime-state/runtime_state.schema.json).
+# helianthus-docs runtime-state/runtime_state.schema.json).
 INSTANCE_GUID_REGEX = (
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 
 # AD27 IdentitySource values, mirrored from
-# helianthus-ebusgateway/internal/runtimestate.IdentitySource.
+# helianthus-gateway/internal/runtimestate.IdentitySource.
 IDENTITY_SOURCE_RUNTIME_STATE = "runtime_state"
 IDENTITY_SOURCE_LEGACY_MIGRATED = "legacy_migrated"
 IDENTITY_SOURCE_GENERATED = "generated"

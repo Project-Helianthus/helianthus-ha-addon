@@ -34,7 +34,7 @@ RUN --mount=type=secret,id=github_token \
       export GIT_CONFIG_KEY_0="url.https://x-access-token:${github_token_value}@github.com/.insteadOf"; \
       export GIT_CONFIG_VALUE_0="https://github.com/"; \
     fi; \
-    git clone --no-checkout https://github.com/Project-Helianthus/helianthus-ebusgateway /src; \
+    git clone --no-checkout https://github.com/Project-Helianthus/helianthus-gateway /src; \
     cd /src; \
     git checkout --detach "${EBUSGATEWAY_VERSION}"; \
     test "$(git rev-parse HEAD)" = "${EBUSGATEWAY_VERSION}"; \

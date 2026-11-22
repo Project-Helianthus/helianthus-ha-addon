@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Build the gateway from the `helianthus-gateway` repository, which is the
+  gateway's final name. The Dockerfile clones it, the BOM and the parity gate
+  name it, and the add-on pages link it. The pinned gateway commit, the
+  `EBUSGATEWAY_VERSION` build argument, the published image name and every
+  build output are unchanged. The two Modbus multi-endpoint runtime links point
+  at their public `helianthus-docs-ebus` revision; the semantic snapshot read
+  link moves to `helianthus-docs` only after that page is on its `main`.
+
 - Add an opt-in Matter test image. The Dockerfile's builder argument
   `GATEWAY_TAGS` defaults to `nomatter`, which official images keep; `default`
   builds the gateway's default profile and any other value fails the build. The

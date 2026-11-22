@@ -46,7 +46,7 @@ CONFIG = ROOT / "helianthus/config.json"
 WRAPPER = ROOT / "helianthus/rootfs/etc/services.d/helianthus-gateway/run"
 
 FORMAT = "helianthus-addon-bom/1"
-GATEWAY_REPO = "Project-Helianthus/helianthus-ebusgateway"
+GATEWAY_REPO = "Project-Helianthus/helianthus-gateway"
 VRC_REPO = "Project-Helianthus/helianthus-vrc-explorer"
 REGISTRY_MODULE = "github.com/Project-Helianthus/helianthus-semreg"
 REGISTRY_REPO = "Project-Helianthus/helianthus-semreg"

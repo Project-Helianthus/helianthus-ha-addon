@@ -1,6 +1,6 @@
 {
   "evidence_kind": "github_actions_exact_commit_ci_v1",
-  "source_repo": "Project-Helianthus/helianthus-ebusgateway",
+  "source_repo": "Project-Helianthus/helianthus-gateway",
   "source_ref": "b223acf12162f8fee470ac337e1207a9382bae0e",
   "source_tree": "ba6864888a10e4616a8e6052f30033dff384c195",
   "tested_ref": "b223acf12162f8fee470ac337e1207a9382bae0e",
@@ -14,7 +14,7 @@
     "status": "completed",
     "conclusion": "success",
     "updated_at": "2026-11-09T02:25:46Z",
-    "url": "https://github.com/Project-Helianthus/helianthus-ebusgateway/actions/runs/42549669756",
+    "url": "https://github.com/Project-Helianthus/helianthus-gateway/actions/runs/42549669756",
     "jobs": [
       {
         "id": 128942190148,

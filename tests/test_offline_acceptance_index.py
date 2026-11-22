@@ -27,7 +27,7 @@ import check_candidate_metadata as ccm  # noqa: E402
 SCRIPT = ROOT / "scripts/build_offline_acceptance_index.py"
 DOC = ROOT / "docs/offline-acceptance-index.md"
 ADDON = "https://github.com/Project-Helianthus/helianthus-ha-addon"
-GATEWAY = "https://github.com/Project-Helianthus/helianthus-ebusgateway"
+GATEWAY = "https://github.com/Project-Helianthus/helianthus-gateway"
 EXPLORER = "https://github.com/Project-Helianthus/helianthus-vrc-explorer"
 INTEGRATION = "https://github.com/synthetic-org/synthetic-ha-integration"
 NATIVE = "https://github.com/synthetic-org/synthetic-native-family-library"
@@ -116,7 +116,7 @@ def candidate_metadata() -> dict:
         "cohort": "0.7",
         "components": {
             "addon": component("helianthus-ha-addon", "0.7.0", ARTIFACTS["addon"], ref("RELEASE_COHORT.md")),
-            "gateway": component("helianthus-ebusgateway", "v0.7.0", ARTIFACTS["gateway"], ref("README.md", GATEWAY)),
+            "gateway": component("helianthus-gateway", "v0.7.0", ARTIFACTS["gateway"], ref("README.md", GATEWAY)),
             "explorer": component("helianthus-vrc-explorer", "v0.7.1", ARTIFACTS["explorer"],
                                   ref("README.md", EXPLORER)),
             "ha_integration": component("synthetic-ha-integration", "v0.9.4", ARTIFACTS["ha_integration"],

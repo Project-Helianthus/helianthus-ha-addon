@@ -339,7 +339,7 @@ def test_retired_endpoint_keys_are_absent():
 
 
 # Gateway Portal configuration contract, staged read-only beside the worktree.
-PORTAL_DOCS = ROOT / '.tmp/references/ebusgateway/docs'
+PORTAL_DOCS = ROOT / '.tmp/references/gateway/docs'
 CLASS_FIELDS = {'bootstrap': 'reason', 'portal': 'portal_key'}
 
 

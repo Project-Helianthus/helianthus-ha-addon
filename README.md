@@ -19,7 +19,7 @@ The add-on also owns the stable Helianthus instance GUID used by the Home Assist
 
 - eBUS transport/protocol implementation (`helianthus-ebusgo`).
 - Registry/schema/device semantics (`helianthus-ebusreg`).
-- Gateway application logic (`helianthus-ebusgateway`).
+- Gateway application logic (`helianthus-gateway`).
 - Home Assistant integration entity model (`helianthus-ha-integration`).
 
 ## Status and Maturity
@@ -31,7 +31,7 @@ The add-on also owns the stable Helianthus instance GUID used by the Home Assist
 ## Helianthus Dependency Chain
 
 ```text
-helianthus-ebusgo -> helianthus-ebusreg -> helianthus-ebusgateway -> helianthus-ha-addon -> Home Assistant Supervisor
+helianthus-ebusgo -> helianthus-ebusreg -> helianthus-gateway -> helianthus-ha-addon -> Home Assistant Supervisor
   (transport)        (registry/schema)     (runtime/API)             (addon packaging)
 ```
 
@@ -81,7 +81,7 @@ readable alongside `ca.pem`; otherwise that
 view stays disabled independently of listener startup. Authentication and
 authorization frameworks arrive in a later release. Server identity and
 asset admission remain required. SHIP pairing, SKI allow-lists, SPINE bindings, and Matter ACLs
-are unchanged. See [the 0.7 transport decision](https://github.com/Project-Helianthus/helianthus-ebusgateway/issues/1127).
+are unchanged. See [the 0.7 transport decision](https://github.com/Project-Helianthus/helianthus-gateway/issues/1127).
 
 ### 3) Baseline add-on configuration example (local ebusd-tcp)
 
@@ -326,7 +326,7 @@ For full operator sequence and checklist interpretation, use `SMOKE_RUNBOOK.md`.
 
 ### Related Helianthus repos/docs
 
-- Gateway runtime: https://github.com/Project-Helianthus/helianthus-ebusgateway
+- Gateway runtime: https://github.com/Project-Helianthus/helianthus-gateway
 - Registry/schema layer: https://github.com/Project-Helianthus/helianthus-ebusreg
 - eBUS transport/protocol layer: https://github.com/Project-Helianthus/helianthus-ebusgo
 - HA integration: https://github.com/Project-Helianthus/helianthus-ha-integration

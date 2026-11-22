@@ -58,7 +58,7 @@ It does not introduce a receipt, identity ledger or recovery implementation.
 | Recovery target | Public label plus opaque reference to the retained prior artifact and its compatibility result. | Retain the exact previously installed image locally or by an immutable private artifact reference; do not reconstruct it from a mutable version/latest tag. Keep exact coordinates private. |
 
 Observation presentation belongs to the published
-[semantic snapshot read contract](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/semantic-snapshot-read.md)
+[semantic snapshot read contract](https://github.com/Project-Helianthus/helianthus-docs/blob/main/api/semantic-snapshot-read.md)
 and its referenced data owners. Consume that interface without defining age,
 freshness, provenance, availability, evidence grade, admission or write authority
 here. Any upgrade/restore behavior not covered by the owner's published contract
@@ -150,7 +150,7 @@ container, Supervisor, registry or device:
 | Metadata covers only the two Supervisor architectures while the reviewed workflow publishes five | Hold: the three remaining published architectures also need complete output bindings. |
 | The historical source-address marker remains after a failed upgrade | Preserve it as historical evidence only; it supplies neither active authority nor a recovery path. |
 
-The [gateway repository](https://github.com/Project-Helianthus/helianthus-ebusgateway)
+The [gateway repository](https://github.com/Project-Helianthus/helianthus-gateway)
 owns gateway runtime and recovery implementation; the
 [Explorer repository](https://github.com/Project-Helianthus/helianthus-vrc-explorer)
 owns Explorer implementation. Add-on build and startup wiring remain with this

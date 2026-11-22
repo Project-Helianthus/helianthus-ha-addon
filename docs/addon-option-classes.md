@@ -18,7 +18,7 @@ qualification.
 ## Portal options
 
 Portal keys are members of the gateway
-[Portal configuration record](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/architecture/portal-config-sharing.md):
+[Portal configuration record](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/docs/architecture/portal-config-sharing.md):
 `drivers[<driver>].enabled` for each editable driver (`ebus.primary`,
 `eebus.primary`, `growatt.bms.rs485` and `modbus.sunspec`), `sharing.graphql`,
 `sharing.mcp`, `adapter_proxy` and `output_bindings.matter`. The guard keeps

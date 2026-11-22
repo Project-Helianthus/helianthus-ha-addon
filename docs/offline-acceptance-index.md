@@ -105,7 +105,7 @@ A `helianthus-operator-evidence/1` record reports physical gate results:
   "environment": "live",
   "gates": [
     {"gate": "passive-smoke-p01", "independent_review": "satisfied",
-     "evidence_ref": {"repository": "https://github.com/Project-Helianthus/helianthus-ebusgateway",
+     "evidence_ref": {"repository": "https://github.com/Project-Helianthus/helianthus-gateway",
                       "path": "docs/testing/synthetic-example-record.md"},
      "cases": [{"case": "passive-smoke-p01", "outcome": "pass"}]}
   ]
@@ -144,7 +144,7 @@ page.
 | `ha-integration-local-gate` | `components.ha_integration` | The HA integration repository's required local gate on the candidate integration artifact. |
 
 The physical gates come from the gateway's
-[hardware-acceptance catalog](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/testing/hardware-acceptance-catalog.md),
+[hardware-acceptance catalog](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/docs/testing/hardware-acceptance-catalog.md),
 version 4, through its copy in this repository,
 `scripts/fixtures/hardware-acceptance-catalog.json`. The tool pins the SHA-256 of
 that copy and refuses to start when the copy is missing or its bytes do not
@@ -153,7 +153,7 @@ the copy beside the script once at start, never a network or sibling copy.
 There is one physical gate per gate of the catalog's active form,
 `adaptermux-v2`, in the catalog's order: the retained handoff rows, then the 173
 matrix cells. The
-[consolidated candidate hardware acceptance handoff](https://github.com/Project-Helianthus/helianthus-ebusgateway/blob/main/docs/testing/consolidated-candidate-handoff.md)
+[consolidated candidate hardware acceptance handoff](https://github.com/Project-Helianthus/helianthus-gateway/blob/main/docs/testing/consolidated-candidate-handoff.md)
 governs every case with its procedures, preconditions and stop conditions.
 Every gate is a single-case gate whose one case is named after the gate, with its
 own per-row record and review. The index names the catalog it applied in
@@ -200,7 +200,7 @@ names.
 
 The twelve Huawei rows are the handoff's Modbus TCP rows for the gateway families
 `huawei.smartlogger`, `huawei.emma` and `huawei.sdongle` of the
-[multi-endpoint contract](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/main/api/modbus-multi-endpoint-runtime.md):
+[multi-endpoint contract](https://github.com/Project-Helianthus/helianthus-docs-ebus/blob/977614c944cd685bef75b5b12148e1110ed7653a/api/modbus-multi-endpoint-runtime.md):
 four per family, each a single-case gate with its own record and review. A family
 summary cannot replace its four rows, and the evidence of one family or kind of
 row never reaches another gate. The gateway registers every Huawei instance as
