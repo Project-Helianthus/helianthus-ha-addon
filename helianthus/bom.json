@@ -211,7 +211,7 @@
   },
   "images": {
     "builder_go": {
-      "ref": "golang:1.26.2-alpine",
+      "ref": "golang:1.27.4-alpine",
       "observed_digest": "sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1"
     },
     "builder_python": {

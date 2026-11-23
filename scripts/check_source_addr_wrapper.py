@@ -456,8 +456,8 @@ def _check_static_run_script() -> None:
         "published image workflow must match the required release gateway",
     )
     _assert(
-        "golang:1.26.2-alpine AS builder" in dockerfile_text,
-        "gateway image build must pin the exact Go toolchain used by LIVE_CAPTURE replay",
+        "golang:1.27.4-alpine AS builder" in dockerfile_text,
+        "gateway image build must pin the builder toolchain selected for the current gateway module and matterreg (golang:1.27.4-alpine)",
     )
     _assert(
         "go install github.com/Project-Helianthus/helianthus-ebusgateway/cmd/gateway@${EBUSGATEWAY_VERSION}"

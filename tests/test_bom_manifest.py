@@ -23,6 +23,14 @@ def test_committed_bom_is_valid() -> None:
     assert bom_manifest.validate(BOM) == []
 
 
+def test_builder_image_is_the_matterreg_go_toolchain() -> None:
+    dockerfile = bom_manifest.DOCKERFILE.read_text(encoding="utf-8")
+    assert (
+        "FROM --platform=$TARGETPLATFORM golang:1.27.4-alpine AS builder"
+        in dockerfile.splitlines()
+    )
+
+
 def test_check_cli_passes_for_committed_bom() -> None:
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts/bom_manifest.py"), "check"],
