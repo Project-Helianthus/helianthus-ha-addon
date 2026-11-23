@@ -31,6 +31,15 @@ def test_builder_image_is_the_matterreg_go_toolchain() -> None:
     )
 
 
+def test_builder_observed_digest_is_the_registry_digest_of_the_builder_ref() -> None:
+    builder = BOM["images"]["builder_go"]
+    assert builder["ref"] == "golang:1.27.4-alpine"
+    assert (
+        builder["observed_digest"]
+        == "sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280"
+    )
+
+
 def test_check_cli_passes_for_committed_bom() -> None:
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts/bom_manifest.py"), "check"],
