@@ -4,7 +4,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/base:3.20
 ARG VRCEXPLORER_VERSION=v0.6.1
 ARG BUILD_VERSION
 
-FROM --platform=$TARGETPLATFORM golang:1.26.2-alpine AS builder
+FROM --platform=$TARGETPLATFORM golang:1.27.4-alpine AS builder
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG BUILD_VERSION
